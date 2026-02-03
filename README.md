@@ -15,9 +15,22 @@ I built this because I wanted a faster, more elegant way to control my smart hom
 - **Real-time Sync**: Uses Home Assistant's WebSocket API for instant state updates.
 - **Customizable Appearance**: Choose from different border effects (like Rainbow or Aurora) and customize button colors.
 
-## How to use (lights)
-- click on light to toggle
-- hold light to open dimmer
+## Supported entity types:
+- light / switch
+- sensor
+- climate
+- curtain / cover
+- script
+- scene
+
+## Keyboard shortcuts
+- open / close app with shortcut defined in settings under 'App toggle'
+- buttons can be toggled with eg. ALT + 1,2,3,4 etc - you can choose your prefered modifier in settings.
+- if you want custom keyboard shortcuts for any button, it can be toggled and configurated in add/edit button menu.
+
+## How to use (light)
+- click on button to toggle
+- hold button to open dimmer
 
 ## Installation
 
