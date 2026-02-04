@@ -104,6 +104,10 @@ class Icons:
     PALETTE_OUTLINE = "\U000F0E0C"     # mdi-palette-outline (Corrected)
     SCENE_THEME = PALETTE_OUTLINE      # Default scene icon
     
+    # Image/Camera
+    IMAGE = "\U000F0313"               # mdi-image
+    CAMERA = "\U000F0100"              # mdi-camera
+    
     # Empty/placeholder
     CIRCLE_OUTLINE = "\U000F0766"      # mdi-circle-outline
     CHECKBOX_BLANK_CIRCLE_OUTLINE = "\U000F0130"

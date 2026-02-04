@@ -22,6 +22,7 @@ from PyQt6.QtGui import (
     QIcon
 
 )
+import base64
 from icons import get_icon, get_mdi_font
 
 # Custom MIME type for drag and drop
@@ -46,6 +47,9 @@ class DashboardButton(QFrame):
         self._state = "off"
         self._value = ""
         self._drag_start_pos = None
+        self._image_pixmap = None  # For image type buttons
+        self._scaled_pixmap = None  # Cached scaled version
+        self._scaled_size = (0, 0)  # Size the cache was created for
         
         # Click feedback animation
         self._content_opacity = 0.0
@@ -150,14 +154,25 @@ class DashboardButton(QFrame):
         layout.addWidget(self.name_label)
         layout.addStretch()
         
+        self._slot_span = 1  # Default to 1 slot
         self.setFixedSize(90, 80)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         
         self.update_content()
     
+    def set_slot_span(self, span: int):
+        """Set how many slots this button spans (square: width = height)."""
+        self._slot_span = max(1, min(span, 4))
+        # Width: 90px per slot + 8px spacing between slots
+        new_width = (90 * self._slot_span) + (8 * (self._slot_span - 1))
+        # Height: 80px per slot + 8px spacing between slots (square)
+        new_height = (80 * self._slot_span) + (8 * (self._slot_span - 1))
+        self.setFixedSize(new_width, new_height)
+        self._scaled_pixmap = None  # Invalidate cache on resize
+    
     def update_content(self):
         """Update button content from config."""
-        from icons import Icons, get_mdi_font, get_icon
+        from icons import Icons
         
         if not self.config:
             # Empty slot - show plus icon
@@ -232,6 +247,32 @@ class DashboardButton(QFrame):
             self.value_label.setText(get_icon(custom_icon) if custom_icon else default_icon)
             self.name_label.setText(label)
             self.setProperty("type", "scene")
+        elif btn_type == 'image':
+            # Show image from base64 data or placeholder icon
+            if hasattr(self, '_image_pixmap') and self._image_pixmap:
+                # Image will be painted in paintEvent
+                self.value_label.setText("")
+            else:
+                # Show placeholder icon
+                self.value_label.setFont(get_mdi_font(26))
+                self.value_label.setText(icon_char if icon_char else Icons.IMAGE)
+            # Show entity value if available, otherwise use label
+            if self._value:
+                self.name_label.setText(self._value)
+            else:
+                self.name_label.setText(label)
+            self.setProperty("type", "image")
+        elif btn_type == 'camera':
+            # Show camera stream (auto-refreshing image) or placeholder
+            if hasattr(self, '_image_pixmap') and self._image_pixmap:
+                # Image will be painted in paintEvent
+                self.value_label.setText("")
+            else:
+                # Show placeholder icon
+                self.value_label.setFont(get_mdi_font(26))
+                self.value_label.setText(icon_char if icon_char else Icons.CAMERA)
+            self.name_label.setText(label)
+            self.setProperty("type", "camera")
         else:
             # Show switch/light icon (MDI lightbulb)
             self.value_label.setFont(get_mdi_font(26))
@@ -257,6 +298,36 @@ class DashboardButton(QFrame):
         self._value = value
         self.update_content()
     
+    def set_image(self, base64_data: str):
+        """Set the image from base64 data for image type buttons."""
+        if not base64_data:
+            self._image_pixmap = None
+            self._scaled_pixmap = None  # Clear cache
+            self.update_content()
+            return
+        
+        try:
+            # Handle data URI format (data:image/png;base64,...)
+            if ',' in base64_data:
+                base64_data = base64_data.split(',', 1)[1]
+            
+            image_bytes = base64.b64decode(base64_data)
+            pixmap = QPixmap()
+            pixmap.loadFromData(image_bytes)
+            
+            if not pixmap.isNull():
+                # Store the original pixmap, we'll scale it in update_content based on button size
+                self._image_pixmap = pixmap
+                self._scaled_pixmap = None  # Invalidate cache for new image
+            else:
+                self._image_pixmap = None
+                self._scaled_pixmap = None
+        except Exception:
+            self._image_pixmap = None
+        
+        self.update_content()
+        self.update()  # Force repaint
+
     def update_style(self):
         """Update visual style based on state and theme."""
         if self.theme_manager:
@@ -334,6 +405,12 @@ class DashboardButton(QFrame):
                      font-weight: 400; 
                      font-size: 26px; 
                 }}
+                /* Image type - hide value label when image is shown */
+                DashboardButton[type="image"] QLabel#valueLabel {{
+                     color: {icon_color};
+                     font-weight: 400; 
+                     font-size: 26px; 
+                }}
                 QLabel#nameLabel {{ 
                     color: {text_color}; 
                     background: transparent;
@@ -377,6 +454,34 @@ class DashboardButton(QFrame):
         """Custom paint event for effects."""
         # First draw normal style (background)
         super().paintEvent(event)
+        
+        # Draw image for image/camera type buttons
+        if self.config.get('type') in ('image', 'camera') and self._image_pixmap:
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            
+            # Calculate available space for image (leave room for label at bottom and padding)
+            padding = 8
+            label_height = 20 if self.name_label.text() else 0
+            available_width = self.width() - (padding * 2)
+            available_height = self.height() - (padding * 2) - label_height
+            
+            # Use cached scaled pixmap if size hasn't changed
+            target_size = (available_width, available_height)
+            if self._scaled_pixmap is None or self._scaled_size != target_size:
+                self._scaled_pixmap = self._image_pixmap.scaled(
+                    available_width, available_height,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                self._scaled_size = target_size
+            
+            # Center the image in the available space
+            x = padding + (available_width - self._scaled_pixmap.width()) // 2
+            y = padding + (available_height - self._scaled_pixmap.height()) // 2
+            painter.drawPixmap(x, y, self._scaled_pixmap)
+            painter.end()
         
         # Pulse Animation (Script)
         if self._pulse_opacity > 0.01:
@@ -1396,6 +1501,11 @@ class Dashboard(QWidget):
     rows_changed = pyqtSignal()  # Emitted after row count changes and UI rebuilds
     # Signal for when settings button is clicked
     settings_clicked = pyqtSignal()
+    # Signal for image fetch requests (entity_id, url, access_token)
+    image_fetch_requested = pyqtSignal(str, str, str)
+    # Signals for visibility changes (for camera refresh control)
+    dashboard_shown = pyqtSignal()
+    dashboard_hidden = pyqtSignal()
     
     def __init__(self, config: dict, theme_manager=None, input_manager=None, version: str = "Unknown", rows: int = 2, parent=None):
         super().__init__(parent)
@@ -1407,6 +1517,7 @@ class Dashboard(QWidget):
         self.buttons: list[DashboardButton] = []
         self._button_configs: list[dict] = []
         self._entity_states: dict = {} # Map entity_id -> full state dict
+        self._entity_buttons: dict = {}  # Map entity_id -> button (for O(1) lookup)
         
         # Entrance Animation
         self._anim_progress = 0.0
@@ -1954,6 +2065,28 @@ class Dashboard(QWidget):
             self._live_dimming = appearance_config.get('live_dimming', True)
             self._border_effect = appearance_config.get('border_effect', 'Rainbow')
         
+        # Build a set of slots that are "covered" by multi-slot buttons (square)
+        covered_slots = set()
+        for cfg in configs:
+            slot = cfg.get('slot', -1)
+            slots_span = cfg.get('slots', 1)
+            if slots_span > 1:
+                start_row = slot // 4
+                start_col = slot % 4
+                # Mark all slots covered by this square button
+                for row_offset in range(slots_span):
+                    for col_offset in range(slots_span):
+                        if row_offset == 0 and col_offset == 0:
+                            continue  # Skip the origin slot itself
+                        covered_col = start_col + col_offset
+                        covered_row = start_row + row_offset
+                        if covered_col < 4:  # Stay within grid columns
+                            covered_slots.add(covered_row * 4 + covered_col)
+        
+        # Clear and rebuild grid with proper spanning
+        for button in self.buttons:
+            self.grid.removeWidget(button)
+        
         for i, button in enumerate(self.buttons):
             config = next(
                 (c for c in configs if c.get('slot', -1) == i),
@@ -1968,10 +2101,36 @@ class Dashboard(QWidget):
                 button._value = ""
             
             button.config = config or {}
+            
+            # Handle slot spanning
+            slots_span = config.get('slots', 1) if config else 1
+            row = i // 4
+            col = i % 4
+            
+            # Check if this slot is covered by another button
+            if i in covered_slots:
+                button.hide()
+                button.set_slot_span(1)
+            else:
+                button.show()
+                # Clamp span to not exceed grid boundaries
+                max_col_span = 4 - col
+                actual_span = min(slots_span, max_col_span)
+                button.set_slot_span(actual_span)
+                # Square: rowSpan = colSpan
+                self.grid.addWidget(button, row, col, actual_span, actual_span)
+            
             button.update_content()
             button.update_style()
             # Propagate effect
             button.set_border_effect(self._border_effect)
+        
+        # Rebuild entity -> button lookup for O(1) access
+        self._entity_buttons.clear()
+        for button in self.buttons:
+            entity_id = button.config.get('entity_id')
+            if entity_id:
+                self._entity_buttons[entity_id] = button
 
 
     # (Duplicate methods removed)
@@ -2429,9 +2588,70 @@ class Dashboard(QWidget):
                     cover_state = state.get('state', 'closed')
                     # "open" when cover is up/open, anything else is closed
                     button.set_state('open' if cover_state == 'open' else 'closed')
+                elif btn_type == 'image':
+                    # Update entity state value (shown in label)
+                    entity_state = state.get('state', '')
+                    if entity_state and entity_state not in ['unavailable', 'unknown']:
+                        button.set_value(entity_state)
+                    
+                    # Update image from entity_picture attribute
+                    attrs = state.get('attributes', {})
+                    entity_picture = attrs.get('entity_picture', '')
+                    access_token = attrs.get('access_token', '')
+                    
+                    if entity_picture:
+                        # Build URL with access token if available
+                        if access_token and not entity_picture.startswith('data:'):
+                            # Store URL and token for fetching
+                            button._image_url = entity_picture
+                            button._image_access_token = access_token
+                            # Emit signal to fetch image (handled by main.py)
+                            self.image_fetch_requested.emit(
+                                button.config.get('entity_id', ''),
+                                entity_picture,
+                                access_token
+                            )
+                        elif entity_picture.startswith('data:'):
+                            # Direct base64 data
+                            button.set_image(entity_picture)
+                        else:
+                            # URL without token - try to fetch directly
+                            button._image_url = entity_picture
+                            self.image_fetch_requested.emit(
+                                button.config.get('entity_id', ''),
+                                entity_picture,
+                                ''
+                            )
+                    else:
+                        button.set_image('')
+                elif btn_type == 'camera':
+                    # Camera stream - fetch image and set up auto-refresh
+                    attrs = state.get('attributes', {})
+                    entity_picture = attrs.get('entity_picture', '')
+                    access_token = attrs.get('access_token', '')
+                    
+                    if entity_picture:
+                        # Store for refresh
+                        button._image_url = entity_picture
+                        button._image_access_token = access_token
+                        
+                        # Emit signal to fetch image
+                        self.image_fetch_requested.emit(
+                            button.config.get('entity_id', ''),
+                            entity_picture,
+                            access_token
+                        )
+                    else:
+                        button.set_image('')
                 else:
                     # Update switch state
                     button.set_state(state.get('state', 'off'))
+    
+    def update_button_image(self, entity_id: str, base64_data: str):
+        """Update a button's image from fetched base64 data."""
+        button = self._entity_buttons.get(entity_id)
+        if button and button.config.get('type') in ('image', 'camera'):
+            button.set_image(base64_data)
     
     def _on_button_clicked(self, slot: int, config: dict):
         """Handle button click."""
@@ -2484,6 +2704,7 @@ class Dashboard(QWidget):
             self.close_animated()
         else:
             self.show_near_tray()
+            self.dashboard_shown.emit()
     
     def close_animated(self):
         """Fade out and slide down, then hide."""
@@ -2504,6 +2725,7 @@ class Dashboard(QWidget):
         # Robust check for near-zero
         if self._anim_progress < 0.01:
             super().hide()
+            self.dashboard_hidden.emit()
 
     def focusOutEvent(self, event):
         # We rely on changeEvent for robust window-level focus loss

@@ -4,6 +4,7 @@ Handles HTTP requests to Home Assistant.
 """
 
 import re
+import base64
 import requests
 from typing import Optional, Any
 from urllib.parse import urlparse, quote
@@ -222,4 +223,42 @@ class HAClient:
             return {}
         except Exception:
             return {}
+
+    def get_image(self, image_path: str, access_token: str = '') -> Optional[str]:
+        """
+        Fetch an image from Home Assistant and return as base64.
+        
+        Args:
+            image_path: The path to the image (e.g., /api/image_proxy/image.doorbell)
+            access_token: Optional access token for the image (only used if not already in URL)
+            
+        Returns:
+            Base64 encoded image data or None on error.
+        """
+        if not image_path:
+            return None
+        
+        try:
+            session = self._get_session()
+            
+            # Build full URL if path is relative
+            if image_path.startswith('/'):
+                url = f"{self.url}{image_path}"
+            else:
+                url = image_path
+            
+            # Only append access token if not already in URL
+            if access_token and 'token=' not in url:
+                separator = '&' if '?' in url else '?'
+                url = f"{url}{separator}token={access_token}"
+            
+            response = session.get(url, timeout=10)
+            
+            if response.status_code == 200:
+                content_type = response.headers.get('Content-Type', 'image/jpeg')
+                image_data = base64.b64encode(response.content).decode('utf-8')
+                return f"data:{content_type};base64,{image_data}"
+            return None
+        except Exception:
+            return None
 

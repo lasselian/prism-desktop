@@ -22,6 +22,8 @@ I built this because I wanted a faster, more elegant way to control my smart hom
 - curtain / cover
 - script
 - scene
+- image
+- camera
 
 ## Keyboard shortcuts
 - open / close app with shortcut defined in settings under 'App toggle'

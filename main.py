@@ -32,6 +32,11 @@ class ServiceCallSignals(QObject):
     call_complete = pyqtSignal(bool)
 
 
+class ImageFetchSignals(QObject):
+    """Signals for ImageFetchRunnable."""
+    image_fetched = pyqtSignal(str, str)  # entity_id, base64_data
+
+
 class ServiceCallRunnable(QRunnable):
     """Executes Home Assistant service calls in a background thread."""
     
@@ -55,6 +60,27 @@ class ServiceCallRunnable(QRunnable):
         except Exception as e:
             print(f"Service call error: {e}")
             self.signals.call_complete.emit(False)
+
+
+class ImageFetchRunnable(QRunnable):
+    """Fetches images from Home Assistant in a background thread."""
+    
+    def __init__(self, client: HAClient, entity_id: str, url: str, access_token: str):
+        super().__init__()
+        self.client = client
+        self.entity_id = entity_id
+        self.url = url
+        self.access_token = access_token
+        self.signals = ImageFetchSignals()
+    
+    def run(self):
+        """Fetch image in background."""
+        try:
+            base64_data = self.client.get_image(self.url, self.access_token)
+            self.signals.image_fetched.emit(self.entity_id, base64_data or '')
+        except Exception as e:
+            print(f"Image fetch error: {e}")
+            self.signals.image_fetched.emit(self.entity_id, '')
 
 
 class StateFetchThread(QThread):
@@ -120,18 +146,120 @@ class PrismDesktopApp(QObject):
         self._last_click_time: dict[str, float] = {}  # entity_id -> timestamp
         self._click_cooldown = 0.5
         
+        # Camera refresh timer (for streaming camera buttons)
+        self._camera_refresh_timer: Optional[QTimer] = None
+        self._camera_refresh_interval = 2000  # 2 seconds between frame refreshes
+        
         # Initialize
         self.init_theme()
         self.init_ha_client()
         self.init_ui()
         self.init_shortcuts()
         self.start_websocket()
+        self.init_camera_refresh()
     
     def init_shortcuts(self):
         """Initialize global shortcuts."""
         shortcut_config = self.config.get('shortcut', {'type': 'keyboard', 'value': '<ctrl>+<alt>+h'})
         self.input_manager.update_shortcut(shortcut_config)
         self.input_manager.triggered.connect(self._toggle_dashboard)
+    
+    def init_camera_refresh(self):
+        """Initialize MJPEG streaming for cameras."""
+        from mjpeg_stream import MJPEGStreamManager
+        self._mjpeg_manager = MJPEGStreamManager()
+        self._mjpeg_manager.frame_ready.connect(self._on_mjpeg_frame)
+        self._mjpeg_manager.stream_error.connect(self._on_mjpeg_error)
+        
+        # Fallback timer for cameras where MJPEG fails
+        self._camera_refresh_timer = QTimer()
+        self._camera_refresh_timer.timeout.connect(self._refresh_camera_streams)
+        self._camera_fallback_entities: set[str] = set()
+    
+    def _on_mjpeg_frame(self, entity_id: str, base64_data: str):
+        """Handle frame from MJPEG stream."""
+        if not self.dashboard:
+            return
+        
+        # Use O(1) lookup instead of iterating all buttons
+        button = self.dashboard._entity_buttons.get(entity_id)
+        if button:
+            button.set_image(base64_data)
+    
+    def _on_mjpeg_error(self, entity_id: str, error_message: str):
+        """Handle MJPEG stream error - fall back to polling."""
+        self._camera_fallback_entities.add(entity_id)
+        
+        # Start fallback timer if not running
+        if not self._camera_refresh_timer.isActive():
+            self._camera_refresh_timer.start(self._camera_refresh_interval)
+    
+    def _start_camera_streams(self):
+        """Start MJPEG streams for all camera buttons."""
+        if not self.dashboard:
+            return
+        
+        ha_config = self.config.get('home_assistant', {})
+        base_url = ha_config.get('url', '').rstrip('/')
+        token = get_effective_token(self.config)
+        
+        if not base_url or not token:
+            return
+        
+        for button in self.dashboard.buttons:
+            if button.config.get('type') == 'camera':
+                entity_id = button.config.get('entity_id', '')
+                if entity_id:
+                    self._mjpeg_manager.start_stream(entity_id, base_url, token)
+    
+    def _stop_camera_streams(self):
+        """Stop all camera streams."""
+        if hasattr(self, '_mjpeg_manager'):
+            self._mjpeg_manager.stop_all()
+        self._camera_fallback_entities.clear()
+    
+    def _start_single_camera_stream(self, entity_id: str):
+        """Start MJPEG stream for a single camera entity."""
+        if not entity_id or not hasattr(self, '_mjpeg_manager'):
+            return
+        
+        ha_config = self.config.get('home_assistant', {})
+        base_url = ha_config.get('url', '').rstrip('/')
+        token = get_effective_token(self.config)
+        
+        if not base_url or not token:
+            return
+        
+        self._mjpeg_manager.start_stream(entity_id, base_url, token)
+
+    def _refresh_camera_streams(self):
+        """Refresh camera images using polling (fallback for failed MJPEG)."""
+        if not self.dashboard or not self.dashboard.isVisible():
+            return
+        
+        if not self._camera_fallback_entities:
+            self._camera_refresh_timer.stop()
+            return
+        
+        for button in self.dashboard.buttons:
+            if button.config.get('type') == 'camera':
+                entity_id = button.config.get('entity_id', '')
+                if entity_id in self._camera_fallback_entities:
+                    url = getattr(button, '_image_url', '')
+                    token = getattr(button, '_image_access_token', '')
+                    if url:
+                        self.on_image_fetch_requested(entity_id, url, token)
+    
+    def _on_dashboard_shown(self):
+        """Start camera streams when dashboard is shown."""
+        self._start_camera_streams()
+    
+    def _on_dashboard_hidden(self):
+        """Stop camera streams when dashboard is hidden."""
+        self._stop_camera_streams()
+        
+        if self._camera_refresh_timer:
+            self._camera_refresh_timer.stop()
     
     def load_config(self) -> dict:
         """Load configuration from file."""
@@ -194,6 +322,9 @@ class PrismDesktopApp(QObject):
         self.dashboard.settings_saved.connect(self._on_embedded_settings_saved)  # Embedded settings
         self.dashboard.rows_changed.connect(self.fetch_initial_states)  # Refresh states after row change
         self.dashboard.edit_button_saved.connect(self.on_edit_button_saved) # Embedded button editor
+        self.dashboard.image_fetch_requested.connect(self.on_image_fetch_requested)  # Image fetching
+        self.dashboard.dashboard_shown.connect(self._on_dashboard_shown)  # Start camera refresh
+        self.dashboard.dashboard_hidden.connect(self._on_dashboard_hidden)  # Stop camera refresh
         
         # Initialize embedded SettingsWidget
         self.dashboard._init_settings_widget(self.config, self.input_manager)
@@ -552,6 +683,18 @@ class PrismDesktopApp(QObject):
         runnable.signals.call_complete.connect(lambda success: print(f"Climate service call result: {success}"))
         self.thread_pool.start(runnable)
     
+    @pyqtSlot(str, str, str)
+    def on_image_fetch_requested(self, entity_id: str, url: str, access_token: str):
+        """Handle image fetch request from dashboard."""
+        runnable = ImageFetchRunnable(self.ha_client, entity_id, url, access_token)
+        runnable.signals.image_fetched.connect(self._on_image_fetched)
+        self.thread_pool.start(runnable)
+    
+    def _on_image_fetched(self, entity_id: str, base64_data: str):
+        """Handle fetched image data."""
+        if base64_data:
+            self.dashboard.update_button_image(entity_id, base64_data)
+    
     def _cleanup_service_thread(self, thread):
         """No longer used with QThreadPool."""
         pass
@@ -634,6 +777,12 @@ class PrismDesktopApp(QObject):
         if self.dashboard:
             self.dashboard.set_buttons(buttons, self.config.get('appearance', {}))
             self.fetch_initial_states() # Refresh state for new item
+            
+            # Start camera stream if a camera was added and dashboard is visible
+            if new_config.get('type') == 'camera' and self.dashboard.isVisible():
+                entity_id = new_config.get('entity_id', '')
+                if entity_id:
+                    self._start_single_camera_stream(entity_id)
 
     @pyqtSlot(int, int)
     def on_buttons_reordered(self, source: int, target: int):

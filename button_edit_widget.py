@@ -94,6 +94,38 @@ class ButtonEditWidget(QWidget):
                 color: {colors['text']};
                 selection-background-color: {colors['accent']};
             }}
+            QSpinBox::up-button, QSpinBox::down-button {{
+                subcontrol-origin: border;
+                width: 20px;
+                border: none;
+                background: transparent;
+            }}
+            QSpinBox::up-button {{
+                subcontrol-position: top right;
+            }}
+            QSpinBox::down-button {{
+                subcontrol-position: bottom right;
+            }}
+            QSpinBox::up-arrow {{
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-bottom: 6px solid {colors['text']};
+                width: 0;
+                height: 0;
+            }}
+            QSpinBox::down-arrow {{
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 6px solid {colors['text']};
+                width: 0;
+                height: 0;
+            }}
+            QSpinBox::up-arrow:hover, QSpinBox::down-arrow:hover {{
+                border-bottom-color: {colors['accent']};
+                border-top-color: {colors['accent']};
+            }}
             QComboBox QAbstractItemView {{
                 background-color: {colors['base']};
                 border: 1px solid {colors['border']};
@@ -200,7 +232,7 @@ class ButtonEditWidget(QWidget):
         self.form.addRow("Label:", self.label_input)
         
         self.type_combo = QComboBox()
-        self.type_combo.addItems(["Light / Switch", "Sensor Widget", "Climate", "Curtain", "Script", "Scene"])
+        self.type_combo.addItems(["Light / Switch", "Sensor Widget", "Climate", "Curtain", "Script", "Scene", "Image", "Camera"])
         self.type_combo.currentIndexChanged.connect(self.on_type_changed)
         self.form.addRow("Type:", self.type_combo)
         
@@ -211,6 +243,14 @@ class ButtonEditWidget(QWidget):
         self.entity_combo.lineEdit().setPlaceholderText("Select or type entity ID...")
         self.populate_entities()
         self.form.addRow("Entity:", self.entity_combo)
+        
+        # Size (square span - width and height)
+        self.slots_spin = QSpinBox()
+        self.slots_spin.setRange(1, 4)
+        self.slots_spin.setValue(1)
+        self.slots_spin.setToolTip("Button size (width x height in grid slots)")
+        self.slots_spin.setButtonSymbols(QSpinBox.ButtonSymbols.UpDownArrows)
+        self.form.addRow("Size:", self.slots_spin)
         
         # Advanced Mode (Climate Only)
         self.advanced_mode_check = QCheckBox("Advanced Mode")
@@ -232,13 +272,13 @@ class ButtonEditWidget(QWidget):
         self.form.addRow(self.service_label, self.service_combo)
         
         # --- Appearance Section ---
-        # --- Appearance Section ---
-        self._add_section_header("APPEARANCE")
+        self.appearance_header = self._add_section_header("APPEARANCE")
         
         # Icon Input
         self.icon_input = QLineEdit()
         self.icon_input.setPlaceholderText("e.g. mdi:lightbulb")
         self.form.addRow("Icon:", self.icon_input)
+        self.icon_label = self.form.labelForField(self.icon_input)
         
         # Color Picker
         color_widget = QWidget()
@@ -272,6 +312,8 @@ class ButtonEditWidget(QWidget):
             
         color_layout.addStretch()
         self.form.addRow("Color:", color_widget)
+        self.color_widget = color_widget
+        self.color_label = self.form.labelForField(color_widget)
         
         # --- Shortcut Section ---
         self._add_section_header("SHORTCUT")
@@ -317,6 +359,7 @@ class ButtonEditWidget(QWidget):
         lbl = QLabel(text)
         lbl.setObjectName("sectionHeader")
         self.form.addRow(lbl)
+        return lbl
 
     def populate_entities(self):
         """Fill entity dropdown based on the selected button type."""
@@ -340,6 +383,10 @@ class ButtonEditWidget(QWidget):
             allowed_domains = {'script'}
         elif type_idx == 5:  # Scene
             allowed_domains = {'scene'}
+        elif type_idx == 6:  # Image
+            allowed_domains = {'image'}
+        elif type_idx == 7:  # Camera
+            allowed_domains = {'camera'}
         else:
             allowed_domains = None  # Show all
         
@@ -370,7 +417,7 @@ class ButtonEditWidget(QWidget):
                 self.entity_combo.setCurrentIndex(idx)
 
     def on_type_changed(self, index):
-        types = ["switch", "widget", "climate", "curtain", "script", "scene"]
+        types = ["switch", "widget", "climate", "curtain", "script", "scene", "image", "camera"]
         current_type = types[index]
 
         # Show/Hide fields based on type
@@ -391,8 +438,31 @@ class ButtonEditWidget(QWidget):
         if self.form.labelForField(self.service_combo):
              self.form.labelForField(self.service_combo).setVisible(current_type == 'switch')
         
+        # Disable appearance settings for image/camera types (they show images, not icons)
+        is_image_type = current_type in ('image', 'camera')
+        self._set_appearance_enabled(not is_image_type)
+        
         # Refresh entity list for the new type
         self.populate_entities()
+    
+    def _set_appearance_enabled(self, enabled: bool):
+        """Enable or disable appearance section widgets."""
+        # Grey out appearance header
+        if hasattr(self, 'appearance_header'):
+            self.appearance_header.setEnabled(enabled)
+        
+        # Icon input and label
+        self.icon_input.setEnabled(enabled)
+        if hasattr(self, 'icon_label') and self.icon_label:
+            self.icon_label.setEnabled(enabled)
+        
+        # Color widget and label
+        if hasattr(self, 'color_widget'):
+            self.color_widget.setEnabled(enabled)
+            for btn, _ in self.color_buttons:
+                btn.setEnabled(enabled)
+        if hasattr(self, 'color_label') and self.color_label:
+            self.color_label.setEnabled(enabled)
         
     def select_color(self, color_hex):
         self.selected_color = color_hex
@@ -413,7 +483,7 @@ class ButtonEditWidget(QWidget):
         self.label_input.setText(self.config.get('label', ''))
         self.icon_input.setText(self.config.get('icon', ''))
         
-        types = {'switch': 0, 'widget': 1, 'climate': 2, 'curtain': 3, 'script': 4, 'scene': 5}
+        types = {'switch': 0, 'widget': 1, 'climate': 2, 'curtain': 3, 'script': 4, 'scene': 5, 'image': 6, 'camera': 7}
         self.type_combo.setCurrentIndex(types.get(self.config.get('type'), 0))
         
         eid = self.config.get('entity_id', '')
@@ -430,10 +500,11 @@ class ButtonEditWidget(QWidget):
         
         self.advanced_mode_check.setChecked(self.config.get('advanced_mode', False))
         
-        self.advanced_mode_check.setChecked(self.config.get('advanced_mode', False))
-        
         # Precision
         self.precision_spin.setValue(self.config.get('precision', 1))
+        
+        # Slots
+        self.slots_spin.setValue(self.config.get('slots', 1))
         
         self.select_color(self.config.get('color', '#4285F4'))
         
@@ -442,6 +513,9 @@ class ButtonEditWidget(QWidget):
         self.custom_shortcut_check.setChecked(shortcut.get('enabled', False))
         self.shortcut_display.setText(shortcut.get('value', ''))
         self.on_custom_shortcut_toggled(shortcut.get('enabled', False))
+        
+        # Trigger type-specific UI updates (appearance, service visibility, etc.)
+        self.on_type_changed(self.type_combo.currentIndex())
         
     def get_content_height(self):
         # Force layout update to get accurate size after content changes
@@ -457,7 +531,7 @@ class ButtonEditWidget(QWidget):
         new_config['slot'] = self.slot
         new_config['label'] = self.label_input.text().strip()
         
-        types = ["switch", "widget", "climate", "curtain", "script", "scene"]
+        types = ["switch", "widget", "climate", "curtain", "script", "scene", "image", "camera"]
         new_config['type'] = types[self.type_combo.currentIndex()]
         
         # Extract ID from entity_id (e.g., "light.kitchen_light (Kitchen Light)" -> "light.kitchen_light")
@@ -472,6 +546,9 @@ class ButtonEditWidget(QWidget):
         
         if new_config['type'] == 'widget':
             new_config['precision'] = self.precision_spin.value()
+        
+        # Always save slots (default to 1 if not changed)
+        new_config['slots'] = self.slots_spin.value()
              
         new_config['icon'] = self.icon_input.text().strip()
         new_config['color'] = self.selected_color
