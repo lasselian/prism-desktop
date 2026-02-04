@@ -1399,6 +1399,12 @@ class ClimateOverlay(QWidget):
         painter.drawRoundedRect(border_rect, 12, 12)
 
 
+
+class FrozenScrollArea(QScrollArea):
+    """ScrollArea that disables wheel scrolling."""
+    def wheelEvent(self, event):
+        event.accept()
+
 class Dashboard(QWidget):
     """Main dashboard popup widget with dynamic grid."""
     
@@ -1634,7 +1640,7 @@ class Dashboard(QWidget):
         self.grid.setContentsMargins(12, 12, 12, 8)
         
         # FIX: Wrap Grid in ScrollArea for smooth animation
-        self.grid_scroll = QScrollArea()
+        self.grid_scroll = FrozenScrollArea()
         self.grid_scroll.setWidgetResizable(True)
         self.grid_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.grid_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
