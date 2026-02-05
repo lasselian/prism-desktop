@@ -5,6 +5,7 @@ The main popup menu with 4x2 grid of buttons/widgets.
 
 import asyncio
 import time
+import platform
 from PyQt6.QtWidgets import (
     QWidget, QGridLayout, QPushButton, QLabel, 
     QVBoxLayout, QHBoxLayout, QFrame, QApplication, QGraphicsDropShadowEffect, QMenu,
@@ -24,6 +25,19 @@ from PyQt6.QtGui import (
 )
 import base64
 from icons import get_icon, get_mdi_font
+
+# Cross-platform system font
+def _get_system_font() -> str:
+    """Get the appropriate system UI font for the current platform."""
+    system = platform.system()
+    if system == 'Windows':
+        return 'Segoe UI'
+    elif system == 'Darwin':
+        return 'SF Pro Display'
+    else:  # Linux
+        return 'Ubuntu'
+
+SYSTEM_FONT = _get_system_font()
 
 # Custom MIME type for drag and drop
 MIME_TYPE = "application/x-hatray-slot"
@@ -139,14 +153,14 @@ class DashboardButton(QFrame):
         self.value_label = QLabel()
         self.value_label.setObjectName("valueLabel")
         self.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        font = QFont("Segoe UI", 16, QFont.Weight.Bold)
+        font = QFont(SYSTEM_FONT, 16, QFont.Weight.Bold)
         self.value_label.setFont(font)
         
         # Name label
         self.name_label = QLabel()
         self.name_label.setObjectName("nameLabel")
         self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        name_font = QFont("Segoe UI", 9)
+        name_font = QFont(SYSTEM_FONT, 9)
         self.name_label.setFont(name_font)
         
         layout.addStretch()
@@ -189,7 +203,7 @@ class DashboardButton(QFrame):
         
         if btn_type == 'widget':
             # Show sensor value (no icon font, regular font)
-            self.value_label.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+            self.value_label.setFont(QFont(SYSTEM_FONT, 16, QFont.Weight.Bold))
             
             val = self._value
             if val is not None:
@@ -218,7 +232,7 @@ class DashboardButton(QFrame):
             self.setProperty("type", "widget")
         elif btn_type == 'climate':
             # Show temperature value
-            self.value_label.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+            self.value_label.setFont(QFont(SYSTEM_FONT, 16, QFont.Weight.Bold))
             self.value_label.setText(self._value or "--°C")
             self.name_label.setText(label)
             self.setProperty("type", "climate")
@@ -349,11 +363,11 @@ class DashboardButton(QFrame):
         # Main Value: Large, Thin/Light
         # Label: Small, Uppercase, Tracking
         
-        font_main = "Segoe UI"
+        font_main = SYSTEM_FONT
         font_weight_val = "300" # Light
         font_size_val = "20px" # Increased from 18px
         
-        font_label = "Segoe UI" 
+        font_label = SYSTEM_FONT 
         font_size_label = "11px" # Increased from 10px
         font_weight_label = "600" # Semi-Bold
 
@@ -940,7 +954,7 @@ class DimmerOverlay(QWidget):
         painter.setPen(QColor(255, 255, 255, alpha))
         
         # Draw Label (Left)
-        font_label = QFont("Segoe UI", 11, QFont.Weight.DemiBold)
+        font_label = QFont(SYSTEM_FONT, 11, QFont.Weight.DemiBold)
         font_label.setCapitalization(QFont.Capitalization.AllUppercase)
         painter.setFont(font_label)
         
@@ -950,7 +964,7 @@ class DimmerOverlay(QWidget):
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text)
             
         # Draw Percent (Right)
-        font_val = QFont("Segoe UI", 20, QFont.Weight.Light)
+        font_val = QFont(SYSTEM_FONT, 20, QFont.Weight.Light)
         painter.setFont(font_val)
         painter.setPen(QColor(255, 255, 255, alpha))
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, f"{self._value}%")
@@ -1267,12 +1281,12 @@ class ClimateOverlay(QWidget):
         # Small, uppercase, subtle
         if self._advanced_mode:
              title_rect = QRect(20, 8, rect.width() - 80, 20)
-             painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+             painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
              painter.setPen(QColor(255, 255, 255, int(alpha * 0.4)))
              painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text)
         else:
              # Standard centered title for simple mode
-             painter.setFont(QFont("Segoe UI", 9, QFont.Weight.DemiBold))
+             painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.DemiBold))
              painter.setPen(QColor(255, 255, 255, int(alpha * 0.5)))
              painter.drawText(QRect(0, 14, rect.width(), 16), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, self._text)
 
@@ -1291,7 +1305,7 @@ class ClimateOverlay(QWidget):
         spacing = 20
         
         # Temp Value
-        font_val = QFont("Segoe UI", 16, QFont.Weight.Light) # Was 20.
+        font_val = QFont(SYSTEM_FONT, 16, QFont.Weight.Light) # Was 20.
         painter.setFont(font_val)
         fm = painter.fontMetrics()
         val_str = f"{self._value:.1f}°"
@@ -1372,7 +1386,7 @@ class ClimateOverlay(QWidget):
         y_pos_1 = 78 # Was 60. Shifted down to clear the Control Pill.
         
         # Label
-        painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
         painter.setPen(QColor(255, 255, 255, int(alpha * 0.4)))
         painter.drawText(QRect(20, y_pos_1, 60, icon_size), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "MODE")
         
@@ -1412,7 +1426,7 @@ class ClimateOverlay(QWidget):
         y_pos_2 = 122 # Was 110. Shifted down to spacing from Mode row.
         
         # Label
-        painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
         painter.setPen(QColor(255, 255, 255, int(alpha * 0.4)))
         painter.drawText(QRect(20, y_pos_2, 60, icon_size), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "FAN")
         
@@ -1451,7 +1465,7 @@ class ClimateOverlay(QWidget):
                          text = mode_lower.capitalize() if len(mode) > 3 else mode.upper()
                          
                  # Draw Text
-                 painter.setFont(QFont("Segoe UI", 12, QFont.Weight.DemiBold))
+                 painter.setFont(QFont(SYSTEM_FONT, 12, QFont.Weight.DemiBold))
                  painter.setPen(QColor(255, 255, 255, alpha if is_active else int(alpha * 0.5)))
                  painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, text)
 
@@ -1489,6 +1503,12 @@ class ClimateOverlay(QWidget):
         border_rect = QRectF(rect).adjusted(1, 1, -1, -1)
         painter.drawRoundedRect(border_rect, 12, 12)
 
+
+
+class FrozenScrollArea(QScrollArea):
+    """ScrollArea that disables wheel scrolling."""
+    def wheelEvent(self, event):
+        event.accept()
 
 class Dashboard(QWidget):
     """Main dashboard popup widget with dynamic grid."""
@@ -1731,7 +1751,7 @@ class Dashboard(QWidget):
         self.grid.setContentsMargins(12, 12, 12, 8)
         
         # FIX: Wrap Grid in ScrollArea for smooth animation
-        self.grid_scroll = QScrollArea()
+        self.grid_scroll = FrozenScrollArea()
         self.grid_scroll.setWidgetResizable(True)
         self.grid_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.grid_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -1902,7 +1922,7 @@ class Dashboard(QWidget):
                     border: none;
                     border-radius: 4px;
                     color: {text};
-                    font-family: "Segoe UI";
+                    font-family: "{SYSTEM_FONT}";
                     font-size: 11px;
                     font-weight: 600;
                     text-transform: uppercase;

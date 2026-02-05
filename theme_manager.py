@@ -1,16 +1,17 @@
 """
 Theme Manager for Prism Desktop
-Handles light/dark/system theme switching with Windows integration.
+Handles light/dark/system theme switching with cross-platform integration.
 """
 
-import winreg
+import platform
+import subprocess
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPalette, QColor
 from PyQt6.QtCore import QObject, pyqtSignal
 
 
 class ThemeManager(QObject):
-    """Manages application theming with Windows system integration."""
+    """Manages application theming with cross-platform system integration."""
     
     theme_changed = pyqtSignal(str)  # Emits 'light' or 'dark'
     
@@ -51,17 +52,71 @@ class ThemeManager(QObject):
         self._effective_theme = 'dark'
     
     def get_system_theme(self) -> str:
-        """Detect Windows system theme preference."""
-        try:
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-            )
-            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-            winreg.CloseKey(key)
-            return 'light' if value == 1 else 'dark'
-        except Exception:
-            return 'dark'  # Default to dark if registry read fails
+        """Detect system theme preference across platforms."""
+        system = platform.system()
+        
+        if system == 'Windows':
+            try:
+                import winreg
+                key = winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+                )
+                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                winreg.CloseKey(key)
+                return 'light' if value == 1 else 'dark'
+            except Exception:
+                return 'dark'
+        
+        elif system == 'Linux':
+            # Try KDE Plasma first
+            try:
+                result = subprocess.run(
+                    ['kreadconfig5', '--group', 'General', '--key', 'ColorScheme'],
+                    capture_output=True, text=True, timeout=2
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    scheme = result.stdout.strip().lower()
+                    return 'dark' if 'dark' in scheme else 'light'
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+            
+            # Try GNOME
+            try:
+                result = subprocess.run(
+                    ['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'],
+                    capture_output=True, text=True, timeout=2
+                )
+                if result.returncode == 0:
+                    return 'dark' if 'dark' in result.stdout.lower() else 'light'
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+            
+            # Fallback: check GTK theme name
+            try:
+                result = subprocess.run(
+                    ['gsettings', 'get', 'org.gnome.desktop.interface', 'gtk-theme'],
+                    capture_output=True, text=True, timeout=2
+                )
+                if result.returncode == 0:
+                    return 'dark' if 'dark' in result.stdout.lower() else 'light'
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+            
+            return 'dark'  # Default to dark
+        
+        elif system == 'Darwin':
+            # macOS
+            try:
+                result = subprocess.run(
+                    ['defaults', 'read', '-g', 'AppleInterfaceStyle'],
+                    capture_output=True, text=True, timeout=2
+                )
+                return 'dark' if result.returncode == 0 else 'light'
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                return 'light'
+        
+        return 'dark'  # Default for unknown platforms
     
     def set_theme(self, theme: str):
         """Set the application theme ('light', 'dark', or 'system')."""
@@ -120,7 +175,7 @@ class ThemeManager(QObject):
             QWidget {{
                 background-color: {colors['window']};
                 color: {colors['text']};
-                font-family: 'Segoe UI', sans-serif;
+                font-family: 'Segoe UI', 'Ubuntu', 'Noto Sans', 'DejaVu Sans', sans-serif;
                 font-size: 12px;
             }}
             

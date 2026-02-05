@@ -70,7 +70,7 @@ class ButtonEditWidget(QWidget):
         
         self.setStyleSheet(f"""
             QWidget {{ 
-                font-family: 'Segoe UI', sans-serif; 
+                font-family: 'Segoe UI', 'Ubuntu', 'Noto Sans', 'DejaVu Sans', sans-serif; 
                 font-size: 13px;
                 color: {colors['text']};
             }}

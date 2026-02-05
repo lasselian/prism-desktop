@@ -24,14 +24,17 @@ class InputManager(QObject):
         self._is_recording = False
         self._pressed_keys = set()
         
-        # Mouse button mapping
+        # Mouse button mapping - x1/x2 (side buttons) may not exist on Linux
         self._mouse_map = {
             mouse.Button.left: "Button.left",
             mouse.Button.right: "Button.right",
             mouse.Button.middle: "Button.middle",
-            mouse.Button.x1: "Button.x1", # Back
-            mouse.Button.x2: "Button.x2"  # Forward
         }
+        # Add side buttons if available (Windows only)
+        if hasattr(mouse.Button, 'x1'):
+            self._mouse_map[mouse.Button.x1] = "Button.x1"  # Back
+        if hasattr(mouse.Button, 'x2'):
+            self._mouse_map[mouse.Button.x2] = "Button.x2"  # Forward
 
     def update_shortcut(self, config: dict):
         """Update the active shortcut from config."""
