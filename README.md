@@ -14,15 +14,17 @@ I built this because I wanted a faster, more elegant way to control my smart hom
 - **Drag & Drop Customization**: Rearrange your dashboard grid simply by dragging icons around.
 - **Real-time Sync**: Uses Home Assistant's WebSocket API for instant state updates.
 - **Customizable Appearance**: Choose from different border effects (like Rainbow or Aurora) and customize button colors.
+- **Keyboard Shortcuts**: Global hotkeys for toggling the app and controlling individual buttons.
 
 ## Supported Entity Types
-- Light / Switch
-- Sensor
+- Camera
 - Climate
 - Curtain / Cover
-- Script
+- Light / Switch
 - Scene
-- Camera
+- Script
+- Sensor
+- Weather
 
 ## Keyboard Shortcuts
 - **Open / Close App**: Use the shortcut defined in Settings under 'App toggle'.
@@ -67,10 +69,23 @@ Upon first launch, you will be asked for your Home Assistant URL and a Long-Live
 
 ## Building
 
+### Windows
 To build the executable yourself, run the included build script:
 
-```
+```bash
 python build_exe.py
 ```
 
 This will run PyInstaller and generate a single-file executable in the `dist` folder.
+
+To build the installer, open `setup.iss` with [Inno Setup](https://jrsoftware.org/isdl.php) and compile it.
+
+### Linux (AppImage)
+1. Download `appimagetool-x86_64.AppImage` from the [appimagetool releases](https://github.com/AppImage/appimagetool/releases) and place it in the project folder.
+2. Run the build script:
+
+```bash
+python3 build_appimage.py
+```
+
+This will build the binary, create an AppDir, and package it into an AppImage.
