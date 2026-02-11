@@ -224,6 +224,9 @@ def get_icon_for_type(entity_type: str, state: str = "off") -> str:
     
     elif entity_type == "widget":
         return Icons.GAUGE
+
+    elif entity_type == "fan":
+        return Icons.FAN if state == "on" else Icons.FAN
     
     # Default/empty
     return Icons.PLUS_CIRCLE

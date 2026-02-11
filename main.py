@@ -714,8 +714,8 @@ class PrismDesktopApp(QObject):
         btn_type = config.get('type', 'switch')
         entity_id = config.get('entity_id', '')
         
-        # Handle switch, curtain, script, and scene types
-        if btn_type in ('switch', 'curtain', 'script', 'scene') and entity_id:
+        # Handle switch, curtain, script, scene, and fan types
+        if btn_type in ('switch', 'curtain', 'script', 'scene', 'fan') and entity_id:
             # Debounce check - prevent rapid clicks
             current_time = time.time()
             last_time = self._last_click_time.get(entity_id, 0)

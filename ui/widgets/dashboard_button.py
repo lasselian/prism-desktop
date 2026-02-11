@@ -352,6 +352,21 @@ class DashboardButton(QFrame):
             self.setProperty("type", "scene")
             self.value_label.show()
             self.name_label.show()
+            self.setProperty("type", "scene")
+            self.value_label.show()
+            self.name_label.show()
+        elif btn_type == 'fan':
+            # Fan (Switch-like)
+            self.value_label.setFont(get_mdi_font(26))
+            if icon_char:
+                icon = icon_char
+            else:
+                icon = Icons.FAN
+            self.value_label.setText(icon)
+            self.name_label.setText(label)
+            self.setProperty("type", "fan")
+            self.value_label.show()
+            self.name_label.show()
         elif btn_type == 'camera':
             # Camera shows image, hide text labels
             self.value_label.hide()
@@ -539,7 +554,8 @@ class DashboardButton(QFrame):
                 /* Beefier font for Icons (Switch/Light/Script) */
                 DashboardButton[type="switch"] QLabel#valueLabel,
                 DashboardButton[type="script"] QLabel#valueLabel,
-                DashboardButton[type="scene"] QLabel#valueLabel {{
+                DashboardButton[type="scene"] QLabel#valueLabel,
+                DashboardButton[type="fan"] QLabel#valueLabel {{
                      color: {icon_color};
                      font-weight: 400; 
                      font-size: 26px; /* Significantly larger icon */
@@ -586,7 +602,8 @@ class DashboardButton(QFrame):
                 }}
                 DashboardButton[type="switch"] QLabel#valueLabel,
                 DashboardButton[type="script"] QLabel#valueLabel,
-                DashboardButton[type="scene"] QLabel#valueLabel {{
+                DashboardButton[type="scene"] QLabel#valueLabel,
+                DashboardButton[type="fan"] QLabel#valueLabel {{
                      font-weight: 400; 
                      font-size: 26px; /* Significantly larger icon */
                 }}
