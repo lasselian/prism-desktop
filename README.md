@@ -1,15 +1,23 @@
 # Prism Desktop
+**A Home Assistant PC App for Windows & Linux**
 
-A modern, native Windows client for Home Assistant that lives in your system tray.
+Prism Desktop brings Home Assistant to your PC with a modern, lightweight desktop experience.  
+It features a sleek dashboard with smooth animations, build in notifications, intuitive drag-and-drop customization, and deep integration with Home Assistant entities.
 
-I built this because I wanted a faster, more elegant way to control my smart home without opening a browser tab. It features a sleek dashboard with fluid animations, drag-and-drop customization, and deep integration with Home Assistant entities.
 
-<img width="439" height="399" alt="prismdesktop" src="https://github.com/user-attachments/assets/bfb576a4-d65f-4f3f-a9da-e5e26f89e404" />
+<img
+  width="418"
+  height="497"
+  alt="Prism Desktop – Home Assistant PC app dashboard"
+  src="https://github.com/user-attachments/assets/14e5d292-98be-4270-9ce3-9f9661499370"
+/>
+
 
 
 ## Features
 
 - **System Tray Integration**: The app stays tucked away in your tray until you need it.
+- **PC notifications**: Send notifications to your PC via persistent_notification.create
 - **Morphing Controls**: Click and hold widgets to expand them into granular controls like dimmers or thermostats.
 - **Drag & Drop Customization**: Rearrange your dashboard grid simply by dragging icons around.
 - **Real-time Sync**: Uses Home Assistant's WebSocket API for instant state updates.
@@ -40,6 +48,12 @@ I built this because I wanted a faster, more elegant way to control my smart hom
 ### Windows Installer
 Download the latest `PrismDesktopSetup.exe` from the Releases page. This will install the app and optionally set it to start with Windows.
 
+### Linux Installer
+Download the latest `appimage` from the Releases page. or download and run from source.    
+GNOME: make sure to install `AppIndicator and KStatusNotifierItem Support` through `Extension Manager` first. 
+
+```keyboard shortcuts doesn't work on wayland yet.```
+
 ### Manual / Portable
 You can also download the standalone `.exe` if you prefer not to install anything. Just run it, and it will create a configuration file in the same directory.
 
@@ -64,7 +78,8 @@ If you want to modify the code or run it manually:
 
 Upon first launch, you will be asked for your Home Assistant URL and a Long-Lived Access Token. You can generate this token in your Home Assistant profile settings.
 
-<img width="429" height="691" alt="image" src="https://github.com/user-attachments/assets/a8a2a005-cda2-4068-80e8-25643924a8ed" />
+<img width="420" height="729" alt="image" src="https://github.com/user-attachments/assets/b77c9c29-ea0e-4f42-be96-fafc37e41b8c" />
+
 
 
 ## Building
