@@ -80,6 +80,21 @@ class OverlayManager(QObject):
         self._border_effect = 'Rainbow'
         self._live_dimming = True
 
+    def close_all_overlays(self):
+        """Instantly hide any active overlay. Called before navigating away from grid."""
+        if self.dimmer_overlay.isVisible():
+            self.dimmer_overlay.hide()
+            self.on_dimmer_finished()
+        if self.climate_overlay.isVisible():
+            self.climate_overlay.hide()
+            self.on_climate_finished()
+        if self.printer_overlay.isVisible():
+            self.printer_overlay.hide()
+            self.on_printer_finished()
+        if self.weather_overlay.isVisible():
+            self.weather_overlay.hide()
+            self.on_weather_finished()
+
     def update_buttons(self, buttons: list):
         """Update reference to buttons."""
         self.buttons = buttons
@@ -206,7 +221,10 @@ class OverlayManager(QObject):
                 current_val = 100 if source_btn._state == "on" else 0
         
         # Colors
-        base_color = QColor("#2d2d2d")
+        if self.theme_manager:
+            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
+        else:
+            base_color = QColor("#2d2d2d")
         button_color = config.get('color')
         accent_color = QColor(button_color) if button_color else QColor("#FFD700")
         
@@ -264,7 +282,7 @@ class OverlayManager(QObject):
         self.dimmer_overlay.set_border_effect(self._border_effect)
         self.dimmer_overlay.start_morph(
             start_rect, target_rect, start_pct, "Volume",
-            color=color, base_color=QColor("#2d2d2d")
+            color=color, base_color=QColor(self.theme_manager.get_colors().get('base', '#2d2d2d')) if self.theme_manager else QColor("#2d2d2d")
         )
         if not self.dimmer_timer.isActive():
             self.dimmer_timer.start()
@@ -479,7 +497,10 @@ class OverlayManager(QObject):
              except: pass
              
         # Colors
-        base_color = QColor("#2d2d2d")
+        if self.theme_manager:
+            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
+        else:
+            base_color = QColor("#2d2d2d")
         button_color = config.get('color')
         accent_color = QColor(button_color) if button_color else QColor("#EA4335")
         
@@ -624,7 +645,10 @@ class OverlayManager(QObject):
             self.printer_overlay.set_camera_pixmap(source_btn._last_camera_pixmap)
         
         # Colors
-        base_color = QColor("#2d2d2d")
+        if self.theme_manager:
+            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
+        else:
+            base_color = QColor("#2d2d2d")
         button_color = config.get('color')
         accent_color = QColor(button_color) if button_color else QColor("#FF6D00")
         
@@ -734,7 +758,10 @@ class OverlayManager(QObject):
         self._active_weather_entity = entity_id
         source_btn = next((b for b in self.buttons if b.slot == slot), None)
         
-        base_color = QColor("#2d2d2d")
+        if self.theme_manager:
+            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
+        else:
+            base_color = QColor("#2d2d2d")
         button_color = config.get('color')
         accent_color = QColor(button_color) if button_color else QColor("#4285F4")
         

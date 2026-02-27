@@ -232,17 +232,17 @@ class DashboardButton(QFrame):
         self.name_label.setFont(name_font)
         
         # Add drop shadows for readability on colored backgrounds
-        shadow_val = QGraphicsDropShadowEffect()
-        shadow_val.setBlurRadius(4)
-        shadow_val.setColor(QColor(0, 0, 0, 140))
-        shadow_val.setOffset(0, 1)
-        self.value_label.setGraphicsEffect(shadow_val)
+        self._shadow_val = QGraphicsDropShadowEffect()
+        self._shadow_val.setBlurRadius(4)
+        self._shadow_val.setColor(QColor(0, 0, 0, 140))
+        self._shadow_val.setOffset(0, 1)
+        self.value_label.setGraphicsEffect(self._shadow_val)
         
-        shadow_name = QGraphicsDropShadowEffect()
-        shadow_name.setBlurRadius(4)
-        shadow_name.setColor(QColor(0, 0, 0, 140))
-        shadow_name.setOffset(0, 1)
-        self.name_label.setGraphicsEffect(shadow_name)
+        self._shadow_name = QGraphicsDropShadowEffect()
+        self._shadow_name.setBlurRadius(4)
+        self._shadow_name.setColor(QColor(0, 0, 0, 140))
+        self._shadow_name.setOffset(0, 1)
+        self.name_label.setGraphicsEffect(self._shadow_name)
         
         layout.addStretch()
         layout.addWidget(self.value_label)
@@ -330,6 +330,24 @@ class DashboardButton(QFrame):
         temp = attrs.get('temperature', '--')
         emoji = self._get_weather_emoji(state_str)
         
+        # Build temperature unit suffix (e.g. "°C", "°F")
+        raw_unit = attrs.get('temperature_unit', '°')
+        # HA may return "°C", "°F", or just the symbol — normalize
+        if raw_unit in ('°C', '°F'):
+            unit = raw_unit
+        elif raw_unit in ('C', 'F'):
+            unit = f'°{raw_unit}'
+        else:
+            unit = '°'
+        
+        # Clean temp display
+        try:
+            temp_clean = f"{float(temp):.1f}".replace('.0', '')
+        except (ValueError, TypeError):
+            temp_clean = str(temp)
+        
+        temp_str = f"{temp_clean}{unit}"
+        
         is_huge = self.span_x >= 2 and self.span_y >= 2
         is_wide = self.span_x >= 2
         is_tall = self.span_y >= 2
@@ -352,7 +370,7 @@ class DashboardButton(QFrame):
             emoji_html = f"<span style='font-family: \"{mdi_family}\"; font-size: 40px;'>{emoji}</span>" if is_linux else f"{emoji}"
 
             text = (
-                f"<div style='font-size: 22px; font-weight: 300; margin-bottom: 4px;'>{emoji_html} {temp}°</div>"
+                f"<div style='font-size: 22px; font-weight: 300; margin-bottom: 4px;'>{emoji_html} {temp_str}</div>"
                 f"<div style='font-size: 11px; color: #aaaaaa; font-weight: 600;'>Humidity: {humidity}%</div>"
                 f"<div style='font-size: 11px; color: #aaaaaa; font-weight: 600;'>Wind: {wind_display}</div>"
             )
@@ -364,23 +382,23 @@ class DashboardButton(QFrame):
             if is_linux:
                 mdi_family = get_mdi_font().family()
                 emoji_html = f"<div style='font-family: \"{mdi_family}\"; font-size: 40px; margin-bottom: 5px;'>{emoji}</div>"
-                self.value_label.setText(f"{emoji_html}{temp}°")
+                self.value_label.setText(f"{emoji_html}{temp_str}")
             else:
-                self.value_label.setText(f"{emoji}\n{temp}°")
+                self.value_label.setText(f"{emoji}\n{temp_str}")
             self.value_label.setFont(QFont(SYSTEM_FONT, 24))
         elif is_wide:
             self.value_label.setTextFormat(Qt.TextFormat.RichText if is_linux else Qt.TextFormat.PlainText)
             if is_linux:
                 mdi_family = get_mdi_font().family()
                 emoji_html = f"<span style='font-family: \"{mdi_family}\"; font-size: 32px;'>{emoji}</span>"
-                self.value_label.setText(f"{emoji_html} {temp}°")
+                self.value_label.setText(f"{emoji_html} {temp_str}")
             else:
-                self.value_label.setText(f"{emoji} {temp}°")
+                self.value_label.setText(f"{emoji} {temp_str}")
             self.value_label.setFont(QFont(SYSTEM_FONT, 28))
         else:
             self.value_label.setTextFormat(Qt.TextFormat.PlainText)
-            # Small buttons: just temp, maybe no icon? existing logic shows temp only
-            self.value_label.setText(f"{temp}°")
+            # Small buttons: just temp
+            self.value_label.setText(temp_str)
             self.value_label.setFont(QFont(SYSTEM_FONT, 22, QFont.Weight.Bold))
         
         if label:
@@ -768,6 +786,26 @@ class DashboardButton(QFrame):
     def update_style(self):
         """Update visual style based on state and theme."""
         DashboardButtonStyleManager.apply_style(self)
+        self._update_label_shadows()
+    
+    def _update_label_shadows(self):
+        """Adjust drop shadow intensity for light vs dark theme."""
+        is_light = (self.theme_manager and self.theme_manager.get_effective_theme() == 'light')
+        if is_light:
+            # Light mode: very subtle shadow to avoid blurry text
+            shadow_color = QColor(0, 0, 0, 30)
+            blur = 2
+        else:
+            # Dark mode: stronger shadow for readability on colored backgrounds
+            shadow_color = QColor(0, 0, 0, 140)
+            blur = 4
+        
+        if hasattr(self, '_shadow_val'):
+            self._shadow_val.setColor(shadow_color)
+            self._shadow_val.setBlurRadius(blur)
+        if hasattr(self, '_shadow_name'):
+            self._shadow_name.setColor(shadow_color)
+            self._shadow_name.setBlurRadius(blur)
     
     def paintEvent(self, event):
         """Custom paint event for effects."""

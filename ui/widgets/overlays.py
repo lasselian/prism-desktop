@@ -47,6 +47,18 @@ class DimmerOverlay(QWidget):
         self._start_geom = QRect()
         self._target_geom = QRect()
 
+    def _is_light_bg(self):
+        """Check if base color is light (for text contrast)."""
+        c = self._base_color
+        lum = 0.2126 * c.red() + 0.7152 * c.green() + 0.0722 * c.blue()
+        return lum > 140
+
+    def _fg_color(self, alpha=255):
+        """Get foreground text color based on base color luminance."""
+        if self._is_light_bg():
+            return QColor(0, 0, 0, alpha)
+        return QColor(255, 255, 255, alpha)
+
     def get_morph_progress(self):
         return self._morph_progress
         
@@ -202,7 +214,7 @@ class DimmerOverlay(QWidget):
         if alpha < 0: alpha = 0
         
         # Use Same Styles as DashboardButton
-        painter.setPen(QColor(255, 255, 255, alpha))
+        painter.setPen(self._fg_color(alpha))
         
         # Draw Label (Left)
         font_label = QFont(SYSTEM_FONT, 11, QFont.Weight.DemiBold)
@@ -211,13 +223,13 @@ class DimmerOverlay(QWidget):
         
         # Adjust rect for padding
         text_rect = rect.adjusted(16, 0, -16, 0)
-        painter.setPen(QColor(255, 255, 255, int(alpha * 0.7))) # Slightly dimmer label
+        painter.setPen(self._fg_color(int(alpha * 0.7))) # Slightly dimmer label
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text)
             
         # Draw Percent (Right)
         font_val = QFont(SYSTEM_FONT, 20, QFont.Weight.Light)
         painter.setFont(font_val)
-        painter.setPen(QColor(255, 255, 255, alpha))
+        painter.setPen(self._fg_color(alpha))
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, f"{self._value}%")
 
     def set_border_effect(self, effect: str):
@@ -325,6 +337,16 @@ class ClimateOverlay(QWidget):
         # Advanced UI Rects
         self._mode_btns = [] # list of (rect, mode_name)
         self._fan_btns = []  # list of (rect, fan_name)
+
+    def _is_light_bg(self):
+        c = self._base_color
+        lum = 0.2126 * c.red() + 0.7152 * c.green() + 0.0722 * c.blue()
+        return lum > 140
+
+    def _fg_color(self, alpha=255):
+        if self._is_light_bg():
+            return QColor(0, 0, 0, alpha)
+        return QColor(255, 255, 255, alpha)
     
     def get_morph_progress(self):
         return self._morph_progress
@@ -524,7 +546,7 @@ class ClimateOverlay(QWidget):
         close_size = 20
         self._btn_close = QRect(rect.width() - close_size - 12, 8, close_size, close_size)
         painter.setFont(get_mdi_font(18))
-        painter.setPen(QColor(255, 255, 255, int(alpha * 0.5)))
+        painter.setPen(self._fg_color(int(alpha * 0.5)))
         painter.drawText(self._btn_close, Qt.AlignmentFlag.AlignCenter, get_icon('close'))
         
         # 2. Header / Title (Top Left)
@@ -532,7 +554,7 @@ class ClimateOverlay(QWidget):
         font_title = QFont(SYSTEM_FONT, 8, QFont.Weight.Bold)
         font_title.setCapitalization(QFont.Capitalization.AllUppercase)
         painter.setFont(font_title)
-        painter.setPen(QColor(255, 255, 255, int(alpha * 0.4)))
+        painter.setPen(self._fg_color(int(alpha * 0.4)))
         painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text)
 
         # 3. Main Control Pill (Centered)
@@ -552,7 +574,7 @@ class ClimateOverlay(QWidget):
         close_size = 20
         self._btn_close = QRect(rect.width() - close_size - 12, 8, close_size, close_size)
         painter.setFont(get_mdi_font(18))
-        painter.setPen(QColor(255, 255, 255, int(alpha * 0.5)))
+        painter.setPen(self._fg_color(int(alpha * 0.5)))
         painter.drawText(self._btn_close, Qt.AlignmentFlag.AlignCenter, get_icon('close'))
         
         # 2. Header / Title (Top Left)
@@ -560,14 +582,14 @@ class ClimateOverlay(QWidget):
         font_title = QFont(SYSTEM_FONT, 8, QFont.Weight.Bold)
         font_title.setCapitalization(QFont.Capitalization.AllUppercase)
         painter.setFont(font_title)
-        painter.setPen(QColor(255, 255, 255, int(alpha * 0.4)))
+        painter.setPen(self._fg_color(int(alpha * 0.4)))
         painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text)
         
         # Split Point
         mid_x = int(rect.width() * 0.40) # 40% Left
         
         # Divider Line (Subtle)
-        painter.setPen(QPen(QColor(255, 255, 255, int(alpha * 0.1)), 1))
+        painter.setPen(QPen(self._fg_color(int(alpha * 0.1)), 1))
         painter.drawLine(mid_x, 20, mid_x, rect.height() - 20)
         
         # === Left Zone: Temperature Control ===
@@ -599,7 +621,7 @@ class ClimateOverlay(QWidget):
         text_rect = QRect(0, 0, text_w + 10, text_h)
         text_rect.moveCenter(QPoint(cx, cy))
         
-        painter.setPen(QColor(255, 255, 255, alpha))
+        painter.setPen(self._fg_color(alpha))
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, val_str)
         
         # Minus Button (Left of text)
@@ -620,14 +642,14 @@ class ClimateOverlay(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(66, 133, 244, int(alpha * 0.8))) # Blue
         painter.drawEllipse(self._btn_minus_center, btn_radius, btn_radius)
-        painter.setPen(QColor(255, 255, 255, alpha))
+        painter.setPen(QColor(255, 255, 255, alpha))  # Always white on colored button
         painter.drawText(self._btn_minus_click, Qt.AlignmentFlag.AlignCenter, get_icon('minus'))
         
         # Plus
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(234, 67, 53, int(alpha * 0.8))) # Red
         painter.drawEllipse(self._btn_plus_center, btn_radius, btn_radius)
-        painter.setPen(QColor(255, 255, 255, alpha))
+        painter.setPen(QColor(255, 255, 255, alpha))  # Always white on colored button
         painter.drawText(self._btn_plus_click, Qt.AlignmentFlag.AlignCenter, get_icon('plus'))
 
     def _draw_advanced_controls_split(self, painter, rect, alpha):
@@ -647,7 +669,7 @@ class ClimateOverlay(QWidget):
         
         # --- Row 1: MODE ---
         painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
-        painter.setPen(QColor(255, 255, 255, int(alpha * 0.4)))
+        painter.setPen(self._fg_color(int(alpha * 0.4)))
         painter.drawText(QRect(rect.left() + margin_left, y_mode - 25, 60, 20), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "MODE")
         
         start_x = rect.left() + margin_left
@@ -670,20 +692,20 @@ class ClimateOverlay(QWidget):
             
             is_active = (mode == self._current_hvac_mode)
             if is_active:
-                painter.setBrush(QColor(255, 255, 255, 40))
+                painter.setBrush(self._fg_color(40))
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.drawRoundedRect(btn_rect, 8, 8)
-                painter.setPen(QColor(255, 255, 255, alpha))
+                painter.setPen(self._fg_color(alpha))
             else:
                 painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.setPen(QColor(255, 255, 255, int(alpha * 0.4)))
+                painter.setPen(self._fg_color(int(alpha * 0.4)))
                 
             icon_name = mode_icons.get(mode, 'help-circle-outline')
             painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon(icon_name))
 
         # --- Row 2: FAN ---
         painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
-        painter.setPen(QColor(255, 255, 255, int(alpha * 0.4)))
+        painter.setPen(self._fg_color(int(alpha * 0.4)))
         painter.drawText(QRect(rect.left() + margin_left, y_fan - 25, 60, 20), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "FAN")
 
         painter.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.Bold)) # For text labels
@@ -699,13 +721,13 @@ class ClimateOverlay(QWidget):
             
             is_active = (mode == self._current_fan_mode)
             if is_active:
-                painter.setBrush(QColor(255, 255, 255, 40))
+                painter.setBrush(self._fg_color(40))
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.drawRoundedRect(btn_rect, 8, 8)
-                painter.setPen(QColor(255, 255, 255, alpha))
+                painter.setPen(self._fg_color(alpha))
             else:
                 painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.setPen(QColor(255, 255, 255, int(alpha * 0.4)))
+                painter.setPen(self._fg_color(int(alpha * 0.4)))
             
             # Draw Icon or Text
             mode_lower = mode.lower()
@@ -740,7 +762,7 @@ class ClimateOverlay(QWidget):
         
         # Label
         painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
-        painter.setPen(QColor(255, 255, 255, int(alpha * 0.4)))
+        painter.setPen(self._fg_color(int(alpha * 0.4)))
         painter.drawText(QRect(20, y_pos_1, 60, icon_size), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "MODE")
         
         # Calculate positions to Center/Justify
@@ -771,7 +793,7 @@ class ClimateOverlay(QWidget):
             
             is_active = (mode == self._current_hvac_mode)
             if is_active:
-                painter.setBrush(QColor(255, 255, 255, 40))
+                painter.setBrush(self._fg_color(40))
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.drawRoundedRect(btn_rect, 6, 6)
             else:
@@ -780,7 +802,7 @@ class ClimateOverlay(QWidget):
             icon_name = mode_icons.get(mode, 'help-circle-outline')
             icon_char = get_icon(icon_name)
             
-            painter.setPen(QColor(255, 255, 255, alpha if is_active else int(alpha * 0.5)))
+            painter.setPen(self._fg_color(alpha if is_active else int(alpha * 0.5)))
             painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, icon_char)
 
         # 2. Fan Modes (Row 2) - Y = 122
@@ -788,7 +810,7 @@ class ClimateOverlay(QWidget):
         
         # Label
         painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
-        painter.setPen(QColor(255, 255, 255, int(alpha * 0.4)))
+        painter.setPen(self._fg_color(int(alpha * 0.4)))
         painter.drawText(QRect(20, y_pos_2, 60, icon_size), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "FAN")
         
         # Fan Map
@@ -818,7 +840,7 @@ class ClimateOverlay(QWidget):
             
             is_active = (mode == self._current_fan_mode)
             if is_active:
-                painter.setBrush(QColor(255, 255, 255, 40))
+                painter.setBrush(self._fg_color(40))
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.drawRoundedRect(btn_rect, 6, 6)
             else:
@@ -829,7 +851,7 @@ class ClimateOverlay(QWidget):
             if mode_lower == 'auto':
                  painter.setFont(get_mdi_font(20))
                  icon_char = get_icon('fan-auto')
-                 painter.setPen(QColor(255, 255, 255, alpha if is_active else int(alpha * 0.5)))
+                 painter.setPen(self._fg_color(alpha if is_active else int(alpha * 0.5)))
                  painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, icon_char)
             else:
                  text = fan_map.get(mode_lower)
@@ -837,7 +859,7 @@ class ClimateOverlay(QWidget):
                      text = mode_lower.capitalize() if len(mode) > 3 else mode.upper()
                          
                  painter.setFont(QFont(SYSTEM_FONT, 12, QFont.Weight.DemiBold))
-                 painter.setPen(QColor(255, 255, 255, alpha if is_active else int(alpha * 0.5)))
+                 painter.setPen(self._fg_color(alpha if is_active else int(alpha * 0.5)))
                  painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, text)
 
     def set_border_effect(self, effect: str):
@@ -949,6 +971,16 @@ class PrinterOverlay(QWidget):
         self.setMouseTracking(True)
         self._hover_pause = False
         self._hover_stop = False
+
+    def _is_light_bg(self):
+        c = self._base_color
+        lum = 0.2126 * c.red() + 0.7152 * c.green() + 0.0722 * c.blue()
+        return lum > 140
+
+    def _fg_color(self, alpha=255):
+        if self._is_light_bg():
+            return QColor(0, 0, 0, alpha)
+        return QColor(255, 255, 255, alpha)
 
     def _reset_confirm_mode(self):
         self._confirm_stop_mode = False
@@ -1141,7 +1173,7 @@ class PrinterOverlay(QWidget):
         close_size = 20
         self._btn_close = QRect(rect.width() - close_size - padding, padding, close_size, close_size)
         painter.setFont(get_mdi_font(18))
-        painter.setPen(QColor(255, 255, 255, int(alpha * 0.5)))
+        painter.setPen(self._fg_color(int(alpha * 0.5)))
         painter.drawText(self._btn_close, Qt.AlignmentFlag.AlignCenter, get_icon('close'))
         
         right_rect = QRect(mid_x, padding, rect.width() - mid_x - padding, rect.height() - padding * 2)
@@ -1157,7 +1189,7 @@ class PrinterOverlay(QWidget):
         close_size = 20
         self._btn_close = QRect(rect.width() - close_size - padding, padding, close_size, close_size)
         painter.setFont(get_mdi_font(18))
-        painter.setPen(QColor(255, 255, 255, int(alpha * 0.5)))
+        painter.setPen(self._fg_color(int(alpha * 0.5)))
         painter.drawText(self._btn_close, Qt.AlignmentFlag.AlignCenter, get_icon('close'))
         
         bottom_rect = QRect(padding, cam_h + padding * 2, rect.width() - padding * 2, rect.height() - cam_h - padding * 3)
@@ -1211,7 +1243,7 @@ class PrinterOverlay(QWidget):
             painter.translate(-rect.x(), -rect.y()) # Restore
             
         else:
-            painter.setPen(QColor(255, 255, 255, int(alpha * 0.3)))
+            painter.setPen(self._fg_color(int(alpha * 0.3)))
             painter.setFont(get_mdi_font(32))
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, get_icon("video-off"))
             painter.setFont(QFont(SYSTEM_FONT, 10))
@@ -1232,14 +1264,14 @@ class PrinterOverlay(QWidget):
         
         # Header / Status
         painter.setFont(QFont(SYSTEM_FONT, 12, QFont.Weight.Bold))
-        painter.setPen(QColor(255, 255, 255, alpha))
+        painter.setPen(self._fg_color(alpha))
         painter.drawText(QRect(rect.x(), y, rect.width(), 20), Qt.AlignmentFlag.AlignLeft, self._state.upper())
         y += 32  # Moved progress bar down slightly
         
         # Progress Bar
         bar_h = 4
         bar_rect = QRect(rect.x(), y, rect.width(), bar_h)
-        painter.setBrush(QColor(255, 255, 255, 40))
+        painter.setBrush(self._fg_color(40))
         painter.drawRoundedRect(bar_rect, 2, 2)
         
         fill_w = int(rect.width() * (self._progress / 100.0))
@@ -1249,7 +1281,7 @@ class PrinterOverlay(QWidget):
             
         y += 12
         painter.setFont(QFont(SYSTEM_FONT, 9))
-        painter.setPen(QColor(255, 255, 255, alpha))
+        painter.setPen(self._fg_color(alpha))
         painter.drawText(QRect(rect.x(), y, rect.width(), 20), Qt.AlignmentFlag.AlignRight, self._time_remaining)
         
         # Temperatures (Single Centered Box)
@@ -1260,8 +1292,8 @@ class PrinterOverlay(QWidget):
         temp_y = btn_y - 36 - 12
         
         box_rect = QRect(rect.x(), temp_y, rect.width(), 36)
-        painter.setBrush(QColor(255, 255, 255, 15))
-        painter.setPen(QPen(QColor(255, 255, 255, 40), 1))
+        painter.setBrush(self._fg_color(15))
+        painter.setPen(QPen(self._fg_color(40), 1))
         painter.drawRoundedRect(box_rect, 6, 6)
         
         # We know Pause button is left, Stop is right.
@@ -1269,7 +1301,7 @@ class PrinterOverlay(QWidget):
         stop_center = rect.x() + btn_w + 8 + (btn_w // 2)
         
         # Hotend
-        painter.setPen(QColor(255, 255, 255, alpha))
+        painter.setPen(self._fg_color(alpha))
         
         nozzle_val = f"{self._hotend_actual:.0f}°/{self._hotend_target:.0f}°"
         bed_val = f"{self._bed_actual:.0f}°/{self._bed_target:.0f}°"
@@ -1303,14 +1335,14 @@ class PrinterOverlay(QWidget):
         btn_w = (rect.width() - 8) // 2
         
         self._btn_pause = QRect(rect.x(), btn_y, btn_w, 36)
-        pause_color = QColor(255, 255, 255, 50) if getattr(self, '_hover_pause', False) else QColor(255, 255, 255, 10)
-        pause_border = QColor(255, 255, 255, 100) if getattr(self, '_hover_pause', False) else QColor(255, 255, 255, 30)
+        pause_color = self._fg_color(50) if getattr(self, '_hover_pause', False) else self._fg_color(10)
+        pause_border = self._fg_color(100) if getattr(self, '_hover_pause', False) else self._fg_color(30)
         pause_icon = 'play' if self._state.lower() == 'paused' else 'pause'
         
         painter.setBrush(pause_color)
         painter.setPen(QPen(pause_border, 1.5))
         painter.drawRoundedRect(self._btn_pause, 6, 6)
-        painter.setPen(QColor(255, 255, 255, alpha))
+        painter.setPen(self._fg_color(alpha))
         painter.setFont(get_mdi_font(16))
         painter.drawText(self._btn_pause, Qt.AlignmentFlag.AlignCenter, get_icon(pause_icon))
         
@@ -1320,13 +1352,13 @@ class PrinterOverlay(QWidget):
             stop_color = QColor("#D32F2F")
             stop_border = QColor(255, 100, 100, 200)
         else:
-            stop_color = QColor(255, 255, 255, 50) if getattr(self, '_hover_stop', False) else QColor(255, 255, 255, 10)
-            stop_border = QColor(255, 255, 255, 100) if getattr(self, '_hover_stop', False) else QColor(255, 255, 255, 30)
+            stop_color = self._fg_color(50) if getattr(self, '_hover_stop', False) else self._fg_color(10)
+            stop_border = self._fg_color(100) if getattr(self, '_hover_stop', False) else self._fg_color(30)
             
         painter.setBrush(stop_color)
         painter.setPen(QPen(stop_border, 1.5))
         painter.drawRoundedRect(self._btn_stop, 6, 6)
-        painter.setPen(QColor(255, 255, 255, alpha))
+        painter.setPen(self._fg_color(alpha))
         
         if self._confirm_stop_mode:
             painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.Bold))
@@ -1413,6 +1445,16 @@ class WeatherOverlay(QWidget):
         self._start_geom = QRect()
         self._target_geom = QRect()
         self._btn_close = QRect()
+
+    def _is_light_bg(self):
+        c = self._base_color
+        lum = 0.2126 * c.red() + 0.7152 * c.green() + 0.0722 * c.blue()
+        return lum > 140
+
+    def _fg_color(self, alpha=255):
+        if self._is_light_bg():
+            return QColor(0, 0, 0, alpha)
+        return QColor(255, 255, 255, alpha)
 
     def get_morph_progress(self):
         return self._morph_progress
@@ -1595,7 +1637,7 @@ class WeatherOverlay(QWidget):
         close_size = 20
         self._btn_close = QRect(rect.width() - close_size - 12, 8, close_size, close_size)
         painter.setFont(get_mdi_font(18))
-        painter.setPen(QColor(255, 255, 255, int(alpha * 0.5)))
+        painter.setPen(self._fg_color(int(alpha * 0.5)))
         painter.drawText(self._btn_close, Qt.AlignmentFlag.AlignCenter, get_icon('close'))
         
         # Title
@@ -1603,18 +1645,27 @@ class WeatherOverlay(QWidget):
         font_title = QFont(SYSTEM_FONT, 8, QFont.Weight.Bold)
         font_title.setCapitalization(QFont.Capitalization.AllUppercase)
         painter.setFont(font_title)
-        painter.setPen(QColor(255, 255, 255, int(alpha * 0.4)))
+        painter.setPen(self._fg_color(int(alpha * 0.4)))
         painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text)
 
         # Current condition (left side)
         mid_x = int(rect.width() * 0.3)
-        painter.setPen(QPen(QColor(255, 255, 255, int(alpha * 0.1)), 1))
+        painter.setPen(QPen(self._fg_color(int(alpha * 0.1)), 1))
         painter.drawLine(mid_x, 20, mid_x, rect.height() - 20)
         
         current_st = self._current_state.get('state', 'unknown')
         attrs = self._current_state.get('attributes', {})
         temp = attrs.get('temperature', '--')
         emoji = self._get_weather_emoji(current_st)
+        
+        # Temperature unit
+        raw_unit = attrs.get('temperature_unit', '°')
+        if raw_unit in ('°C', '°F'):
+            unit = raw_unit
+        elif raw_unit in ('C', 'F'):
+            unit = f'°{raw_unit}'
+        else:
+            unit = '°'
         
         center_x = mid_x // 2
         
@@ -1623,7 +1674,7 @@ class WeatherOverlay(QWidget):
             painter.setFont(get_mdi_font(36))
         else:
             painter.setFont(QFont(SYSTEM_FONT, 32))
-        painter.setPen(QColor(255, 255, 255, alpha))
+        painter.setPen(self._fg_color(alpha))
         
         fm = painter.fontMetrics()
         icon_h = fm.height()
@@ -1634,7 +1685,7 @@ class WeatherOverlay(QWidget):
         except: temp_clean = temp
         
         painter.setFont(QFont(SYSTEM_FONT, 14, QFont.Weight.DemiBold))
-        painter.drawText(QRect(0, rect.height() // 2 + 18, mid_x, 30), Qt.AlignmentFlag.AlignCenter, f"{temp_clean}°")
+        painter.drawText(QRect(0, rect.height() // 2 + 18, mid_x, 30), Qt.AlignmentFlag.AlignCenter, f"{temp_clean}{unit}")
 
         # Forecast items (right side)
         right_rect = QRect(mid_x, 0, rect.width() - mid_x, rect.height())
@@ -1672,21 +1723,21 @@ class WeatherOverlay(QWidget):
                 except: low = f.get('templow', '--')
                 
                 painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.DemiBold))
-                painter.setPen(QColor(255, 255, 255, int(alpha * 0.6)))
+                painter.setPen(self._fg_color(int(alpha * 0.6)))
                 painter.drawText(QRect(fx, fy, item_w, 15), Qt.AlignmentFlag.AlignCenter, day_str.upper())
                 
                 if is_linux:
                     painter.setFont(get_mdi_font(20))
                 else:
                     painter.setFont(QFont(SYSTEM_FONT, 16))
-                painter.setPen(QColor(255, 255, 255, alpha))
+                painter.setPen(self._fg_color(alpha))
                 painter.drawText(QRect(fx, fy + 18, item_w, 30), Qt.AlignmentFlag.AlignCenter, f_emoji)
                 
                 painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold))
-                painter.setPen(QColor(255, 255, 255, int(alpha * 0.95)))
-                painter.drawText(QRect(fx, fy + 50, item_w, 16), Qt.AlignmentFlag.AlignCenter, f"{high}°")
+                painter.setPen(self._fg_color(int(alpha * 0.95)))
+                painter.drawText(QRect(fx, fy + 50, item_w, 16), Qt.AlignmentFlag.AlignCenter, f"{high}{unit}")
                 
                 if low != '--':
                     painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.Medium))
-                    painter.setPen(QColor(255, 255, 255, int(alpha * 0.4)))
-                    painter.drawText(QRect(fx, fy + 68, item_w, 16), Qt.AlignmentFlag.AlignCenter, f"{low}°")
+                    painter.setPen(self._fg_color(int(alpha * 0.4)))
+                    painter.drawText(QRect(fx, fy + 68, item_w, 16), Qt.AlignmentFlag.AlignCenter, f"{low}{unit}")

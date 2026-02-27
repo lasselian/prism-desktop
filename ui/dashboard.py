@@ -1041,19 +1041,19 @@ class Dashboard(QWidget):
                 border-radius: 12px;
             }}
             QMenu {{
-                background-color: #2b2b2b;
-                border: 1px solid #3d3d3d;
+                background-color: {colors.get('alternate_base', '#2b2b2b')};
+                border: 1px solid {colors.get('border', '#3d3d3d')};
                 border-radius: 6px;
                 padding: 4px;
             }}
             QMenu::item {{
                 background: transparent;
                 padding: 6px 24px 6px 12px;
-                color: #e0e0e0;
+                color: {colors.get('text', '#e0e0e0')};
                 border-radius: 4px;
             }}
             QMenu::item:selected {{
-                background-color: #007aff;
+                background-color: {colors.get('accent', '#007aff')};
                 color: white;
             }}
         """)
@@ -2043,6 +2043,8 @@ class Dashboard(QWidget):
 
     def show_settings(self):
         """Morph from Grid view to Settings view."""
+        if self.overlay_manager:
+            self.overlay_manager.close_all_overlays()
         self.transition_to('settings')
     
     def hide_settings(self):

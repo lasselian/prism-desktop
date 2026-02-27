@@ -773,10 +773,15 @@ class DashboardButtonPainter:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = button.rect().adjusted(1, 1, -1, -1)
         
-        if not hasattr(button, '_dashed_pen'):
-            button._dashed_pen = QPen(QColor("#555555")) 
+        # Theme-aware border color
+        is_light = (button.theme_manager and button.theme_manager.get_effective_theme() == 'light')
+        border_color = QColor("#c0c0c0") if is_light else QColor("#555555")
+        
+        if not hasattr(button, '_dashed_pen') or getattr(button, '_dashed_pen_light', None) != is_light:
+            button._dashed_pen = QPen(border_color)
             button._dashed_pen.setStyle(Qt.PenStyle.DashLine)
             button._dashed_pen.setWidth(2)
+            button._dashed_pen_light = is_light
             
         painter.setPen(button._dashed_pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
