@@ -45,6 +45,14 @@ It features a sleek dashboard with smooth animations, build in notifications, in
 - **Open / Close App**: Use the shortcut defined in Settings under 'App toggle'.
 - **Custom Shortcuts**: Define custom shortcuts for any button via the Add/Edit menu.
 
+## Adjustable grid
+![gif-grid](https://github.com/user-attachments/assets/70d9b5f6-bef0-4f86-a6e3-59790e3f5460)
+
+## Widget overlays
+![gif-overlay](https://github.com/user-attachments/assets/244bb7a7-be80-499e-a343-ec8773bb1307)
+
+
+
 ## Installation
 
 ### Windows Installer
