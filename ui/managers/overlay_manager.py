@@ -779,25 +779,22 @@ class OverlayManager(QObject):
         if target_rect.height() < min_height:
             target_rect.setHeight(min_height)
             
-            # Check if it goes off-screen (bottom)
-            safe_bottom = self.parent_widget.height() - 40 
+            safe_bottom = self.parent_widget.height() - 40
             if target_rect.bottom() > safe_bottom:
-                 if source_btn:
-                     src_pos = source_btn.mapTo(self.parent_widget, QPoint(0, 0))
-                     src_bottom = src_pos.y() + source_btn.height()
-                     target_rect.moveBottom(src_bottom)
-                 else:
-                     diff = target_rect.bottom() - safe_bottom
-                     target_rect.moveTop(target_rect.top() - diff)
+                if source_btn:
+                    src_pos = source_btn.mapTo(self.parent_widget, QPoint(0, 0))
+                    src_bottom = src_pos.y() + source_btn.height()
+                    target_rect.moveBottom(src_bottom)
+                else:
+                    diff = target_rect.bottom() - safe_bottom
+                    target_rect.moveTop(target_rect.top() - diff)
 
-            # Identify additional buttons covered by the expanded height
+            # Identify additional buttons covered by the expanded rect
             for btn in self.buttons:
                 if not btn.isVisible() or btn == source_btn: continue
                 if btn in self._weather_siblings: continue
-
                 btn_pos = btn.mapTo(self.parent_widget, QPoint(0, 0))
                 btn_rect = QRect(btn_pos, btn.size())
-                
                 if target_rect.intersects(btn_rect):
                     self._weather_siblings.append(btn)
                     btn.set_opacity(0.0)
