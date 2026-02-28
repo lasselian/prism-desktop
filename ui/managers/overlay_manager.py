@@ -774,6 +774,34 @@ class OverlayManager(QObject):
         
         target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='weather')
         
+        # Enforce Minimum Height (2 Rows) for Weather Overlay
+        min_height = (BUTTON_HEIGHT * 2) + BUTTON_SPACING
+        if target_rect.height() < min_height:
+            target_rect.setHeight(min_height)
+            
+            # Check if it goes off-screen (bottom)
+            safe_bottom = self.parent_widget.height() - 40 
+            if target_rect.bottom() > safe_bottom:
+                 if source_btn:
+                     src_pos = source_btn.mapTo(self.parent_widget, QPoint(0, 0))
+                     src_bottom = src_pos.y() + source_btn.height()
+                     target_rect.moveBottom(src_bottom)
+                 else:
+                     diff = target_rect.bottom() - safe_bottom
+                     target_rect.moveTop(target_rect.top() - diff)
+
+            # Identify additional buttons covered by the expanded height
+            for btn in self.buttons:
+                if not btn.isVisible() or btn == source_btn: continue
+                if btn in self._weather_siblings: continue
+
+                btn_pos = btn.mapTo(self.parent_widget, QPoint(0, 0))
+                btn_rect = QRect(btn_pos, btn.size())
+                
+                if target_rect.intersects(btn_rect):
+                    self._weather_siblings.append(btn)
+                    btn.set_opacity(0.0)
+
         current_state = self._entity_states.get(entity_id, {})
         
         self.weather_overlay.set_border_effect(self._border_effect)
