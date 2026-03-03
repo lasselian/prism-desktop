@@ -112,7 +112,7 @@ To build the installer, open `setup.iss` with [Inno Setup](https://jrsoftware.or
 2. Run the build script:
 
 ```bash
-python3 build_appimage.py
+python3 build_linux.py
 ```
 
 This will build the binary, create an AppDir, and package it into an AppImage.
