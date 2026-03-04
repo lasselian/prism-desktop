@@ -316,6 +316,7 @@ class SettingsWidget(QWidget):
         self.status_label.setStyleSheet("color: #aaa;")
         
         test_row.addWidget(self.test_btn)
+        test_row.addSpacing(10)
         test_row.addWidget(self.status_label)
         test_row.addStretch()
         self.form.addRow("", test_row)
