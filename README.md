@@ -59,10 +59,11 @@ It features a sleek dashboard with smooth animations, build in notifications, in
 Download the latest `PrismDesktopSetup.exe` from the Releases page. This will install the app and optionally set it to start with Windows.
 
 ### Linux Installer
-Download the latest `appimage` from the Releases page. or download and run from source.    
-GNOME: make sure to install `AppIndicator and KStatusNotifierItem Support` through `Extension Manager` first. 
+Download the latest `appimage` from the Releases page. or download and run from source.  
 
-```keyboard shortcuts doesn't work on wayland yet.```
+**GNOME:** 
+- make sure to install `AppIndicator and KStatusNotifierItem Support` through `Extension Manager
+- Wayland: keyboard shortcuts doesn't work completely yet.
 
 ### Manual / Portable
 You can also download the standalone `.exe` if you prefer not to install anything. Just run it, and it will create a configuration file in the same directory.
