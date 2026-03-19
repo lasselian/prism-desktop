@@ -44,7 +44,8 @@ from ui.dashboard import Dashboard
 from ui.tray_manager import TrayManager
 from services.notifications import NotificationManager
 from services.input_manager import InputManager
-from services.mobile_app import register_mobile_app
+from services.mobile_app import register_mobile_app, send_location_update
+from services.location_manager import get_location
 from ui.icons import load_mdi_font
 from services.update_checker import UpdateCheckerThread
 from PyQt6.QtWidgets import QMessageBox
@@ -85,6 +86,9 @@ class PrismDesktopApp(QObject):
         # WebSocket
         self._ha_websocket: Optional[HAWebSocket] = None
         self._ws_task: Optional[asyncio.Task] = None
+
+        # Location reporting (Windows only)
+        self._location_task: Optional[asyncio.Task] = None
         
         # Helper threads (legacy/transition)
         
@@ -153,8 +157,8 @@ class PrismDesktopApp(QObject):
     
     def init_ui(self):
         """Initialize UI components."""
-        rows = self.config.get('appearance', {}).get('rows', 2)
-        cols = self.config.get('appearance', {}).get('cols', 4)
+        rows = self.config.get('appearance', {}).get('rows', 4)
+        cols = self.config.get('appearance', {}).get('cols', 6)
         self.dashboard = Dashboard(config=self.config, theme_manager=self.theme_manager, input_manager=self.input_manager, version=VERSION, rows=rows, cols=cols)
         self.dashboard.set_buttons(self.config.get('buttons', []), self.config.get('appearance', {}))
         
@@ -256,6 +260,7 @@ class PrismDesktopApp(QObject):
 
     def stop_all_threads(self):
         """Stop all background threads."""
+        self._stop_location_loop()
         self.stop_websocket()
 
         if self.tray_manager:
@@ -382,14 +387,21 @@ class PrismDesktopApp(QObject):
             print("HA config changed, restarting connections...")
             # Clear mobile_app registration so we re-register with the new HA instance
             self.config.setdefault("mobile_app", {}).pop("webhook_id", None)
+            self._stop_location_loop()
             self.stop_websocket()
             await self.ha_client.close()
-            
+
             self.init_ha_client()
             self.start_websocket()
             self.fetch_initial_states()
         else:
             self.theme_manager.set_theme(self.config.get('appearance', {}).get('theme', 'system'))
+            # Sync location loop with new setting
+            location_enabled = self.config.get('mobile_app', {}).get('location_enabled', False)
+            if location_enabled:
+                self._start_location_loop()
+            else:
+                self._stop_location_loop()
 
     @pyqtSlot(dict)
     def _on_embedded_settings_saved(self, new_config: dict):
@@ -653,7 +665,39 @@ class PrismDesktopApp(QObject):
                 print("[MobileApp] New registration — reconnecting WS for push channel subscription")
                 self.stop_websocket()
                 self.start_websocket()
+
+        # Start location loop if enabled
+        if self.config.get('mobile_app', {}).get('location_enabled', False):
+            self._start_location_loop()
         
+    def _start_location_loop(self):
+        """Start (or restart) the periodic location update task."""
+        if self._location_task and not self._location_task.done():
+            self._location_task.cancel()
+        self._location_task = asyncio.create_task(self._location_update_loop())
+
+    def _stop_location_loop(self):
+        """Cancel the location update task if running."""
+        if self._location_task and not self._location_task.done():
+            self._location_task.cancel()
+            self._location_task = None
+
+    async def _location_update_loop(self):
+        """Periodically fetch device location and send it to Home Assistant."""
+        ha_config = self.config.get('home_assistant', {})
+        ha_url = ha_config.get('url', '')
+        webhook_id = self.config.get('mobile_app', {}).get('webhook_id', '')
+        if not ha_url or not webhook_id:
+            return
+        try:
+            while True:
+                location = await get_location()
+                if location:
+                    await send_location_update(ha_url, webhook_id, location)
+                await asyncio.sleep(900)  # 15 minutes
+        except asyncio.CancelledError:
+            pass
+
     @pyqtSlot()
     def on_ws_disconnected(self):
         print("WS Disconnected")

@@ -54,13 +54,17 @@ async def register_mobile_app(
     """
     mobile_app_cfg = config.setdefault("mobile_app", {})
 
-    # Already registered — ensure push_websocket_channel is set on HA side
+    # Already registered — verify the webhook is still valid on HA side
     existing_webhook_id = mobile_app_cfg.get("webhook_id", "")
     if existing_webhook_id:
         logger.info(f"[MobileApp] Already registered (webhook_id={existing_webhook_id[:8]}...)")
-        # Always update registration to ensure push_websocket_channel is enabled
-        await _update_registration(ha_url, existing_webhook_id)
-        return existing_webhook_id
+        still_valid = await _update_registration(ha_url, existing_webhook_id)
+        if still_valid:
+            return existing_webhook_id
+        # Webhook is dead (device deleted in HA) — clear and re-register below
+        logger.warning("[MobileApp] Registration lost — HA no longer recognises this webhook. Re-registering...")
+        mobile_app_cfg.pop("webhook_id", None)
+        save_config_fn()
 
     if not ha_url or not ha_token:
         logger.warning("[MobileApp] Missing HA URL or token — skipping registration")
@@ -134,11 +138,40 @@ async def register_mobile_app(
         return None
 
 
-async def _update_registration(ha_url: str, webhook_id: str):
+async def send_location_update(ha_url: str, webhook_id: str, location: dict) -> bool:
+    """
+    POST an update_location action to the HA mobile app webhook.
+
+    location should be: {"gps": [lat, lon], "gps_accuracy": metres}
+    The webhook endpoint is unauthenticated — no Authorization header needed.
+    Returns True on success (HTTP 200/201).
+    """
+    url = ha_url.rstrip("/") + f"/api/webhook/{webhook_id}"
+    payload = {"type": "update_location", "data": location}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=10) as response:
+                if response.status in (200, 201):
+                    logger.info("[MobileApp] Location update sent successfully")
+                    return True
+                else:
+                    logger.warning(f"[MobileApp] Location update returned HTTP {response.status}")
+                    return False
+    except asyncio.TimeoutError:
+        logger.warning("[MobileApp] Location update timed out")
+        return False
+    except Exception as e:
+        logger.warning(f"[MobileApp] Location update error: {e}")
+        return False
+
+
+async def _update_registration(ha_url: str, webhook_id: str) -> bool:
     """
     Update an existing mobile app registration via the webhook POST endpoint
     to ensure push_websocket_channel is enabled (required for notify service creation).
-    Uses the webhook's update_registration action rather than the REST API.
+
+    Returns True if the webhook is still valid, False if HA no longer
+    recognises it (device was deleted → 404/410/etc.).
     """
     url = ha_url.rstrip("/") + f"/api/webhook/{webhook_id}"
     payload = {
@@ -154,7 +187,15 @@ async def _update_registration(ha_url: str, webhook_id: str):
             async with session.post(url, json=payload, timeout=10) as response:
                 if response.status in (200, 201):
                     logger.info("[MobileApp] Registration updated (push_websocket_channel=True)")
+                    return True
+                elif response.status in (404, 410):
+                    logger.warning(f"[MobileApp] Webhook gone (HTTP {response.status})")
+                    return False
                 else:
+                    # Other errors (e.g. 500) — assume still valid, don't wipe registration
                     logger.warning(f"[MobileApp] Registration update returned HTTP {response.status}")
+                    return True
     except Exception as e:
+        # Network error — don't assume the registration is lost
         logger.warning(f"[MobileApp] Registration update error (non-critical): {e}")
+        return True

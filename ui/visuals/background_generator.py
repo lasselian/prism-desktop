@@ -1,246 +1,190 @@
+import math
 import random
-from PyQt6.QtCore import Qt, QPointF, QRectF, QPoint
+from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import (
-    QColor, QPainter, QPixmap, QLinearGradient, QRadialGradient, 
-    QBrush, QPen, QPainterPath, QConicalGradient
+    QColor, QPainter, QPixmap, QRadialGradient, QBrush,
 )
+
 
 class BackgroundGenerator:
     """
-    Generates procedural abstract backgrounds with frosted glass effects.
-    Designed for media player placeholders.
+    Generates prismatic light-field backgrounds for media player buttons.
+
+    The effect looks like spectral light projected through frosted glass:
+    colored radial gradients are rendered onto a tiny pixmap with additive
+    blending, then upscaled — the bilinear interpolation *is* the blur.
     """
-    
-    # Modern, aesthetic palettes (fallback)
-    PALETTES = [
-        ["#4e54c8", "#8f94fb"], # Retro wave
-        ["#11998e", "#38ef7d"], # Moss
-        ["#FC466B", "#3F5EFB"], # Sunset
-        ["#C6FFDD", "#FBD786", "#f7797d"], # Beach
-        ["#12c2e9", "#c471ed", "#f64f59"], # Synth
-        ["#2980B9", "#6DD5FA", "#FFFFFF"], # Ice
-        ["#8E2DE2", "#4A00E0"], # Purple
-        ["#00b09b", "#96c93d"], # Greenish
-        ["#D3CCE3", "#E9E4F0"], # Muted White
-        ["#20002c", "#cbb4d4"], # Dark Purple
+
+    # Prismatic / spectral palettes
+    PRISM_PALETTES = [
+        ["#7400B8", "#5390D9", "#48BFE3", "#64DFDF"],  # Deep violet → cyan spectrum
+        ["#FF006E", "#8338EC", "#3A86FF"],              # Magenta → purple → blue
+        ["#3A0CA3", "#4361EE", "#4CC9F0"],              # Royal blue → electric cyan
+        ["#F72585", "#B5179E", "#7209B7", "#3A0CA3"],   # Hot pink → deep purple
+        ["#560BAD", "#480CA8", "#3F37C9", "#4895EF"],   # Indigo cascade
+        ["#7209B7", "#4CC9F0", "#F72585"],              # Purple → cyan → pink (triadic)
+        ["#4361EE", "#F72585", "#4CC9F0"],              # Blue → pink → cyan
+        ["#3A86FF", "#8338EC", "#FF006E", "#48BFE3"],   # Full prism
     ]
+
+    # Golden ratio — used to create irrational frequency ratios
+    _PHI = 1.6180339887
 
     @staticmethod
     def generate(width: int, height: int, seed: int = None, palette: list[str] = None) -> QPixmap:
         """
-        Generate a random background pixmap.
-        
+        Generate a static background pixmap (single frozen frame of the light field).
+
         Args:
             width: Width of the background.
             height: Height of the background.
             seed: Random seed for deterministic generation.
             palette: Optional list of hex color strings or QColors.
-        
+
         Returns:
             QPixmap: The generated background.
         """
-        # Ensure minimum size to avoid errors
-        width = max(1, width)
-        height = max(1, height)
-        
-        # Initialize random generator
-        if seed is None:
-            seed = random.randint(0, 1000000)
-        
-        rng = random.Random(seed)
-        
-        # 1. Setup Canvas
-        pixmap = QPixmap(width, height)
-        # Fill with a base color (usually dark for modern look)
-        pixmap.fill(QColor("#1a1a1a"))
-        
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # 2. Resolve Palette
-        if not palette:
-            palette = rng.choice(BackgroundGenerator.PALETTES)
-        
-        # Convert to QColors if strings
-        q_palette = [QColor(c) if isinstance(c, str) else c for c in palette]
-        
-        # 3. Draw Background Gradient (Base)
-        grad_type = rng.choice(['linear', 'radial', 'conical'])
-        
-        if grad_type == 'linear':
-            # Random angle
-            start = QPointF(0, 0)
-            end = QPointF(width, height)
-            if rng.random() > 0.5:
-                start = QPointF(width, 0)
-                end = QPointF(0, height)
-            
-            grad = QLinearGradient(start, end)
-            
-        elif grad_type == 'radial':
-            center = QPointF(width * rng.random(), height * rng.random())
-            radius = max(width, height) * (0.5 + rng.random())
-            grad = QRadialGradient(center, radius)
-            
-        else: # conical
-            center = QPointF(width/2, height/2)
-            angle = rng.random() * 360
-            grad = QConicalGradient(center, angle)
-            
-        # Apply palette to gradient
-        if len(q_palette) == 1:
-            grad.setColorAt(0, q_palette[0].darker(150))
-            grad.setColorAt(1, q_palette[0])
-        else:
-            for i, color in enumerate(q_palette):
-                pos = i / (len(q_palette) - 1)
-                grad.setColorAt(pos, color)
-                
-        painter.fillRect(0, 0, width, height, grad)
-        
-        # 4. Draw Layers (Shapes)
-        num_layers = rng.randint(2, 5)
-        
-        for _ in range(num_layers):
-            BackgroundGenerator._draw_random_layer(painter, width, height, rng, q_palette)
-            
-        painter.end()
-        
-        # 5. Apply Effects (Frosted Glass / Noise)
-        final_pixmap = BackgroundGenerator._apply_frosted_effect(pixmap, rng)
-        
-        return final_pixmap
-    
-    @staticmethod
-    def _draw_random_layer(painter: QPainter, w: int, h: int, rng: random.Random, palette: list[QColor]):
-        """Draws a single layer of random shapes."""
-        shape_type = rng.choice(['circles', 'stripes', 'blobs', 'rects', 'dots'])
-        
-        # Pick a random color from palette
-        base_color = rng.choice(palette)
-        # Randomize alpha for layering
-        color = QColor(base_color)
-        color.setAlpha(rng.randint(30, 150))
-        
-        # Blend mode? (Qt Painter composition modes)
-        # Some modes look cool, others break things. Let's stick to SourceOver or Overlay-ish logic via alpha.
-        # painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver) 
-        
-        pen = QPen(Qt.PenStyle.NoPen)
-        painter.setPen(pen)
-        painter.setBrush(QBrush(color))
-        
-        if shape_type == 'circles':
-            # Scatter random circles
-            count = rng.randint(3, 10)
-            for _ in range(count):
-                r = rng.randint(20, min(w, h) // 2)
-                cx = rng.randint(-r, w + r)
-                cy = rng.randint(-r, h + r)
-                painter.drawEllipse(QPointF(cx, cy), r, r)
-                
-        elif shape_type == 'stripes':
-            # Draw diagonal stripes
-            thickness = rng.randint(10, 50)
-            spacing = thickness * 2
-            angle = rng.randint(-45, 45)
-            
-            painter.save()
-            painter.translate(w/2, h/2)
-            painter.rotate(angle)
-            painter.translate(-w, -h) # Move back far enough to cover rotation
-            
-            # Draw enough stripes to cover
-            limit = max(w, h) * 3
-            for x in range(0, limit, spacing):
-                painter.drawRect(x, -limit, thickness, limit * 2)
-                
-            painter.restore()
-            
-        elif shape_type == 'rects':
-            # Rounded rects
-            count = rng.randint(3, 8)
-            for _ in range(count):
-                rw = rng.randint(50, 200)
-                rh = rng.randint(50, 200)
-                rx = rng.randint(-50, w)
-                ry = rng.randint(-50, h)
-                rot = rng.randint(0, 360)
-                
-                painter.save()
-                painter.translate(rx + rw/2, ry + rh/2)
-                painter.rotate(rot)
-                painter.drawRoundedRect(QRectF(-rw/2, -rh/2, rw, rh), 20, 20)
-                painter.restore()
-        
-        elif shape_type == 'dots':
-             # Grid of dots
-             size = rng.randint(4, 15)
-             gap = rng.randint(20, 50)
-             offset_x = rng.randint(0, gap)
-             offset_y = rng.randint(0, gap)
-             
-             for y in range(0, h, gap):
-                 for x in range(0, w, gap):
-                     painter.drawEllipse(QPointF(x + offset_x, y + offset_y), size/2, size/2)
-                     
-        elif shape_type == 'blobs':
-            # Random curves (simple approximation)
-            path = QPainterPath()
-            sx, sy = rng.randint(0, w), rng.randint(0, h)
-            path.moveTo(sx, sy)
-            
-            for _ in range(3):
-                px1 = rng.randint(-w//2, int(w*1.5))
-                py1 = rng.randint(-h//2, int(h*1.5))
-                px2 = rng.randint(-w//2, int(w*1.5))
-                py2 = rng.randint(-h//2, int(h*1.5))
-                ex = rng.randint(0, w)
-                ey = rng.randint(0, h)
-                path.cubicTo(px1, py1, px2, py2, ex, ey)
-                
-            path.closeSubpath()
-            painter.drawPath(path)
+        layers = BackgroundGenerator.generate_layers(width, height, seed=seed, palette=palette)
+        return BackgroundGenerator.render_frame(
+            width, height, layers, frame=(layers["seed"] % 1000)
+        )
 
     @staticmethod
-    def _apply_frosted_effect(source: QPixmap, rng: random.Random) -> QPixmap:
-        """Applies blur and noise to create a frosted glass aesthetic."""
-        
-        # 1. Downscale -> Upscale Blur
-        # This is strictly faster than a full Gaussian kernel on the CPU
-        orig_size = source.size()
-        w, h = orig_size.width(), orig_size.height()
-        
-        # Downscale factor (smaller = more blur)
-        scale_factor = 0.1
-        small_w = max(1, int(w * scale_factor))
-        small_h = max(1, int(h * scale_factor))
-        
-        small = source.scaled(
-            small_w, small_h,
+    def generate_layers(width: int, height: int, seed: int = None, palette: list[str] = None) -> dict:
+        """
+        Generate anchor definitions for a prismatic light-field animation.
+
+        Each anchor is a colored radial gradient that drifts on a Lissajous
+        curve.  The caller renders frames by passing these anchors plus a
+        frame counter to ``render_frame()``.
+
+        Returns:
+            dict with keys:
+              anchors   – list of anchor dicts (color, frequencies, phases, radius)
+              base_color – dark tinted QColor for the canvas fill
+              seed      – echo back for cache comparison
+        """
+        width = max(1, width)
+        height = max(1, height)
+        if seed is None:
+            seed = random.randint(0, 1_000_000)
+
+        rng = random.Random(seed)
+
+        # --- Resolve palette ---
+        if not palette:
+            palette = rng.choice(BackgroundGenerator.PRISM_PALETTES)
+        q_palette = [QColor(c) if isinstance(c, str) else c for c in palette]
+
+        # --- Base color: dark glass tinted by palette average ---
+        avg_r = sum(c.red()   for c in q_palette) // len(q_palette)
+        avg_g = sum(c.green() for c in q_palette) // len(q_palette)
+        avg_b = sum(c.blue()  for c in q_palette) // len(q_palette)
+        base_color = QColor(avg_r, avg_g, avg_b)
+        # Darken dramatically: keep hue, reduce saturation + value
+        h, s, v, _ = base_color.getHsv()
+        base_color = QColor.fromHsv(h, max(0, min(255, int(s * 0.30))), int(255 * 0.12))
+
+        # --- Anchor definitions ---
+        num_anchors = rng.randint(4, 5)
+        base_freq = rng.uniform(0.002, 0.006)
+        anchors = []
+
+        for i in range(num_anchors):
+            color = QColor(q_palette[i % len(q_palette)])
+            color.setAlpha(rng.randint(90, 130))
+
+            # Frequencies: multiply by golden-ratio powers for irrational ratios
+            phi_pow = BackgroundGenerator._PHI ** i
+            freq_x = base_freq * phi_pow * rng.uniform(0.8, 1.2)
+            freq_y = base_freq * phi_pow * rng.uniform(0.6, 1.0)
+
+            anchors.append({
+                "color":      color,
+                "freq_x":     freq_x,
+                "freq_y":     freq_y,
+                "phase_x":    rng.uniform(0, 2 * math.pi),
+                "phase_y":    rng.uniform(0, 2 * math.pi),
+                "radius":     rng.uniform(0.4, 0.7),       # fraction of max(tiny_w, tiny_h)
+                "radius_freq": rng.uniform(0.0008, 0.002),  # very slow breathing
+            })
+
+        return {
+            "anchors":    anchors,
+            "base_color": base_color,
+            "seed":       seed,
+        }
+
+    @staticmethod
+    def render_frame(width: int, height: int, layers: dict, frame: int,
+                     tiny_pixmap: QPixmap = None) -> QPixmap:
+        """
+        Render one frame of the prismatic light field.
+
+        Draws colour gradients onto a tiny canvas with additive blending,
+        then upscales — the bilinear interpolation produces the frosted-glass
+        blur for free.
+
+        Args:
+            width:  Target output width.
+            height: Target output height.
+            layers: Dict returned by ``generate_layers()``.
+            frame:  Animation frame counter.
+            tiny_pixmap: Optional pre-allocated tiny QPixmap for reuse
+                         (avoids per-frame allocation).
+        """
+        width = max(1, width)
+        height = max(1, height)
+        scale = 0.15
+        tiny_w = max(20, int(width * scale))
+        tiny_h = max(16, int(height * scale))
+
+        if tiny_pixmap is not None:
+            tiny = tiny_pixmap
+        else:
+            tiny = QPixmap(tiny_w, tiny_h)
+
+        tiny.fill(layers["base_color"])
+
+        p = QPainter(tiny)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
+
+        t = frame
+        tw, th = tiny.width(), tiny.height()
+        max_dim = max(tw, th)
+
+        for anchor in layers["anchors"]:
+            # Lissajous position — smooth, organic, bounded to canvas
+            cx = 0.5 + 0.4 * math.sin(anchor["freq_x"] * t + anchor["phase_x"])
+            cy = 0.5 + 0.4 * math.sin(anchor["freq_y"] * t + anchor["phase_y"])
+            # Gentle radius breathing
+            r_scale = 1.0 + 0.15 * math.sin(anchor["radius_freq"] * t + anchor["phase_x"])
+            px = cx * tw
+            py = cy * th
+            r = anchor["radius"] * max_dim * r_scale
+
+            grad = QRadialGradient(QPointF(px, py), max(1.0, r))
+            grad.setColorAt(0.0, anchor["color"])
+            edge = QColor(anchor["color"])
+            edge.setAlpha(0)
+            grad.setColorAt(1.0, edge)
+            p.setBrush(QBrush(grad))
+            p.drawEllipse(QPointF(px, py), r, r)
+
+        p.end()
+
+        # Upscale — bilinear interpolation IS the frosted-glass blur
+        result = tiny.scaled(
+            width, height,
             Qt.AspectRatioMode.IgnoreAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
+            Qt.TransformationMode.SmoothTransformation,
         )
-        
-        blurred = small.scaled(
-            w, h,
-            Qt.AspectRatioMode.IgnoreAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        )
-        
-        # 2. Add White/Noise Overlay
-        painter = QPainter(blurred)
-        
-        # White tint for "frost"
-        painter.fillRect(0, 0, w, h, QColor(255, 255, 255, 20))
-        
-        # Noise (Optional, adds texture)
-        # We can draw random pixels or a pre-calculated noise pattern.
-        # Since we want speed, we won't iterate pixels in Python.
-        # Instead, we just trust the blur + shapes are enough texture.
-        # Or, we can draw a few thousand tiny random points? (Might be slow)
-        # SKIP pixel-level noise for performance.
-        
-        painter.end()
-        
-        return blurred
+
+        # Subtle frost overlay
+        frost = QPainter(result)
+        frost.fillRect(0, 0, width, height, QColor(255, 255, 255, 18))
+        frost.end()
+
+        return result

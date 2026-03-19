@@ -6,10 +6,11 @@ Embedded Button Editor Widget
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QLineEdit, QPushButton, QComboBox, QFormLayout,
-    QCheckBox, QSpinBox, QSizePolicy, QCompleter
+    QSpinBox, QSizePolicy, QCompleter
 )
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QColor, QFont
+from ui.widgets.toggle_switch import ToggleSwitch
 
 class ButtonEditWidget(QWidget):
     """
@@ -254,12 +255,19 @@ class ButtonEditWidget(QWidget):
         # (Advanced mode toggle removed - climate now defaults to advanced)
         
         # Show Album Art (Media Player Only)
-        self.show_album_art_check = QCheckBox("Show Album Art")
+        self.show_album_art_check = ToggleSwitch("Show Album Art")
         self.show_album_art_check.setToolTip("Display album artwork as button background")
         self.show_album_art_check.setChecked(True)
         self.show_album_art_check.setVisible(False)
         self.form.addRow("", self.show_album_art_check)
-        
+
+        # Animated Background (Media Player Only)
+        self.animated_bg_toggle = ToggleSwitch("Animated Background")
+        self.animated_bg_toggle.setToolTip("Enable animated parallax background when no album art is shown")
+        self.animated_bg_toggle.setChecked(True)
+        self.animated_bg_toggle.setVisible(False)
+        self.form.addRow("", self.animated_bg_toggle)
+
         # Precision (Widget/Sensor Only)
         self.precision_spin = QSpinBox()
         self.precision_spin.setRange(0, 5)
@@ -400,7 +408,7 @@ class ButtonEditWidget(QWidget):
         # --- Shortcut Section ---
         self._add_section_header("SHORTCUT")
         
-        self.custom_shortcut_check = QCheckBox("Enable Custom Shortcut")
+        self.custom_shortcut_check = ToggleSwitch("Enable Custom Shortcut")
         self.custom_shortcut_check.toggled.connect(self.on_custom_shortcut_toggled)
         self.form.addRow("", self.custom_shortcut_check)
         
@@ -628,6 +636,7 @@ class ButtonEditWidget(QWidget):
 
         # (Advanced mode visibility logic removed)
         self.show_album_art_check.setVisible(current_type == 'media_player')
+        self.animated_bg_toggle.setVisible(current_type == 'media_player')
         self.service_combo.setVisible(current_type == 'switch')
         self.service_label.setVisible(current_type == 'switch')
         
@@ -769,7 +778,8 @@ class ButtonEditWidget(QWidget):
         
         # (Advanced mode checked logic removed)
         self.show_album_art_check.setChecked(self.config.get('show_album_art', True))
-        
+        self.animated_bg_toggle.setChecked(self.config.get('animated_bg', True))
+
         # Precision
         self.precision_spin.setValue(self.config.get('precision', 1))
         
@@ -838,6 +848,7 @@ class ButtonEditWidget(QWidget):
             
         if new_config['type'] == 'media_player':
             new_config['show_album_art'] = self.show_album_art_check.isChecked()
+            new_config['animated_bg'] = self.animated_bg_toggle.isChecked()
             
         if new_config['type'] == 'switch':
              new_config['service'] = f"{new_config['entity_id'].split('.')[0]}.{self.service_combo.currentText()}"

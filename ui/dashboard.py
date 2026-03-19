@@ -4,6 +4,7 @@ The main popup menu with 4x2 grid of buttons/widgets.
 """
 
 import asyncio
+import sys
 import time
 import platform
 from PyQt6.QtWidgets import (
@@ -898,9 +899,23 @@ class Dashboard(QWidget):
         """Open Home Assistant in default browser."""
         ha_cfg = self.config.get('home_assistant', {})
         url = ha_cfg.get('url', '').strip()
-        if url:
-             QDesktopServices.openUrl(QUrl(url))
-             self.hide()
+        if not url:
+            return
+        try:
+            if sys.platform == 'linux':
+                # QDesktopServices.openUrl() can segfault on some KDE/D-Bus
+                # configurations — use xdg-open in a detached subprocess instead.
+                import subprocess
+                subprocess.Popen(
+                    ['xdg-open', url],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            else:
+                QDesktopServices.openUrl(QUrl(url))
+        except Exception:
+            QDesktopServices.openUrl(QUrl(url))
+        self.hide()
 
     def update_style(self):
         """Update dashboard style based on theme."""
@@ -1515,6 +1530,7 @@ class Dashboard(QWidget):
         # Anchor exactly to the current bottom so sizing is perfectly stable,
         # _on_transition_done will run when finished to reset the anchor precisely
         self._anchor_bottom_y = self.geometry().y() + self.height()
+        self._anchor_right_x = self.geometry().x() + self.width()
         
         self._lock_view_sizes('edit_button', target_height)
         self._animation_timer.start()
@@ -1586,11 +1602,13 @@ class Dashboard(QWidget):
 
     def _lock_view_sizes(self, target_view: str, target_height: int):
         """Lock widget sizes before animation to prevent jitter."""
-        width = self.container.width() if self.container.width() > 0 else (self._fixed_width - 20)
+        width = self._fixed_width - (ROOT_MARGIN * 2)
         
         if target_view == 'settings':
             if self.settings_widget:
-                self.settings_widget.setFixedSize(width, target_height)
+                self.settings_widget.setMinimumSize(0, 0)
+                self.settings_widget.setMaximumSize(16777215, 16777215)
+                self.settings_widget.setFixedHeight(target_height)
         
         elif target_view == 'edit_button':
             if hasattr(self, 'edit_widget'):
@@ -1632,7 +1650,8 @@ class Dashboard(QWidget):
         self._anim_start_time = time.perf_counter()
         self._anim_duration = 0.25
         self._anchor_bottom_y = self.geometry().y() + self.height()
-        
+        self._anchor_right_x = self.geometry().x() + self.width()
+
         # 5. Handle Footer Visibility
         if view_name == 'grid':
             # Footer will be shown/faded-in after animation in _on_transition_done
@@ -1650,8 +1669,8 @@ class Dashboard(QWidget):
                 btn.set_opacity(1.0)
 
         # 7. Unlock Window Constraints
-        self.setMinimumHeight(0)
-        self.setMaximumHeight(16777215)
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(16777215, 16777215)
         
         # 8. Switch Stack & Lock Content
         self._lock_view_sizes(view_name, target_height)
@@ -1671,10 +1690,18 @@ class Dashboard(QWidget):
         """Morph from Grid view to Settings view."""
         if self.overlay_manager:
             self.overlay_manager.close_all_overlays()
+        # Expand to at least 6 columns wide when entering settings
+        min_settings_cols = 6
+        target_width = max(self._fixed_width, calculate_width(min_settings_cols))
+        self._anim_start_width = self.width()
+        self._fixed_width = target_width
         self.transition_to('settings')
-    
+
     def hide_settings(self):
         """Morph from Settings view back to Grid view."""
+        grid_width = calculate_width(self._cols)
+        self._anim_start_width = self.width()
+        self._fixed_width = grid_width
         self.transition_to('grid')
 
     def _on_animation_frame(self):
@@ -1692,13 +1719,23 @@ class Dashboard(QWidget):
         # Update Geometry
         # Anchor to bottom: new_y = bottom - new_height
         new_y = self._anchor_bottom_y - current_h
-        current_x = self.x()
-        
+
+        # Animate width if it changed (e.g. settings expansion)
+        start_w = getattr(self, '_anim_start_width', None)
+        if start_w is not None:
+            current_w = int(start_w + (self._fixed_width - start_w) * t)
+            anchor_right = getattr(self, '_anchor_right_x', self.x() + self.width())
+            new_x = anchor_right - current_w
+        else:
+            current_w = self._fixed_width
+            new_x = self.x()
+
         # Single atomic update
-        self.setGeometry(current_x, new_y, self._fixed_width, current_h)
+        self.setGeometry(new_x, new_y, current_w, current_h)
         
         if progress >= 1.0:
             self._animation_timer.stop()
+            self._anim_start_width = None
             if self._current_view == 'grid':
                 # Special handling for returning to grid
                 pass
@@ -1819,7 +1856,7 @@ class Dashboard(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             x = event.position().x()
             y = event.position().y()
-            
+
             # Identify resize zone
             mode = None
             # Disable Corner Drag (Top-Left) - Prioritize Top then Left
@@ -1827,7 +1864,7 @@ class Dashboard(QWidget):
                 mode = 'top'
             elif x < RESIZE_MARGIN:
                 mode = 'left'
-                
+
             if mode:
                 self._is_resizing_window = True
                 self._resize_mode = mode
@@ -1870,7 +1907,7 @@ class Dashboard(QWidget):
 
         x = event.position().x()
         y = event.position().y()
-        
+
         if not self._is_resizing_window:
             # Hover Logic: Change Cursor (No Corner)
             if y < RESIZE_MARGIN:
@@ -1881,43 +1918,36 @@ class Dashboard(QWidget):
                 self.unsetCursor()
             super().mouseMoveEvent(event)
             return
-            
+
         # Drag Logic
         delta = event.globalPosition().toPoint() - self._resize_start_pos
         dx = delta.x()
         dy = delta.y()
-        
-        # Calculate Logic:
-        # Top Drag (dy < 0 -> Grow Up -> Height Increase)
-        # Left Drag (dx < 0 -> Grow Left -> Width Increase)
-        
+
         target_rows = self._resize_start_rows
         target_cols = self._resize_start_cols
-        
+
         if 'top' in self._resize_mode:
-            # Current Height - dy (since dy is negative for Up drag)
-            # Actually: new_h = start_h - dy
             start_h = self._resize_start_geo[3]
             new_h = start_h - dy
             target_rows = self._get_rows_at_height(new_h)
-            
+
         if 'left' in self._resize_mode:
-            # new_w = start_w - dx
             start_w = self._resize_start_geo[2]
             new_w = start_w - dx
             target_cols = self._get_cols_at_width(new_w)
-            
+
         # Apply Changes (Snap)
         current_rows = getattr(self, '_pending_rows_update', None)
         if current_rows is None:
             current_rows = self._rows
-            
+
         if target_rows != current_rows:
             self.set_rows(target_rows)
-            
+
         if target_cols != self._cols:
             self.set_cols(target_cols)
-            
+
         event.accept()
 
     def mouseReleaseEvent(self, event):
@@ -1926,12 +1956,12 @@ class Dashboard(QWidget):
             self._is_resizing_window = False
             self._resize_mode = None
             self.unsetCursor()
-            
+
             # Prevent focus-loss close for a brief moment
             # (In case mouse release happened outside window)
             self._ignore_focus_loss = True
             QTimer.singleShot(500, lambda: setattr(self, '_ignore_focus_loss', False))
-            
+
             event.accept()
             return
         super().mouseReleaseEvent(event)

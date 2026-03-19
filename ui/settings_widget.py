@@ -4,18 +4,24 @@ Settings Widget
 Clean, minimalist, and bug-free implementation of the Settings panel.
 """
 
+import sys
 from typing import Optional
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QLineEdit, QPushButton, QComboBox, QFormLayout, 
-    QCheckBox, QGraphicsOpacityEffect, QFrame, QColorDialog
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QLineEdit, QPushButton, QComboBox, QFormLayout,
+    QGraphicsOpacityEffect, QFrame, QColorDialog
 )
+from ui.widgets.toggle_switch import ToggleSwitch
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtProperty, pyqtSlot, QUrl
 from PyQt6.QtGui import QFont, QColor, QDesktopServices, QIcon, QPixmap
 from core.utils import SYSTEM_FONT
 
 from core.worker_threads import ConnectionTestThread
 from services.update_checker import UpdateCheckerThread
+from services.location_manager import (
+    is_geoclue2_available, ensure_desktop_file,
+    get_distro_info, get_geoclue2_install_hint,
+)
 
 class SettingsWidget(QWidget):
     """
@@ -85,15 +91,11 @@ class SettingsWidget(QWidget):
             input_bg = "rgba(0, 0, 0, 0.05)"
             input_border = "rgba(0, 0, 0, 0.15)"
             input_focus_bg = "rgba(0, 0, 0, 0.08)"
-            checkbox_bg = "rgba(0, 0, 0, 0.05)"
-            checkbox_border = "#aaa"
             section_header_color = "#666666"  # Dark gray for light mode
         else:
             input_bg = "rgba(255, 255, 255, 0.08)"
             input_border = "rgba(255, 255, 255, 0.1)"
             input_focus_bg = "rgba(255, 255, 255, 0.12)"
-            checkbox_bg = "rgba(255, 255, 255, 0.05)"
-            checkbox_border = "#555"
             section_header_color = "#8e8e93"  # Apple gray for dark mode
             
         # Pill Background (Semi-transparent container for readability)
@@ -106,6 +108,13 @@ class SettingsWidget(QWidget):
             
         from ui.styles import Typography, Dimensions
         
+        # Push accent + text color into any ToggleSwitch children already created
+        accent = colors['accent']
+        text   = colors['text']
+        for toggle in self.findChildren(ToggleSwitch):
+            toggle.set_accent(accent)
+            toggle.set_text_color(text)
+
         self.setStyleSheet(f"""
             QWidget {{ 
                 font-family: {Typography.FONT_FAMILY_UI}; 
@@ -128,7 +137,9 @@ class SettingsWidget(QWidget):
                 background-color: {input_bg};
                 border: 1px solid {input_border};
                 border-radius: {Dimensions.RADIUS_MEDIUM};
-                padding: 6px 10px;
+                padding: 0px 10px;
+                min-height: 32px;
+                max-height: 32px;
                 color: {colors['text']};
                 selection-background-color: {colors['accent']};
             }}
@@ -147,7 +158,9 @@ class SettingsWidget(QWidget):
                 color: {colors['button_text']};
                 border: 1px solid {colors['border']};
                 border-radius: {Dimensions.RADIUS_MEDIUM};
-                padding: {Dimensions.PADDING_MEDIUM} {Dimensions.PADDING_LARGE};
+                padding: 0px {Dimensions.PADDING_LARGE};
+                min-height: 32px;
+                max-height: 32px;
                 font-weight: {Typography.WEIGHT_MEDIUM};
             }}
             QPushButton:hover {{ background-color: {colors['accent']}; color: white; }}
@@ -177,18 +190,6 @@ class SettingsWidget(QWidget):
                 border: 1px solid {colors['accent']};
                 color: white;
             }}
-            QCheckBox {{ spacing: 8px; color: {colors['text']}; }}
-            QCheckBox::indicator {{
-                width: 18px; height: 18px;
-                border-radius: {Dimensions.RADIUS_SMALL};
-                border: 1px solid {checkbox_border};
-                background: {checkbox_bg};
-            }}
-            QCheckBox::indicator:checked {{
-                background: {colors['accent']};
-                border-color: {colors['accent']};
-            }}
-            
             QPushButton#recordBtn {{
                 background-color: #C62828;
                 border: none;
@@ -213,24 +214,24 @@ class SettingsWidget(QWidget):
                 font-weight: {Typography.WEIGHT_MEDIUM};
                 font-size: {Typography.SIZE_BODY};
                 border-radius: {Dimensions.RADIUS_MEDIUM};
-                padding: {Dimensions.PADDING_MEDIUM} 12px;
+                padding: 0px 12px;
             }}
             QPushButton#coffeeBtn:hover {{
                 background-color: #006ce6;
             }}
-            
+
             QPushButton#updateBtn {{
                 background-color: {colors['button']};
                 border: 1px solid {colors['border']};
                 border-radius: {Dimensions.RADIUS_MEDIUM};
-                padding: {Dimensions.PADDING_MEDIUM} 12px;
+                padding: 0px 12px;
             }}
             QPushButton#updateBtn:hover {{
                 background-color: {colors['accent']};
                 color: white;
                 border-color: {colors['accent']};
             }}
-            
+
             QFrame#settingsPill {{
                 background-color: {pill_bg};
                 border: 1px solid {pill_border};
@@ -300,27 +301,33 @@ class SettingsWidget(QWidget):
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText("http://homeassistant.local:8123")
         self.form.addRow("URL:", self.url_input)
-        
+
         self.token_input = QLineEdit()
         self.token_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.token_input.setPlaceholderText("Long-Lived Access Token")
         self.form.addRow("Token:", self.token_input)
-        
-        # Test Connection Row
-        test_row = QHBoxLayout()
+
+        # Full-width Test Connection button + status + optional location toggle
+        connect_col = QVBoxLayout()
+        connect_col.setSpacing(6)
         self.test_btn = QPushButton("Test Connection")
-        self.test_btn.setMinimumWidth(120)
         self.test_btn.clicked.connect(self.test_connection)
         self.status_label = QLabel("")
-        self.status_label.setWordWrap(True)
-        self.status_label.setStyleSheet("color: #aaa;")
-        
-        test_row.addWidget(self.test_btn)
-        test_row.addSpacing(10)
-        test_row.addWidget(self.status_label)
-        test_row.addStretch()
-        self.form.addRow("", test_row)
-        
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet("color: #aaa; font-size: 11px;")
+        self.status_label.hide()
+        connect_col.addWidget(self.test_btn)
+        connect_col.addWidget(self.status_label)
+        self.form.addRow("", connect_col)
+
+        # Location tracking (Windows + Linux)
+        if sys.platform in ('win32', 'linux'):
+            self.location_check = ToggleSwitch("Send location to Home Assistant")
+            self.location_check.setToolTip(
+                "Periodically reports this device's location via the Mobile App integration"
+            )
+            self.form.addRow("", self.location_check)
+
         # --- Appearance Section ---
         self._add_section_header("APPEARANCE")
         
@@ -349,15 +356,13 @@ class SettingsWidget(QWidget):
 
         
         # Show Dimming Option
-        self.show_dimming_check = QCheckBox("Show dimming")
+        self.show_dimming_check = ToggleSwitch("Show dimming")
         self.show_dimming_check.setToolTip("Fade button color based on brightness level")
-        self.show_dimming_check.setCursor(Qt.CursorShape.PointingHandCursor)
         self.form.addRow("", self.show_dimming_check)
-        
+
         # Glass UI Option
-        self.glass_ui_check = QCheckBox("Glass UI (EXPERIMENTAL)")
+        self.glass_ui_check = ToggleSwitch("Glass UI (EXPERIMENTAL)")
         self.glass_ui_check.setToolTip("Use a translucent glass background for the window")
-        self.glass_ui_check.setCursor(Qt.CursorShape.PointingHandCursor)
         self.form.addRow("", self.glass_ui_check)
         
         # --- Shortcut Section ---
@@ -395,50 +400,40 @@ class SettingsWidget(QWidget):
         
         self.form.addRow("App Toggle:", shortcut_row)
         
-        if self.theme_manager:
-            self.theme_manager.theme_changed.connect(self._update_stylesheet)
-        
-        # ... (Previous code)
-        
-        # layout.addLayout(self.form) - Already added to pill_layout
-        
         # --- Support Section ---
         self._add_section_header("SUPPORT")
-        
+
         # Update Check
         update_row = QHBoxLayout()
         update_row.setContentsMargins(0, 0, 0, 0)
-        
+
         self.update_btn = QPushButton("Check for Updates")
         self.update_btn.setObjectName("updateBtn")
         self.update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.update_btn.clicked.connect(self.check_for_updates)
-        
+
         self.update_label = QLabel(f"v{self.current_version}")
         self.update_label.setStyleSheet("color: #aaa; font-size: 11px;")
-        
+
         update_row.addWidget(self.update_btn)
         update_row.addSpacing(10)
         update_row.addWidget(self.update_label)
         update_row.addStretch()
-        
+
         self.form.addRow("Update:", update_row)
-        
+
         self.coffee_btn = QPushButton("Buy me a coffee ☕")
         self.coffee_btn.setObjectName("coffeeBtn")
         self.coffee_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        # self.coffee_btn.setFixedHeight(36) # Removed to match Update button size
         self.coffee_btn.clicked.connect(self.open_coffee)
-        
-        # Add to form layout for consistent alignment
-        # Align left (stretch on right)
+
         coffee_row = QHBoxLayout()
         coffee_row.addWidget(self.coffee_btn)
         coffee_row.addStretch()
-        
+
         self.form.addRow("Donate:", coffee_row)
-        
-        layout.addStretch() # Push everything up
+
+        layout.addStretch()
         
     def _add_section_header(self, text):
         """Helper to add spaced section header."""
@@ -486,6 +481,11 @@ class SettingsWidget(QWidget):
              
         self.show_dimming_check.setChecked(app.get('show_dimming', False))
         self.glass_ui_check.setChecked(app.get('glass_ui', False))
+
+        if sys.platform in ('win32', 'linux'):
+            self.location_check.setChecked(
+                self.config.get('mobile_app', {}).get('location_enabled', False)
+            )
              
         self.border_effect_combo.blockSignals(False)
         
@@ -511,12 +511,49 @@ class SettingsWidget(QWidget):
             'show_dimming': self.show_dimming_check.isChecked(),
             'glass_ui': self.glass_ui_check.isChecked(),
         })
-        
+
+        if sys.platform in ('win32', 'linux'):
+            new_location_enabled = self.location_check.isChecked()
+            self.config.setdefault('mobile_app', {})['location_enabled'] = new_location_enabled
+
+            # On Linux, verify GeoClue2 is available when first enabling
+            if sys.platform == 'linux' and new_location_enabled:
+                self._check_geoclue2_and_setup()
+
         # Shortcut handled by record signal, but good to ensure consistency
         # (Shortcut saves immediately on record in config dict)
         if 'shortcut' not in self.config: self.config['shortcut'] = {}
         
         self.settings_saved.emit(self.config)
+
+    # --- Linux location helpers ---
+
+    def _check_geoclue2_and_setup(self):
+        """Check GeoClue2 availability on Linux and create .desktop file."""
+        import asyncio
+
+        async def _check():
+            available = await is_geoclue2_available()
+            if not available:
+                distro = get_distro_info()
+                install_cmd = get_geoclue2_install_hint(distro["id"])
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(
+                    self,
+                    "GeoClue2 Not Found",
+                    f"Location services require GeoClue2, which was not found "
+                    f"on your system.\n\n"
+                    f"Install it with:\n  {install_cmd}\n\n"
+                    f"Then restart Prism Desktop.",
+                )
+                # Revert toggle — location won't work without GeoClue2
+                self.location_check.setChecked(False)
+                self.config.setdefault('mobile_app', {})['location_enabled'] = False
+                return
+            # GeoClue2 is available — ensure .desktop file exists
+            ensure_desktop_file()
+
+        asyncio.ensure_future(_check())
 
     # --- Logic ---
 
@@ -571,10 +608,12 @@ class SettingsWidget(QWidget):
         
         if not url or not token:
             self.status_label.setText("⚠ Missing Info")
+            self.status_label.show()
             return
             
         self.test_btn.setEnabled(False)
         self.status_label.setText("Testing...")
+        self.status_label.show()
         
         if self._test_thread and self._test_thread.isRunning():
             self._test_thread.quit()
@@ -588,8 +627,8 @@ class SettingsWidget(QWidget):
     def on_test_complete(self, success, message):
         self.test_btn.setEnabled(True)
         icon = "✅" if success else "❌"
-        # Display full message with wrap enabled on label
         self.status_label.setText(f"{icon} {message}")
+        self.status_label.show()
 
     def check_for_updates(self):
         """Start update check."""

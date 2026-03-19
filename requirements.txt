@@ -3,9 +3,12 @@ pystray>=0.19.5
 aiohttp>=3.9.0
 Pillow>=10.0.0
 win11toast>=0.34; sys_platform == 'win32'
+winrt-runtime>=1.0.5; sys_platform == 'win32'
+winrt-Windows.Devices.Geolocation>=1.0.5; sys_platform == 'win32'
 pynput>=1.7.6
 requests>=2.31.0
 keyring>=24.0.0
 cryptography>=41.0.0
 secretstorage>=3.2; sys_platform == 'linux'
+dbus-next>=0.2.3; sys_platform == 'linux'
 qasync>=0.27.1

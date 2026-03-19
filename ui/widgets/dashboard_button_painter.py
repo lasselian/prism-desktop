@@ -1,6 +1,7 @@
+import math
 from PyQt6.QtCore import Qt, QRect, QRectF, QPointF, QPropertyAnimation
 from PyQt6.QtGui import (
-    QColor, QFont, QFontMetrics, QPainter, QPainterPath, QColor, QPen, QBrush, 
+    QColor, QFont, QFontMetrics, QPainter, QPainterPath, QColor, QPen, QBrush,
     QLinearGradient, QConicalGradient, QRadialGradient
 )
 from PyQt6.QtWidgets import QApplication
@@ -176,37 +177,43 @@ class DashboardButtonPainter:
             painter.fillRect(rect, grad)
         else:
              # No Art -> Procedural Background
-             
+
              # Generate deterministic seed based on media info or button slot
              media_state = button._media_state or {}
              attrs = media_state.get('attributes', {})
-             
+
              title = attrs.get('media_title', '')
              artist = attrs.get('media_artist', '')
-             
+
              if title or artist:
-                 # Consistent background for the same track
                  seed = hash(f"{title}{artist}")
              else:
-                 # Consistent background for the slot (idle state)
                  seed = button.slot
-                 
-             # Generate background
-             # We use the button rect size
-             bg_pixmap = BackgroundGenerator.generate(rect.width(), rect.height(), seed=seed)
-             
-             # Draw Background
-             painter.drawPixmap(0, 0, bg_pixmap)
-             
-             # Gradient Overlay (for text readability)
+
+             animated = button.config.get('animated_bg', True)
+             w, h = rect.width(), rect.height()
+
+             if animated:
+                 # --- Animated prismatic light field ---
+                 button._ensure_anim_bg_layers(seed)
+                 bg = BackgroundGenerator.render_frame(
+                     w, h,
+                     button._anim_bg_layers,
+                     button._anim_bg_frame,
+                     tiny_pixmap=button._anim_bg_tiny,
+                 )
+                 painter.drawPixmap(0, 0, bg)
+             else:
+                 # --- Static background (original behaviour) ---
+                 bg_pixmap = BackgroundGenerator.generate(w, h, seed=seed)
+                 painter.drawPixmap(0, 0, bg_pixmap)
+
+             # Gradient overlay (for text readability)
              grad = QLinearGradient(QPointF(rect.topLeft()), QPointF(rect.bottomLeft()))
-             grad.setColorAt(0.0, QColor(0, 0, 0, 0))              # Top: transparent
-             
+             grad.setColorAt(0.0, QColor(0, 0, 0, 0))
              overlay_color = QColor(btn_color)
-             # Slightly stronger overlay for generated backgrounds to unify theme
-             overlay_color.setAlpha(200 if is_playing else 120)    
-             grad.setColorAt(1.0, overlay_color)                   # Bottom: user/accent color
-             
+             overlay_color.setAlpha(200 if is_playing else 120)
+             grad.setColorAt(1.0, overlay_color)
              painter.fillRect(rect, grad)
             
         # === PILL LABEL (Apple-like) ===

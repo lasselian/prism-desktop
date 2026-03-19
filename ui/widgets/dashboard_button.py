@@ -16,6 +16,7 @@ from ui.icons import get_icon, get_mdi_font, Icons, get_icon_for_type
 from core.utils import SYSTEM_FONT
 from ui.widgets.dashboard_button_painter import DashboardButtonPainter
 from ui.widgets.dashboard_button_styles import DashboardButtonStyleManager
+import math
 import sys
 
 # Custom MIME type for drag and drop
@@ -65,6 +66,7 @@ class DashboardButton(QFrame):
         
         # input_number interaction state
         self._input_changing = False
+        self._input_scrub_mode = False
         self._input_drag_start_pos = None
         self._input_start_val = 0.0
         self._hovering = False
@@ -122,6 +124,17 @@ class DashboardButton(QFrame):
         self._ignore_release = False
         
         self._border_effect = 'Rainbow'
+
+        # Animated background state (prismatic light field)
+        self._anim_bg_timer = QTimer(self)
+        self._anim_bg_timer.setInterval(33)  # ~30fps
+        self._anim_bg_timer.timeout.connect(self._tick_animated_bg)
+        self._anim_bg_frame = 0
+        self._anim_bg_layers = None
+        self._anim_bg_cache_key = None
+        self._anim_bg_anchors = None
+        self._anim_bg_tiny = None  # Cached tiny QPixmap (reused every frame)
+
         self.setup_ui()
         self.update_style()
         
@@ -337,6 +350,56 @@ class DashboardButton(QFrame):
             
         self.style().unpolish(self)
         self.style().polish(self)
+        self._update_anim_bg_timer()
+
+    # --- Animated background helpers ---
+
+    def _update_anim_bg_timer(self):
+        """Start or stop the animated background timer based on current state."""
+        should_run = (
+            self.config.get('type') == 'media_player'
+            and self.config.get('animated_bg', True)
+        )
+        if should_run and not self._anim_bg_timer.isActive():
+            self._anim_bg_timer.start()
+        elif not should_run and self._anim_bg_timer.isActive():
+            self._anim_bg_timer.stop()
+
+    def _tick_animated_bg(self):
+        """Advance animated background by one frame."""
+        self._anim_bg_frame += 1
+        self.update()
+
+    def _ensure_anim_bg_layers(self, seed: int):
+        """Regenerate animated background layers if cache is stale."""
+        cache_key = (seed, self.width(), self.height())
+        if self._anim_bg_cache_key == cache_key and self._anim_bg_layers is not None:
+            return
+        from ui.visuals.background_generator import BackgroundGenerator
+        self._anim_bg_layers = BackgroundGenerator.generate_layers(
+            self.width(), self.height(), seed=seed
+        )
+        self._anim_bg_anchors = self._anim_bg_layers["anchors"]
+        # Cache a tiny pixmap for reuse each frame (avoids allocation per frame)
+        scale = 0.15
+        tw = max(20, int(self.width() * scale))
+        th = max(16, int(self.height() * scale))
+        from PyQt6.QtGui import QPixmap
+        self._anim_bg_tiny = QPixmap(tw, th)
+        self._anim_bg_cache_key = cache_key
+        self._anim_bg_frame = 0
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._update_anim_bg_timer()
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self._anim_bg_timer.stop()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._anim_bg_cache_key = None  # force regen on next paint
 
     # --- View Helpers ---
 
@@ -933,6 +996,9 @@ class DashboardButton(QFrame):
             # Long press on media player -> Volume overlay
             self._ignore_release = True
             self.volume_requested.emit(self.slot, rect)
+        elif btn_type == 'input_number':
+            # Long press on input_number -> Enable value scrub mode
+            self._input_scrub_mode = True
             
     def mousePressEvent(self, event):
         """Track click start."""
@@ -1041,8 +1107,8 @@ class DashboardButton(QFrame):
         if not self.config:
             return
             
-        # Input Number Drag
-        if self.config.get('type') == 'input_number' and not self._is_resizing and not self._ignore_release:
+        # Input Number Drag (only after long press activates scrub mode)
+        if self.config.get('type') == 'input_number' and getattr(self, '_input_scrub_mode', False) and not self._is_resizing and not self._ignore_release:
             current_global_pos = event.globalPosition().toPoint()
             
             # Allow both horizontal and vertical scrubbing
@@ -1128,31 +1194,54 @@ class DashboardButton(QFrame):
         
         drag.setMimeData(mime_data)
         
-        # Create transparent pixmap with rounded corners
+        # Build ghost pixmap: button content clipped to rounded rect
         from PyQt6.QtGui import QPainterPath
-        pixmap = QPixmap(self.size())
-        pixmap.fill(Qt.GlobalColor.transparent)
-        
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # Create rounded clip path
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(self.rect()), 12, 12)
-        painter.setClipPath(path)
-        
-        # Render widget into clipped area
-        self.render(painter)
-        painter.end()
-        
-        drag.setPixmap(pixmap)
+
+        ghost = QPixmap(self.size())
+        ghost.fill(Qt.GlobalColor.transparent)
+        gp = QPainter(ghost)
+        gp.setRenderHint(QPainter.RenderHint.Antialiasing)
+        clip_path = QPainterPath()
+        clip_path.addRoundedRect(QRectF(self.rect()), 12, 12)
+        gp.setClipPath(clip_path)
+        self.render(gp)
+        gp.setClipping(False)
+        # pen = QPen(QColor("#4285F4"))
+        # pen.setWidth(2)
+        # gp.setPen(pen)
+        # gp.setBrush(Qt.BrushStyle.NoBrush)
+        # gp.drawRoundedRect(QRectF(ghost.rect()).adjusted(1, 1, -1, -1), 12, 12)
+        gp.end()
+
+        drag.setPixmap(ghost)
         drag.setHotSpot(event.pos())
-        
+
+        # Gradually fade the original button to 50% over 400 ms
+        import time as _time
+        _fade_start = _time.monotonic()
+        _fade_duration = 0.4
+        _fade_timer = QTimer(self)
+
+        def _do_fade():
+            progress = min(1.0, (_time.monotonic() - _fade_start) / _fade_duration)
+            self.set_faded(1.0 - 0.5 * progress)
+            self.repaint()
+            if progress >= 1.0:
+                _fade_timer.stop()
+
+        _fade_timer.timeout.connect(_do_fade)
+        _fade_timer.start(16)
+
         drag.exec(Qt.DropAction.MoveAction)
+
+        _fade_timer.stop()
+        self.set_faded(1.0)
+        self.repaint()
         
     def mouseReleaseEvent(self, event):
         """Handle click."""
         self._long_press_timer.stop()
+        self._input_scrub_mode = False
         
         if hasattr(self, 'bounce_anim') and self._bounce_offset > 0:
             self.bounce_anim.stop()
