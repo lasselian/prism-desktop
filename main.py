@@ -52,7 +52,7 @@ from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtCore import QUrl
 
-VERSION = "1.4.1"
+VERSION = "1.4.2"
 
 def _create_task_safe(coro):
     """Schedule an async task safely from synchronous Qt context.
