@@ -13,7 +13,7 @@ It features a sleek dashboard with smooth animations, build in notifications, in
 ## Features
 
 - **System Tray Integration**: The app stays tucked away in your tray until you need it.
-- **PC notifications**: Send notifications to your PC via persistent_notification.create
+- **PC notifications**: Send notifications to your PC 
 - **Resizeable dashboard**: adjust the size of your dashboard according to your needs.
 - **Morphing Controls**: Click and hold widgets to expand them into granular controls like dimmers or thermostats.
 - **Drag & Drop Customization**: Rearrange your dashboard grid simply by dragging icons around.
