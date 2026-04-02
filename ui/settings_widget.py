@@ -338,6 +338,11 @@ class SettingsWidget(QWidget):
         self.theme_combo.currentIndexChanged.connect(self.on_theme_preview)
         self.form.addRow("Theme:", self.theme_combo)
 
+        self.tray_position_combo = QComboBox()
+        self.tray_position_combo.addItems(["Bottom Panel", "Top Panel"])
+        self.tray_position_combo.setMinimumWidth(120)
+        self.form.addRow("Tray Position:", self.tray_position_combo)
+
         # Border Effect
         from ui.widgets.effect_combobox import EffectComboBox
         self.border_effect_combo = EffectComboBox()
@@ -460,6 +465,11 @@ class SettingsWidget(QWidget):
         theme_map = {'system': 0, 'light': 1, 'dark': 2}
         idx = theme_map.get(app.get('theme', 'system'), 0)
         self.theme_combo.setCurrentIndex(idx)
+
+        tray_position_map = {'bottom': 0, 'top': 1}
+        self.tray_position_combo.setCurrentIndex(
+            tray_position_map.get(app.get('tray_position', 'bottom'), 0)
+        )
         
         effect = app.get('border_effect', 'Rainbow')
         
@@ -504,8 +514,11 @@ class SettingsWidget(QWidget):
         
         # Appearance
         theme_map = {0: 'system', 1: 'light', 2: 'dark'}
+        tray_position_map = {0: 'bottom', 1: 'top'}
+        self.config.setdefault('appearance', {})
         self.config['appearance'].update({
             'theme': theme_map.get(self.theme_combo.currentIndex(), 'system'),
+            'tray_position': tray_position_map.get(self.tray_position_combo.currentIndex(), 'bottom'),
             'border_effect': self.border_effect_combo.currentText(),
             'button_style': self.button_style_combo.currentText(),
             'show_dimming': self.show_dimming_check.isChecked(),

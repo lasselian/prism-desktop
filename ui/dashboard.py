@@ -1278,12 +1278,17 @@ class Dashboard(QWidget):
             return
         
         screen_rect = screen.availableGeometry()
+        tray_position = self.config.get('appearance', {}).get('tray_position', 'bottom')
         
         # Calculate target position
         target_x = screen_rect.right() - self.width() - 10
-        target_y = screen_rect.bottom() - self.height() - 10
+        if tray_position == 'top':
+            target_y = screen_rect.top() + 10
+        else:
+            target_y = screen_rect.bottom() - self.height() - 10
         
         self._target_pos = QPoint(target_x, target_y)
+        self._tray_position = tray_position
         
         # Set initial state (Hidden & Positioned) BEFORE showing
         # This prevents the window from flashing in the center/wrong place
@@ -1320,7 +1325,7 @@ class Dashboard(QWidget):
             self.show_near_tray()
     
     def close_animated(self):
-        """Fade out and slide down, then hide."""
+        """Fade out and slide toward the tray edge, then hide."""
         self.anim.stop()
         self.border_anim.stop() # Stop the glow too
         
@@ -1371,11 +1376,11 @@ class Dashboard(QWidget):
         # 1. Opacity
         self.setWindowOpacity(val)
         
-        # 2. Slide Up (Entrance) / Slide Down (Exit)
-        # Offset: 0 at 1.0 (open), +20 at 0.0 (closed)
+        # 2. Slide relative to the tray edge.
         if hasattr(self, '_target_pos'):
             offset = int((1.0 - val) * 20)
-            self.move(self._target_pos.x(), self._target_pos.y() + offset)
+            direction = 1 if getattr(self, '_tray_position', 'bottom') == 'bottom' else -1
+            self.move(self._target_pos.x(), self._target_pos.y() + (offset * direction))
             
         self.update() # Trigger repaint for border effects
         
@@ -2001,4 +2006,3 @@ class Dashboard(QWidget):
                 best_cols = c
                 
         return best_cols
-
