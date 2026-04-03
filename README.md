@@ -32,6 +32,7 @@ It features a sleek dashboard with smooth animations, build in notifications, in
 - Scene
 - Script
 - Sensor
+- Vacuum
 - Weather
 
 ## 3D printer tile
