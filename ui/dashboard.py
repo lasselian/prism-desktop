@@ -308,6 +308,13 @@ class Dashboard(QWidget):
         else:
             target_y = screen_rect.bottom() - self.height() - 10
 
+            if sys.platform == 'linux':
+                # Guard against availableGeometry() ignoring the panel on some DEs.
+                # Clamp to 60px above the physical screen bottom to clear any panel.
+                full_rect = screen.geometry()
+                safe_target_y = full_rect.bottom() - self.height() - 60
+                target_y = min(target_y, safe_target_y)
+
         self._tray_position = self._get_tray_position()
         self._target_pos = QPoint(target_x, target_y)
 
