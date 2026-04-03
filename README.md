@@ -27,6 +27,7 @@ It features a sleek dashboard with smooth animations, build in notifications, in
 - Climate
 - Curtain / Cover
 - Light / Switch
+- Lawn Mower
 - Media Controller
 - Scene
 - Script
