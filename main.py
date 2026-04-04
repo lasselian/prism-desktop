@@ -125,9 +125,9 @@ class PrismDesktopApp(QObject):
         # Helper for update check
         self._update_thread = None
 
-        # Show Dashboard on Startup
+        # Show Dashboard on Startup after GNOME/XWayland has settled monitor state
         if self.dashboard:
-            self.dashboard.show_near_tray()
+            QTimer.singleShot(1500, self.dashboard.show_near_tray)
             
         # Check for updates
         QTimer.singleShot(2000, self.check_for_updates)
