@@ -175,7 +175,27 @@ class Dashboard(QWidget):
         self.width_anim.setDuration(ANIM_DURATION_WIDTH)
         self.width_anim.setEasingCurve(QEasingCurve.Type.OutBack)
         self.width_anim.finished.connect(self._on_width_anim_finished)
-            
+
+        # React to screen geometry changes (panel settling on startup, resolution, monitor changes)
+        self._connect_screen_signals(self.screen() or QApplication.primaryScreen())
+        app = QApplication.instance()
+        app.primaryScreenChanged.connect(lambda s: (self._connect_screen_signals(s),
+                                                     self._on_screen_geometry_changed()))
+        app.screenAdded.connect(lambda s: (self._connect_screen_signals(s),
+                                            self._on_screen_geometry_changed()))
+
+    def _connect_screen_signals(self, screen):
+        """Connect per-screen geometry signals to the reposition slot."""
+        if not screen:
+            return
+        screen.availableGeometryChanged.connect(self._on_screen_geometry_changed)
+        screen.geometryChanged.connect(self._on_screen_geometry_changed)
+
+    def _on_screen_geometry_changed(self, _rect=None):
+        """Slot for any screen geometry change. Defers to next event loop tick
+        so cascading X11 geometry updates have settled before we read them."""
+        QTimer.singleShot(0, lambda: self.refresh_tray_anchor(move_now=True))
+
     def dragEnterEvent(self, event):
         """Accept dragging buttons."""
         if event.mimeData().hasFormat(MIME_TYPE):
