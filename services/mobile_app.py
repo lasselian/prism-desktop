@@ -18,7 +18,6 @@ APP_ID = "io.prism.desktop"
 APP_NAME = "Prism Desktop"
 MANUFACTURER = "Prism"
 MODEL = "Desktop"
-OS_NAME = platform.system()
 OS_VERSION = platform.version()
 
 
@@ -81,7 +80,6 @@ async def register_mobile_app(
         "device_name": device_name,
         "manufacturer": MANUFACTURER,
         "model": MODEL,
-        "os_name": OS_NAME,
         "os_version": OS_VERSION,
         "supports_encryption": False,
         # Required: tells HA to create notify.mobile_app_* and enable WS delivery
@@ -181,7 +179,6 @@ async def _update_registration(ha_url: str, webhook_id: str) -> bool:
             "device_name": _get_device_name(),
             "manufacturer": MANUFACTURER,
             "model": MODEL,
-            "os_name": OS_NAME,
             "os_version": OS_VERSION,
             "app_data": {
                 "push_websocket_channel": True,
