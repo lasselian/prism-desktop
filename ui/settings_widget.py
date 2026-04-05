@@ -446,7 +446,6 @@ class SettingsWidget(QWidget):
         self.kde_shortcuts_btn.clicked.connect(self.open_kde_shortcuts)
         self.kde_shortcuts_btn.hide()
         shortcut_aux_layout.addWidget(self.kde_shortcuts_btn, 0, Qt.AlignmentFlag.AlignLeft)
-
         self.shortcut_aux.hide()
         shortcut_container_layout.addWidget(self.shortcut_aux)
         self.form.addRow("App Toggle:", shortcut_container)
@@ -639,6 +638,10 @@ class SettingsWidget(QWidget):
             self.record_btn.setChecked(False)
             return
 
+        if self._is_unsupported_wayland_shortcut_env():
+            self.record_btn.setChecked(False)
+            return
+
         if not self.input_manager:
             self.record_btn.setChecked(False)
             return
@@ -707,6 +710,7 @@ class SettingsWidget(QWidget):
             self.shortcut_display.setToolTip("")
             self.shortcut_hint.setText(
                 "Global app-toggle shortcuts are not currently supported on this Wayland desktop. "
+                "Create a custom keybind that runs 'prism-desktop --toggle' instead. "
                 "The in-window entity shortcuts still work while Prism is focused."
             )
             self.shortcut_aux.show()

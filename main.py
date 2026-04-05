@@ -14,6 +14,8 @@ import logging
 import copy
 import platform
 
+from services.local_ipc import send_local_command
+
 # Force XWayland on Wayland sessions — Qt's QWidget.move() is silently ignored
 # under native Wayland, causing the dashboard to appear centered instead of
 # anchored to the system tray corner. Must be set before QApplication is created.
@@ -28,6 +30,15 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)
     ]
 )
+
+VERSION = "1.4.3"
+TOGGLE_ARG = "--toggle"
+
+if __name__ == '__main__' and TOGGLE_ARG in sys.argv[1:]:
+    if send_local_command("toggle"):
+        sys.exit(0)
+    print("No running Prism Desktop instance found for --toggle")
+    sys.exit(1)
 
 import qasync
 from PyQt6.QtWidgets import QApplication
@@ -44,6 +55,7 @@ from ui.dashboard import Dashboard
 from ui.tray_manager import TrayManager
 from services.notifications import NotificationManager
 from services.input_manager import InputManager
+from services.local_ipc import LocalCommandServer
 from services.mobile_app import register_mobile_app, send_location_update
 from services.location_manager import get_location
 from ui.icons import load_mdi_font
@@ -52,8 +64,6 @@ from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtCore import QUrl
 from core.temperature_utils import normalize_temperature_unit
-
-VERSION = "1.4.3"
 
 def _create_task_safe(coro):
     """Schedule an async task safely from synchronous Qt context.
@@ -79,6 +89,7 @@ class PrismDesktopApp(QObject):
         self.ha_client = HAClient()
         self.notification_manager = NotificationManager(ha_client=self.ha_client)
         self.input_manager = InputManager()
+        self.local_command_server = LocalCommandServer(self)
         
         # UI Components
         self.dashboard: Optional[Dashboard] = None
@@ -112,6 +123,7 @@ class PrismDesktopApp(QObject):
         self.init_theme()
         self.init_ha_client()
         self.init_ui()
+        self.init_local_ipc()
         
         # Initialize shortcuts in background
         QTimer.singleShot(100, self.init_shortcuts)
@@ -140,6 +152,13 @@ class PrismDesktopApp(QObject):
         self.input_manager.update_shortcut(shortcut_config)
         self.input_manager.triggered.connect(self._toggle_dashboard)
 
+    def init_local_ipc(self):
+        """Listen for local CLI commands such as --toggle."""
+        if self.local_command_server.start():
+            self.local_command_server.command_received.connect(self._handle_local_command)
+        else:
+            logging.warning("Failed to start local Prism command server")
+
     def _tray_geometry(self) -> QRect:
         """Return the tray icon geometry when available."""
         if self.tray_manager:
@@ -150,6 +169,12 @@ class PrismDesktopApp(QObject):
         """Show the dashboard using tray geometry when Qt provides it."""
         if self.dashboard:
             self.dashboard.show_near_tray(self._tray_geometry())
+
+    @pyqtSlot(str)
+    def _handle_local_command(self, command: str):
+        """Handle a local CLI command sent to the running instance."""
+        if command == "toggle":
+            self._toggle_dashboard()
     
     def save_config(self):
         """Save configuration to file via ConfigManager."""
@@ -364,6 +389,8 @@ class PrismDesktopApp(QObject):
     def _quit(self):
         """Quit the application."""
         self.stop_all_threads()
+        if self.local_command_server:
+            self.local_command_server.close()
         QApplication.instance().quit()
     
     @pyqtSlot(dict)
