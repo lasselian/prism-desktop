@@ -272,6 +272,9 @@ class OverlayManager(QObject):
         # Mix in Nozzle
         noz_data = self._entity_states.get(cfg.get('printer_nozzle_entity'), {})
         attrs['hotend_actual'] = noz_data.get('attributes', {}).get('actual_temperature', noz_data.get('state', 0.0))
+        noz_unit = noz_data.get('attributes', {}).get('unit_of_measurement')
+        if noz_unit:
+            attrs['temperature_unit'] = noz_unit
         
         noz_target_ent = cfg.get('printer_nozzle_target_entity')
         if noz_target_ent:
@@ -326,6 +329,7 @@ class OverlayManager(QObject):
     def set_temperature_unit_preference(self, preference: str):
         self._temperature_unit_preference = preference
         self.weather_overlay.set_temperature_unit_preference(preference)
+        self.printer_overlay.set_temperature_unit_preference(preference)
 
     # ==========================
     # Dimmer / Volume Logic

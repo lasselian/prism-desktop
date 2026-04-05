@@ -7,6 +7,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QApplication
 from ui.icons import get_icon, get_mdi_font, Icons
 from core.utils import SYSTEM_FONT
+from core.temperature_utils import format_temperature
 from ui.visuals.background_generator import BackgroundGenerator
 
 class DashboardButtonPainter:
@@ -423,8 +424,8 @@ class DashboardButtonPainter:
         # Fetch entities manually since standard button abstraction binds to 1 entity
         dashboard = button.window()  # Walk up to dashboard
         camera_pixmap = None
-        nozzle_str = "--°"
-        bed_str = "--°"
+        nozzle_str = "--"
+        bed_str = "--"
         progress = 0
         
         cfg = button.config
@@ -464,32 +465,39 @@ class DashboardButtonPainter:
             nozzle_val = nozzle_data.get('state', '--')
             nozzle_target_data = dashboard._entity_states.get(cfg.get('printer_nozzle_target_entity'), {})
             nozzle_target_val = nozzle_target_data.get('state', None)
-            
+            nozzle_attrs = nozzle_data.get('attributes', {})
+            src_unit = nozzle_attrs.get('unit_of_measurement')
+            pref = getattr(button, 'temperature_unit_preference', None)
+            _fmt = lambda v: format_temperature(v, src_unit, pref, precision=0, fallback="--")
+
             if nozzle_val != '--':
-                try: 
+                try:
                     n_act = float(nozzle_val)
                     if button.span_x > 3 and nozzle_target_val and nozzle_target_val != 'unknown':
                         n_tgt = float(nozzle_target_val)
-                        nozzle_str = f"{n_act:.0f}°/{n_tgt:.0f}°"
+                        nozzle_str = f"{_fmt(n_act)}/{_fmt(n_tgt)}"
                     else:
-                        nozzle_str = f"{n_act:.0f}°"
-                except: nozzle_str = f"{nozzle_val}°"
-                
+                        nozzle_str = _fmt(n_act)
+                except: nozzle_str = _fmt(nozzle_val)
+
             # Bed
             bed_data = dashboard._entity_states.get(cfg.get('printer_bed_entity'), {})
             bed_val = bed_data.get('state', '--')
             bed_target_data = dashboard._entity_states.get(cfg.get('printer_bed_target_entity'), {})
             bed_target_val = bed_target_data.get('state', None)
-            
+            bed_attrs = bed_data.get('attributes', {})
+            bed_src_unit = bed_attrs.get('unit_of_measurement') or src_unit
+            _fmt_bed = lambda v: format_temperature(v, bed_src_unit, pref, precision=0, fallback="--")
+
             if bed_val != '--':
-                try: 
+                try:
                     b_act = float(bed_val)
                     if button.span_x > 3 and bed_target_val and bed_target_val != 'unknown':
                         b_tgt = float(bed_target_val)
-                        bed_str = f"{b_act:.0f}°/{b_tgt:.0f}°"
+                        bed_str = f"{_fmt_bed(b_act)}/{_fmt_bed(b_tgt)}"
                     else:
-                        bed_str = f"{b_act:.0f}°"
-                except: bed_str = f"{bed_val}°"
+                        bed_str = _fmt_bed(b_act)
+                except: bed_str = _fmt_bed(bed_val)
             
         icon = Icons.PRINTER_3D # standard mdi-printer-3d
         

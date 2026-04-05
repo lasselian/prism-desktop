@@ -983,6 +983,8 @@ class PrinterOverlay(QWidget):
         self._progress = 0.0
         self._time_remaining = ""
         self._camera_pixmap = None
+        self._temperature_unit_preference = "celsius"
+        self._printer_source_unit = None
         
         # UI Rects
         self._btn_close = QRect()
@@ -1087,6 +1089,7 @@ class PrinterOverlay(QWidget):
         self._hotend_target = safe_float(attrs.get('hotend_target', 0.0))
         self._bed_actual = safe_float(attrs.get('bed_actual', 0.0))
         self._bed_target = safe_float(attrs.get('bed_target', 0.0))
+        self._printer_source_unit = attrs.get('temperature_unit')
         self._progress = safe_float(attrs.get('progress', 0.0))
         
         self._time_remaining = attrs.get('time_remaining', '')
@@ -1094,6 +1097,10 @@ class PrinterOverlay(QWidget):
         
     def set_camera_pixmap(self, pixmap):
         self._camera_pixmap = pixmap
+        self.update()
+
+    def set_temperature_unit_preference(self, preference: str):
+        self._temperature_unit_preference = preference
         self.update()
         
     def start_morph(self, start_geo: QRect, target_geo: QRect, label: str,
@@ -1362,8 +1369,9 @@ class PrinterOverlay(QWidget):
         # Hotend
         painter.setPen(self._fg_color(alpha))
         
-        nozzle_val = f"{self._hotend_actual:.0f}°/{self._hotend_target:.0f}°"
-        bed_val = f"{self._bed_actual:.0f}°/{self._bed_target:.0f}°"
+        _fmt = lambda v: format_temperature(v, self._printer_source_unit, self._temperature_unit_preference, precision=0, fallback="0")
+        nozzle_val = f"{_fmt(self._hotend_actual)}/{_fmt(self._hotend_target)}"
+        bed_val = f"{_fmt(self._bed_actual)}/{_fmt(self._bed_target)}"
         
         # Calculate robust widths to prevent overflow
         fm_icon = QFontMetrics(get_mdi_font(14))
