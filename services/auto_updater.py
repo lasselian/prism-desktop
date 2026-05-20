@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import QApplication
 
 from core.build_info import REPO_ROOT, APP_VERSION
 
-_REPO = "HomeRiz/prism-desktop"
+_REPO = "lasselian/prism-desktop"
 _API_LATEST = f"https://api.github.com/repos/{_REPO}/releases/latest"
 _GH_HEADERS = {
     "Accept": "application/vnd.github+json",
