@@ -14,7 +14,7 @@ class UpdateCheckerThread(QThread):
     def __init__(self, current_version: str):
         super().__init__()
         self.current_version = current_version
-        self.repo_url = "https://api.github.com/repos/lasselian/Prism-Desktop/releases/latest"
+        self.repo_url = "https://api.github.com/repos/HomeRiz/prism-desktop/releases/latest"
         
     def _extract_version(self, text):
         """Extract first version-like pattern (e.g. 1.0, v1.2.3)."""

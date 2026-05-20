@@ -941,6 +941,7 @@ class SettingsWidget(QWidget):
 
     def check_for_updates(self):
         """Start update check."""
+        self._cleanup_threads()
         self.update_btn.setEnabled(False)
         self.update_label.setText(t("settings.support.checking"))
         
