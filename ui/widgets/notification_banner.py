@@ -265,6 +265,10 @@ class NotificationBanner(QWidget):
             layout.addWidget(self.btn_close)
             self._countdown_btn = self.btn_close
 
+    def set_text(self, message: str):
+        """Update the banner text in-place without recreating the widget."""
+        self.label.setText(message)
+
     def _compute_content_height(self, width: int) -> int:
         """Explicitly compute the banner's pixel height from its content.
 

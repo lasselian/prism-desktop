@@ -3,6 +3,8 @@ Auto-update: source installs use git pull; packaged/frozen builds download
 the latest GitHub release asset and apply it in-place.
 """
 
+import hashlib
+import os
 import platform
 import shutil
 import subprocess
@@ -22,6 +24,8 @@ _GH_HEADERS = {
     "Accept": "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
 }
+
+_update_in_progress = False
 
 
 def _platform_asset_name() -> str | None:
@@ -50,10 +54,18 @@ class AutoUpdateThread(QThread):
     _NET_TIMEOUT = (10, 120)   # (connect, read) seconds for HTTP requests
 
     def run(self):
-        if getattr(sys, "frozen", False):
-            self._frozen_update()
-        else:
-            self._source_update()
+        global _update_in_progress
+        if _update_in_progress:
+            self.error.emit("An update is already in progress.")
+            return
+        _update_in_progress = True
+        try:
+            if getattr(sys, "frozen", False):
+                self._frozen_update()
+            else:
+                self._source_update()
+        finally:
+            _update_in_progress = False
 
     # ── Source install (git pull) ─────────────────────────────────────────────
 
@@ -139,7 +151,12 @@ class AutoUpdateThread(QThread):
                                     f"Downloading update… {done * 100 // total}%"
                                 )
 
-            # 3. Apply the downloaded asset
+            # 3. Verify checksum if a SHA256SUMS asset is present in the release
+            if not self._verify_checksum(tmp_path, asset_name, assets):
+                self.error.emit("Checksum mismatch — the downloaded file may be corrupt. Aborting.")
+                return
+
+            # 4. Apply the downloaded asset
             self.progress.emit("Applying update…")
             self._apply_frozen(tmp_path)
             applied = True
@@ -158,6 +175,39 @@ class AutoUpdateThread(QThread):
             if not (applied and sys.platform == "win32"):
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
+    def _verify_checksum(self, file_path: Path, asset_name: str, assets: list) -> bool:
+        """
+        Verify SHA-256 checksum against a SHA256SUMS release asset if one exists.
+        Returns True (pass) when no checksum asset is published — verification is
+        opportunistic, not mandatory, until checksums are part of every release.
+        """
+        sums_asset = next(
+            (a for a in assets if a["name"] in ("SHA256SUMS", "sha256sums.txt")), None
+        )
+        if not sums_asset:
+            return True
+
+        resp = requests.get(
+            sums_asset["browser_download_url"], headers=_GH_HEADERS, timeout=self._NET_TIMEOUT
+        )
+        resp.raise_for_status()
+
+        expected = None
+        for line in resp.text.splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[1].lstrip("*") == asset_name:
+                expected = parts[0].lower()
+                break
+
+        if not expected:
+            return True
+
+        sha = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                sha.update(chunk)
+        return sha.hexdigest() == expected
+
     def _apply_frozen(self, asset_path: Path) -> None:
         if sys.platform == "win32":
             self._apply_windows(asset_path)
@@ -175,13 +225,21 @@ class AutoUpdateThread(QThread):
 
     def _apply_linux(self, appimage_path: Path) -> None:
         """
-        Replace the running AppImage at sys.executable.
+        Replace the running AppImage in-place.
+        Uses $APPIMAGE (set by the AppImage runtime) to get the real file path;
+        sys.executable resolves to the mount point inside /tmp and is wrong here.
         Linux keeps the old inode open for the running process; only the
         directory entry is updated, so the replacement is safe mid-run.
         """
-        current = Path(sys.executable).resolve()
+        appimage_env = os.environ.get("APPIMAGE")
+        current = Path(appimage_env).resolve() if appimage_env else Path(sys.executable).resolve()
         appimage_path.chmod(0o755)
-        shutil.move(str(appimage_path), str(current))
+        try:
+            shutil.move(str(appimage_path), str(current))
+        except PermissionError:
+            raise OSError(
+                f"Cannot replace {current} — check that you own the file or have write permission."
+            )
 
 
 # ── Post-update flag ──────────────────────────────────────────────────────────
@@ -218,13 +276,15 @@ def consume_update_flag() -> str | None:
 
 def restart_app() -> None:
     """Restart the application after a successful update."""
+    write_update_flag()
     if getattr(sys, "frozen", False):
         if sys.platform.startswith("linux"):
-            # New AppImage is already in place at sys.executable; re-exec it.
-            subprocess.Popen([sys.executable])
+            # New AppImage is in place at $APPIMAGE; re-exec from there.
+            # sys.executable points into the /tmp squashfs mount, not the file.
+            appimage = os.environ.get("APPIMAGE") or sys.executable
+            subprocess.Popen([appimage])
         # On Windows the Inno Setup installer spawns the new version itself;
         # just quit so the installer can replace our files cleanly.
     else:
-        write_update_flag()
         subprocess.Popen([sys.executable] + sys.argv)
     QApplication.quit()

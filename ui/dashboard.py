@@ -403,6 +403,13 @@ class Dashboard(QWidget):
         banner.show_at(self.x(), self.width(), container_edge, above)
         return banner
 
+    def update_toast(self, message: str):
+        """Update the text of the active toast banner in-place; shows a new one if none is active."""
+        if self._active_banner and self._active_banner.banner_type == "toast":
+            self._active_banner.set_text(message)
+        else:
+            self.show_toast(message, duration_ms=60000)
+
     def _dismiss_banner(self):
         """Close and delete the active floating banner."""
         self._dismiss_banner_immediate()

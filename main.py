@@ -1126,8 +1126,9 @@ class PrismDesktopApp(QObject):
         )
 
     def _run_auto_update(self):
-        from services.auto_updater import AutoUpdateThread, restart_app
+        from services.auto_updater import AutoUpdateThread
         self._auto_update_thread = AutoUpdateThread()
+        self._auto_update_thread.progress.connect(self.dashboard.update_toast)
         self._auto_update_thread.success.connect(self._on_auto_update_success)
         self._auto_update_thread.error.connect(self._on_auto_update_error)
         self._auto_update_thread.start()

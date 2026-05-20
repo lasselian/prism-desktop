@@ -1017,7 +1017,7 @@ class SettingsWidget(QWidget):
             self._update_thread.wait(500)
         if self._auto_update_thread and self._auto_update_thread.isRunning():
             self._auto_update_thread.quit()
-            self._auto_update_thread.wait(2000)
+            self._auto_update_thread.wait(0)
         if self._geoclue_thread and self._geoclue_thread.isRunning():
             self._geoclue_thread.quit()
             self._geoclue_thread.wait(500)
