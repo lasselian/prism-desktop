@@ -2,7 +2,7 @@
 ; Requires Inno Setup: https://jrsoftware.org/isdl.php
 
 #define MyAppName "Prism Desktop"
-#define MyAppVersion "1.5.2"
+#define MyAppVersion "1.5.3"
 #define MyAppPublisher "Lasse Lian"
 #define MyAppExeName "PrismDesktop.exe"
 
@@ -15,13 +15,15 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
-; Remove the following line to run in administrative install mode (install for all users.)
 PrivilegesRequired=lowest
 OutputDir=installer
 OutputBaseFilename=PrismDesktopSetup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+CloseApplications=yes
+CloseApplicationsFilter=PrismDesktop.exe
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -33,7 +35,8 @@ Name: "startup"; Description: "Start {#MyAppName} with Windows"; GroupDescriptio
 
 [Files]
 ; IMPORTANT: Ensure you run 'python build_exe.py' BEFORE compiling this script
-Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; NOTE: onedir build — copy the entire dist\PrismDesktop\ folder
+Source: "dist\PrismDesktop\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: We do NOT bundle config.json so that new installs start fresh (or use AppData)
 
 [Icons]
@@ -46,3 +49,14 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}
 [Registry]
 ; Start with Windows logic
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startup
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  { Force-kill all running instances including PyInstaller child processes (/T = process tree) }
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM PrismDesktop.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(1500);
+  Result := '';
+end;
