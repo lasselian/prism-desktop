@@ -48,7 +48,10 @@
   "settings.support.checking": "Kontrollerar...",
   "settings.support.up_to_date": "Appen är uppdaterad",
   "settings.support.update_available": "Uppdatering tillgänglig: {tag}",
-  "settings.support.download_btn": "Ladda ned uppdatering",
+  "settings.support.install_btn": "Installera uppdatering",
+  "settings.support.updating": "Hämtar uppdatering...",
+  "settings.support.restarting": "Startar om...",
+  "settings.support.update_failed": "Uppdatering misslyckades",
   "settings.support.check_failed": "Kontroll misslyckades",
   "settings.support.copied": "kopierat till urklipp",
   "button_editor.title_add": "Lägg till knapp",
@@ -148,6 +151,10 @@
   "notifications.page_full": "Sida {page_num} är full. Kan inte flytta knapp.",
   "notifications.move_as_1x1": "Inget utrymme för {orig_w}×{orig_h} på sida {page_num}. Flytta som 1×1?",
   "notifications.update_available": "Prism Desktop {version} är tillgänglig. Ladda ned nu?",
+  "notifications.update_restart": "Uppdatering klar — startar om Prism Desktop",
+  "notifications.update_success": "Uppdaterad till Prism Desktop {version}",
+  "notifications.update_sanity_failed": "Uppdateringen kan ha misslyckats — {version} fortfarande tillgänglig",
+  "notifications.update_error": "Automatisk uppdatering misslyckades",
   "notifications.missing_credentials": "URL eller token saknas — fyll i båda fälten först.",
   "notifications.geoclue2_missing": "GeoClue2 hittades inte. Installera: {install_cmd}",
   "notifications.language_restart": "Språk ändrat — starta om Prism Desktop för att tillämpa.",
@@ -177,6 +184,6 @@
   "dashboard_button.media.now_playing": "Spelas nu: {info}",
   "notification_banner.yes": "Ja",
   "notification_banner.no": "Nej",
-  "sun.until_sunset": "SOLNEDGÅNG",
-  "sun.until_sunrise": "SOLUPPGÅNG"
+  "sun.until_sunset": "TILL SOLNEDGÅNG",
+  "sun.until_sunrise": "TILL SOLUPPGÅNG"
 }

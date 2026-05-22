@@ -48,7 +48,10 @@
   "settings.support.checking": "Tjekker...",
   "settings.support.up_to_date": "Appen er opdateret",
   "settings.support.update_available": "Opdatering tilgængelig: {tag}",
-  "settings.support.download_btn": "Download opdatering",
+  "settings.support.install_btn": "Installer opdatering",
+  "settings.support.updating": "Henter opdatering...",
+  "settings.support.restarting": "Genstarter...",
+  "settings.support.update_failed": "Opdatering mislykkedes",
   "settings.support.check_failed": "Tjek mislykkedes",
   "settings.support.copied": "kopieret til udklipsholder",
   "button_editor.title_add": "Tilføj knap",
@@ -148,6 +151,10 @@
   "notifications.page_full": "Side {page_num} er fuld. Kan ikke flytte knap.",
   "notifications.move_as_1x1": "Ingen plads til {orig_w}×{orig_h} på side {page_num}. Flyt som 1×1?",
   "notifications.update_available": "Prism Desktop {version} er tilgængelig. Download nu?",
+  "notifications.update_restart": "Opdatering fuldført — genstarter Prism Desktop",
+  "notifications.update_success": "Opdateret til Prism Desktop {version}",
+  "notifications.update_sanity_failed": "Opdatering mislykkedes muligvis — {version} stadig tilgængelig",
+  "notifications.update_error": "Automatisk opdatering mislykkedes",
   "notifications.missing_credentials": "Manglende URL eller token — udfyld begge felter først.",
   "notifications.geoclue2_missing": "GeoClue2 ikke fundet. Installer: {install_cmd}",
   "notifications.language_restart": "Sprog ændret — genstart Prism Desktop for at anvende.",
@@ -177,6 +184,6 @@
   "dashboard_button.media.now_playing": "Spiller nu: {info}",
   "notification_banner.yes": "Ja",
   "notification_banner.no": "Nej",
-  "sun.until_sunset": "SOLNEDGANG",
-  "sun.until_sunrise": "SOLOPGANG"
+  "sun.until_sunset": "TIL SOLNEDGANG",
+  "sun.until_sunrise": "TIL SOLOPGANG"
 }
