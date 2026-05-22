@@ -1,8 +1,10 @@
 import json
 import copy
-from pathlib import Path
+import logging
 from core.utils import get_config_path
 from core.token_storage import store_token, load_token
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigManager:
@@ -40,7 +42,7 @@ class ConfigManager:
                         ha_config['token'] = stored_token
                     elif token_in_file:
                         # Legacy: plaintext token in config.json — migrate it
-                        print("[ConfigManager] Migrating plaintext token to secure storage...")
+                        logger.info("Migrating plaintext token to secure storage...")
                         store_token(token_in_file)
                         ha_config['token'] = token_in_file
                     
@@ -59,7 +61,7 @@ class ConfigManager:
 
                     return config
             except Exception as e:
-                print(f"Error loading config: {e}")
+                logger.error(f"Error loading config: {e}")
         
         return {
             "home_assistant": {"url": "", "token": ""},
@@ -84,7 +86,7 @@ class ConfigManager:
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_to_save, f, indent=2)
         except Exception as e:
-            print(f"Error saving raw config: {e}")
+            logger.error(f"Error saving raw config: {e}")
 
     def save_config(self):
         """Save current configuration to file."""
@@ -100,4 +102,4 @@ class ConfigManager:
             
             self.save_raw_config(config_to_save)
         except Exception as e:
-            print(f"Error saving config: {e}")
+            logger.error(f"Error saving config: {e}")
