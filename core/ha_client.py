@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import aiohttp
+from aiohttp import ClientTimeout
 from typing import Optional
 
 class HAClient:
@@ -66,7 +67,7 @@ class HAClient:
             # Actually, standard flow is fine.
             
             async with aiohttp.ClientSession(headers=self.headers) as session:
-                async with session.get(f"{self.url}/api/", timeout=5) as response:
+                async with session.get(f"{self.url}/api/", timeout=ClientTimeout(total=5)) as response:
                     if response.status == 200:
                         return True, "Connected"
                     elif response.status == 401:
@@ -83,7 +84,7 @@ class HAClient:
         """Fetch all entities."""
         try:
             session = await self._get_session()
-            async with session.get(f"{self.url}/api/states", timeout=10) as response:
+            async with session.get(f"{self.url}/api/states", timeout=ClientTimeout(total=10)) as response:
                 if response.status == 200:
                     return await response.json()
                 return []
@@ -95,7 +96,7 @@ class HAClient:
         """Fetch Home Assistant instance config."""
         try:
             session = await self._get_session()
-            async with session.get(f"{self.url}/api/config", timeout=10) as response:
+            async with session.get(f"{self.url}/api/config", timeout=ClientTimeout(total=10)) as response:
                 if response.status == 200:
                     return await response.json()
                 return None
@@ -107,7 +108,7 @@ class HAClient:
         """Get state of a specific entity."""
         try:
             session = await self._get_session()
-            async with session.get(f"{self.url}/api/states/{entity_id}", timeout=5) as response:
+            async with session.get(f"{self.url}/api/states/{entity_id}", timeout=ClientTimeout(total=5)) as response:
                 if response.status == 200:
                     return await response.json()
                 return None
@@ -123,7 +124,7 @@ class HAClient:
             async with session.post(
                 f"{self.url}/api/services/weather/get_forecasts?return_response=true",
                 json=payload,
-                timeout=10
+                timeout=ClientTimeout(total=10),
             ) as response:
                 if response.status == 200:
                     data = await response.json()
@@ -154,7 +155,7 @@ class HAClient:
             async with session.post(
                 f"{self.url}/api/services/{domain}/{service}",
                 json=payload,
-                timeout=timeout
+                timeout=ClientTimeout(total=timeout),
             ) as response:
                 return response.status == 200
         except Exception as e:
@@ -167,7 +168,7 @@ class HAClient:
             session = await self._get_session()
             async with session.get(
                 f"{self.url}/api/camera_proxy/{entity_id}",
-                timeout=10
+                timeout=ClientTimeout(total=10),
             ) as response:
                 if response.status == 200:
                     return await response.read()
@@ -185,7 +186,7 @@ class HAClient:
             url = f"{self.url}{image_path}" if image_path.startswith('/') else image_path
             
             session = await self._get_session()
-            async with session.get(url, timeout=10) as response:
+            async with session.get(url, timeout=ClientTimeout(total=10)) as response:
                 if response.status == 200:
                     return await response.read()
                 return None
