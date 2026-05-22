@@ -149,6 +149,9 @@ class PrismDesktopApp(QObject):
         self._just_updated_from: str | None = None
         self._temperature_unit_initialized = 'temperature_unit' in self.config.get('appearance', {})
         self._glass_ui_active = self.config.get('appearance', {}).get('glass_ui', False)
+        # Track active language separately — settings_widget modifies self.config in-place
+        # before _process_settings_change runs, so we can't use self.config for comparison.
+        self._current_language = self.config.get('appearance', {}).get('language', 'en')
 
         # Show Dashboard on Startup
         if self.dashboard:
@@ -386,7 +389,8 @@ class PrismDesktopApp(QObject):
                 self._ha_websocket.connected.disconnect()
                 self._ha_websocket.disconnected.disconnect()
                 self._ha_websocket.error.disconnect()
-            except: pass
+            except Exception:
+                pass
             
         def delete_ws_obj():
             if self._ha_websocket:
@@ -457,7 +461,7 @@ class PrismDesktopApp(QObject):
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"Camera loop error: {e}")
+                logging.error(f"Camera loop error: {e}")
                 await asyncio.sleep(10)
 
     @staticmethod
@@ -534,7 +538,7 @@ class PrismDesktopApp(QObject):
         _create_task_safe(self._process_settings_change(new_config))
 
     async def _process_settings_change(self, new_config):
-        print("Settings saved, reinitializing...")
+        logging.info("Settings saved, reinitializing...")
 
         new_ha_config = new_config.get('home_assistant', {})
         new_url = new_ha_config.get('url', '').rstrip('/')
@@ -545,11 +549,20 @@ class PrismDesktopApp(QObject):
         glass_ui_enabled = not self._glass_ui_active and new_glass_ui
         self._glass_ui_active = new_glass_ui
 
+        # Use _current_language (not self.config) because settings_widget already mutated
+        # self.config in-place before this coroutine runs, making old == new always.
+        new_lang = new_config.get('appearance', {}).get('language', 'en')
+        lang_changed = self._current_language != new_lang
+
         self.config_manager.config = new_config
         self.config = self.config_manager.config
         self._temperature_unit_initialized = 'temperature_unit' in self.config.get('appearance', {})
         self.save_config()
-        
+
+        # Ensure localization is in sync (may already be updated by the dropdown's live preview)
+        if lang_changed:
+            init_localization(new_lang)
+
         # Re-apply UI
         rows = self.config.get('appearance', {}).get('rows', 2)
         cols = self.config.get('appearance', {}).get('cols', 4)
@@ -561,7 +574,16 @@ class PrismDesktopApp(QObject):
             self.dashboard.apply_camera_cache(self._camera_cache)
             if self.dashboard.isVisible():
                 self.dashboard.refresh_tray_anchor(move_now=True, tray_geometry=self._tray_geometry())
-        
+            # Live language switch: retranslate footer + recreate settings widget with updated config
+            if lang_changed:
+                self.dashboard.retranslate_ui(config=self.config, input_manager=self.input_manager)
+
+        if lang_changed and self.tray_manager:
+            self.tray_manager.retranslate()
+
+        if lang_changed:
+            self._current_language = new_lang
+
         if self.input_manager:
             self.input_manager.update_shortcut(self.config.get('shortcut', {}))
         self._update_button_shortcuts()
@@ -571,7 +593,7 @@ class PrismDesktopApp(QObject):
             notify_glass_ui_warning(self.dashboard)
 
         if ha_changed:
-            print("HA config changed, restarting connections...")
+            logging.info("HA config changed, restarting connections...")
             # Clear mobile_app registration so we re-register with the new HA instance
             self.config.setdefault("mobile_app", {}).pop("webhook_id", None)
             self._stop_location_loop()
@@ -601,14 +623,14 @@ class PrismDesktopApp(QObject):
         _create_task_safe(self._async_open_editor(slot))
         
     async def _async_open_editor(self, slot: int):
-        print(f"Fetching entities for slot {slot}...")
+        logging.debug(f"Fetching entities for slot {slot}...")
         # Since we are async now, we can await directly!
         entities = await self.ha_client.get_entities()
         if entities:
             self._available_entities = entities
             self._open_button_editor(slot)
         else:
-            print("Failed to fetch entities")
+            logging.warning("Failed to fetch entities")
             
     def _current_page(self) -> int:
         """Return the active dashboard page index."""
@@ -691,7 +713,7 @@ class PrismDesktopApp(QObject):
 
         target_row, target_col = self.dashboard.find_first_empty_slot_on_page(page, span_x, span_y)
         if target_row < 0:
-            print("No space to duplicate")
+            logging.warning("No space to duplicate button")
             return
 
         new_config = source_config.copy()
@@ -926,7 +948,7 @@ class PrismDesktopApp(QObject):
     
     @pyqtSlot()
     def on_ws_connected(self):
-        print("WS Connected")
+        logging.info("WS Connected")
         _create_task_safe(self._ensure_temperature_unit_default())
         self.fetch_initial_states()
         # Register as a Mobile App so HA exposes notify.mobile_app_prism_desktop
@@ -973,7 +995,7 @@ class PrismDesktopApp(QObject):
             self._ha_websocket.set_webhook_id(webhook_id)
             if not was_already_subscribed:
                 # Force a reconnect so the connect() flow re-runs with the webhook_id set
-                print("[MobileApp] New registration — reconnecting WS for push channel subscription")
+                logging.info("[MobileApp] New registration — reconnecting WS for push channel subscription")
                 self.stop_websocket()
                 self.start_websocket()
 
@@ -1024,12 +1046,12 @@ class PrismDesktopApp(QObject):
 
     @pyqtSlot()
     def on_ws_disconnected(self):
-        print("WS Disconnected")
+        logging.info("WS Disconnected")
         _create_task_safe(self._push_sensor_state(False))
 
     @pyqtSlot(str)
     def on_ws_error(self, error):
-        print(f"WS Error: {error}")
+        logging.error(f"WS Error: {error}")
 
     def fetch_initial_states(self):
         _create_task_safe(self._async_fetch_initial_states())
@@ -1092,9 +1114,9 @@ class PrismDesktopApp(QObject):
         from services.auto_updater import consume_update_flag
         self._just_updated_from = consume_update_flag()
         if self._just_updated_from:
-            print(f"Post-update sanity check (was {self._just_updated_from})…")
+            logging.info(f"Post-update sanity check (was {self._just_updated_from})…")
         else:
-            print("Checking for updates…")
+            logging.info("Checking for updates…")
 
         self._update_thread = UpdateCheckerThread(APP_VERSION)
         self._update_thread.update_available.connect(self.on_update_available)
@@ -1117,7 +1139,7 @@ class PrismDesktopApp(QObject):
             self._just_updated_from = None
             return
 
-        print(f"Update available: {new_version}")
+        logging.info(f"Update available: {new_version}")
         from ui.notifications import notify_update_available
         notify_update_available(
             self.dashboard,
@@ -1144,7 +1166,7 @@ class PrismDesktopApp(QObject):
 
     @pyqtSlot(str)
     def _on_auto_update_error(self, error):
-        print(f"Auto-update error: {error}")
+        logging.error(f"Auto-update error: {error}")
         from ui.notifications import notify_update_error
         notify_update_error(self.dashboard)
 
