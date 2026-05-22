@@ -1656,12 +1656,27 @@ class Dashboard(QWidget):
 
     # ============ VIEW SWITCHING (Grid <-> Settings) ============
     
+    def retranslate_ui(self, config=None, input_manager=None):
+        """Update all translated UI strings with the current language. Called after a live language switch."""
+        self.btn_left.setText(t("dashboard.footer.home_assistant"))
+        self.btn_settings.setText(t("dashboard.footer.settings"))
+        self._init_settings_widget(
+            config if config is not None else self._settings_config,
+            input_manager if input_manager is not None else self._settings_input_manager,
+        )
+
     def _init_settings_widget(self, config: dict, input_manager=None):
         """Initialize the SettingsWidget (call from main.py after Dashboard creation)."""
-        # Store for re-initialization after set_rows() rebuilds UI
+        # Store for re-initialization after set_rows() rebuilds UI or language change
         self._settings_config = config
         self._settings_input_manager = input_manager
-        
+
+        # Clean up existing widget before recreating (e.g. on language retranslation)
+        if hasattr(self, 'settings_scroll') and self.settings_scroll is not None:
+            self.stack_widget.removeWidget(self.settings_scroll)
+            self.settings_scroll.deleteLater()
+            self.settings_scroll = None
+
         # IMPORT Settings Widget
         self.settings_widget = SettingsWidget(config, self.theme_manager, input_manager, self.version, self)
         self.settings_widget.back_requested.connect(self.hide_settings)

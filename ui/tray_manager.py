@@ -169,6 +169,18 @@ class TrayManager:
         if self._menu:
             self._menu.setStyleSheet(self._menu_stylesheet())
 
+    def retranslate(self):
+        """Rebuild the tray menu and tooltip with the current language."""
+        if self._tray:
+            self._tray.setToolTip(t("tray.tooltip"))
+        if self._menu:
+            self._menu.clear()
+            show_action = self._menu.addAction(t("tray.show_dashboard"))
+            show_action.triggered.connect(self.signals.left_clicked)
+            self._menu.addSeparator()
+            quit_action = self._menu.addAction(t("tray.quit"))
+            quit_action.triggered.connect(self.signals.quit_clicked)
+
     def set_tooltip(self, text: str):
         """Update the tray icon tooltip."""
         if self._tray:

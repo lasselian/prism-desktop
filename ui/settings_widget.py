@@ -421,10 +421,6 @@ class SettingsWidget(QWidget):
         self.language_combo.setMinimumWidth(120)
         self.form.addRow(t("settings.appearance.language_label"), self.language_combo)
 
-        self._language_restart_note = QLabel(t("settings.appearance.language_restart_note"))
-        self._language_restart_note.setStyleSheet("color: #aaa; font-size: 11px;")
-        self._language_restart_note.hide()
-        self.form.addRow("", self._language_restart_note)
         self.language_combo.currentIndexChanged.connect(self._on_language_changed)
 
         self.tray_position_combo = QComboBox()
@@ -704,11 +700,6 @@ class SettingsWidget(QWidget):
         
         self.settings_saved.emit(self.config)
 
-        if new_language != old_language:
-            from ui.notifications import notify_language_restart
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(300, lambda: notify_language_restart(self.window()))
-
     # --- Linux location helpers ---
 
     def _check_geoclue2_and_setup(self):
@@ -743,8 +734,6 @@ class SettingsWidget(QWidget):
     def _on_language_changed(self, index: int):
         selected_lang = self._language_codes[index]
         init_localization(selected_lang)
-        self._language_restart_note.setText(t("settings.appearance.language_restart_note"))
-        self._language_restart_note.show()
 
     def on_border_effect_changed(self, text):
         self.border_effect_combo.set_effect(text)
