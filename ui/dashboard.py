@@ -54,6 +54,24 @@ from ui.visuals.dashboard_effects import (
 QWIDGETSIZE_MAX = 16777215
 
 
+def _is_glass_supported() -> bool:
+    """
+    Returns True if the OS supports grabWindow-based frosted glass.
+
+    Previously the entire linux branch was blocked with `not sys.platform.startswith('linux')`.
+    grabWindow actually works fine on X11/XCB; it only returns a blank pixmap under
+    Wayland (where the compositor owns the screen buffer and rejects cross-app captures).
+    We detect the active Qt platform plugin at runtime so XWayland apps (which also
+    report 'xcb') are correctly enabled.
+    """
+    if sys.platform == 'win32':
+        return True
+    if sys.platform.startswith('linux'):
+        # QApplication.platformName() returns 'xcb' for X11, 'wayland' for Wayland.
+        return QApplication.platformName() == 'xcb'
+    return False
+
+
 class FrozenScrollArea(QScrollArea):
     """ScrollArea that disables wheel scrolling."""
     def wheelEvent(self, event):
@@ -125,7 +143,7 @@ class Dashboard(QWidget):
         app_config = self.config.get('appearance', {})
         self._border_effect = app_config.get('border_effect', 'Rainbow')
         self._show_dimming = app_config.get('show_dimming', False)
-        self._glass_ui = app_config.get('glass_ui', False) and not sys.platform.startswith('linux')
+        self._glass_ui = app_config.get('glass_ui', False) and _is_glass_supported()
         self._button_style = app_config.get('button_style', 'Gradient').capitalize()
         self._temperature_unit = app_config.get('temperature_unit', 'celsius')
         
@@ -171,7 +189,13 @@ class Dashboard(QWidget):
         self._animation_timer.timeout.connect(self._on_animation_frame)
 
         self._glass_refresh_timer = QTimer(self)
-        self._glass_refresh_timer.setInterval(33) # ~30 FPS
+        # 2000 ms instead of the previous 33 ms (30 FPS).
+        # grabWindow() is an expensive full screen-capture syscall. The desktop behind a
+        # stationary dashboard almost never changes, so running it 30 times per second
+        # was pure wasted CPU — especially on low-spec hardware like a Raspberry Pi.
+        # 2 s is imperceptible to users while being 60× cheaper. Immediate re-captures
+        # are still triggered on show and on window move (see moveEvent).
+        self._glass_refresh_timer.setInterval(2000)
         self._glass_refresh_timer.timeout.connect(self._refresh_glass_background)
         
         # SettingsWidget (created lazily to avoid circular import at module load)
@@ -1587,6 +1611,16 @@ class Dashboard(QWidget):
             if self._glass_ui and not self._glass_refresh_timer.isActive():
                 self._glass_refresh_timer.start()
 
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        # On Windows, SetWindowDisplayAffinity (WDA_EXCLUDEFROMCAPTURE) hides this window
+        # from its own grabWindow() call, so re-capturing while visible is safe.
+        # On Linux (X11) there is no equivalent exclusion API, so we only capture before
+        # show (in show_near_tray) to avoid the window painting itself into the blur.
+        if self._glass_ui and self.isVisible() and sys.platform == 'win32':
+            self._glass_bg_pixmap, self._glass_capture_pos = capture_glass_background(self)
+            self.update()
+
     def focusOutEvent(self, event):
         # We rely on changeEvent for robust window-level focus loss
         # but focusOutEvent is still good for some edge cases
@@ -1731,7 +1765,7 @@ class Dashboard(QWidget):
         
         # Update custom colors
         self._show_dimming = app.get('show_dimming', False)
-        self._glass_ui = app.get('glass_ui', False) and not sys.platform.startswith('linux')
+        self._glass_ui = app.get('glass_ui', False) and _is_glass_supported()
         if self._glass_ui:
             self._set_capture_exclusion(True)
             self._glass_bg_pixmap, self._glass_capture_pos = capture_glass_background(self)
