@@ -437,7 +437,15 @@ def _install_appimage_icon(appdir: str) -> str:
 
 def _ensure_desktop_file():
     """Ensure the portal app id matches an installed desktop entry."""
-    if os.environ.get("APPIMAGELAUNCHER_DISABLE") == "1" or os.environ.get("DESKTOPINTEGRATION"):
+    # Skip writing when an external AppImage manager is handling desktop integration.
+    # DESKTOPINTEGRATION is set by AppImageLauncher to its own binary path — any
+    # non-empty value means it is active and will write its own .desktop entry.
+    # APPIMAGELAUNCHER_DISABLE is the opt-out flag used by tools like Gear Lever;
+    # we accept any non-empty/non-"0" value, not just "1", for broader compatibility.
+    disable_val = os.environ.get("APPIMAGELAUNCHER_DISABLE", "")
+    if disable_val and disable_val != "0":
+        return
+    if os.environ.get("DESKTOPINTEGRATION"):
         return
 
     desktop_dir = Path.home() / ".local" / "share" / "applications"

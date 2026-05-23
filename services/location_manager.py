@@ -98,7 +98,15 @@ def ensure_desktop_file() -> None:
     exist.  GeoClue2 requires a matching .desktop file for the DesktopId
     property or it will refuse to provide location data.
     """
-    if os.environ.get("APPIMAGELAUNCHER_DISABLE") == "1" or os.environ.get("DESKTOPINTEGRATION"):
+    # Skip writing when an external AppImage manager is handling desktop integration.
+    # DESKTOPINTEGRATION is set by AppImageLauncher to its own binary path — any
+    # non-empty value means it is active and will write its own .desktop entry.
+    # APPIMAGELAUNCHER_DISABLE is the opt-out flag used by tools like Gear Lever;
+    # we accept any non-empty/non-"0" value, not just "1", for broader compatibility.
+    disable_val = os.environ.get("APPIMAGELAUNCHER_DISABLE", "")
+    if disable_val and disable_val != "0":
+        return
+    if os.environ.get("DESKTOPINTEGRATION"):
         return
 
     desktop_dir = Path.home() / '.local' / 'share' / 'applications'
