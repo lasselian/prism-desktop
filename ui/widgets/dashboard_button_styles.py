@@ -37,7 +37,6 @@ class DashboardButtonStyleManager:
         # Main Value: Large, Thin/Light
         # Label: Small, Uppercase, Tracking
         
-        font_main = Typography.FONT_FAMILY_MAIN
         font_weight_val = Typography.WEIGHT_MEDIUM
         font_size_val = Typography.SIZE_BUTTON_VALUE
         
@@ -156,7 +155,7 @@ class DashboardButtonStyleManager:
                 QLabel#valueLabel {{ 
                     color: {icon_color}; 
                     background: transparent; 
-                    font-family: "{font_main}"; font-size: {font_size_val}; font-weight: {font_weight_val};
+                    font-size: {font_size_val}; font-weight: {font_weight_val};
                 }}
                 /* Beefier font for Icons (Switch/Light/Script) */
                 DashboardButton[type="switch"] QLabel#valueLabel,
@@ -218,7 +217,7 @@ class DashboardButtonStyleManager:
                 QLabel#valueLabel {{ 
                     color: {colors['text']}; 
                     background: transparent;
-                    font-family: "{font_main}"; font-size: {font_size_val}; font-weight: {font_weight_val};
+                    font-size: {font_size_val}; font-weight: {font_weight_val};
                 }}
                 DashboardButton[type="switch"] QLabel#valueLabel,
                 DashboardButton[type="script"] QLabel#valueLabel,
