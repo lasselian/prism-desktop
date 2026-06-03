@@ -790,6 +790,20 @@ class PrinterOverlay(BaseOverlay):
         self._hover_pause = False
         self._hover_stop  = False
 
+    def _state_color(self) -> QColor:
+        s = self._state.lower()
+        if s in ('printing', 'heating'):
+            return QColor("#4CAF50")
+        elif s == 'paused':
+            return QColor("#FF9800")
+        elif s in ('error', 'offline', 'unknown'):
+            return QColor("#F44336")
+        else:
+            return QColor("#2196F3")
+
+    def _is_active_state(self) -> bool:
+        return self._state.lower() in ('printing', 'heating', 'paused')
+
     def _reset_confirm_mode(self):
         self._confirm_stop_mode = False
         self.update()
@@ -885,36 +899,210 @@ class PrinterOverlay(BaseOverlay):
             self._draw_stacked_layout(painter, rect, alpha)
 
     def _draw_split_layout(self, painter, rect, alpha):
-        padding = 16
-        mid_x   = int(rect.width() * 0.6)
+        pad   = 14
+        mid_x = int(rect.width() * 0.6)
 
-        cam_rect = QRect(padding, padding, mid_x - padding * 2, rect.height() - padding * 2)
+        # Camera (left 60%)
+        cam_rect = QRect(pad, pad, mid_x - pad * 2, rect.height() - pad * 2)
         self._draw_camera(painter, cam_rect, alpha)
 
+        # Close button anchored top-right of whole overlay
         close_size      = 20
-        self._btn_close = QRect(rect.width() - close_size - padding, padding, close_size, close_size)
+        self._btn_close = QRect(rect.width() - close_size - pad, pad, close_size, close_size)
         painter.setFont(get_mdi_font(18))
         painter.setPen(self._fg_color(int(alpha * 0.5)))
         painter.drawText(self._btn_close, Qt.AlignmentFlag.AlignCenter, get_icon('close'))
 
-        right_rect = QRect(mid_x, padding, rect.width() - mid_x - padding, rect.height() - padding * 2)
-        self._draw_telemetry_and_controls(painter, right_rect, alpha)
+        # Right panel
+        rx = mid_x
+        rw = rect.width() - mid_x - pad
+        ry = pad
+
+        # Header: title left, compact state badge right (before close)
+        _badge_pad  = 12
+        badge_label = self._state.upper()
+        fm_badge    = QFontMetrics(QFont(SYSTEM_FONT, 9, QFont.Weight.Bold))
+        badge_w     = fm_badge.horizontalAdvance(badge_label) + _badge_pad
+        badge_x     = max(rx + 4, rect.width() - close_size - pad - 4 - badge_w)
+        self._draw_state_badge(painter, badge_x, ry + 1, alpha, pill_pad=_badge_pad)
+
+        title_w = badge_x - rx - 4
+        if title_w > 20:
+            title_font = QFont(SYSTEM_FONT, 10, QFont.Weight.Bold)
+            fm_title   = QFontMetrics(title_font)
+            painter.setFont(title_font)
+            painter.setPen(self._fg_color(alpha))
+            elided = fm_title.elidedText(self._text, Qt.TextElideMode.ElideRight, title_w)
+            painter.drawText(QRect(rx, ry, title_w, 22),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided)
+        ry += 26   # header (22px) + gap (4px)
+
+        # Progress bar — always visible; green when printing, yellow otherwise
+        _active   = self._is_active_state()
+        bar_color = QColor("#4CAF50") if self._state.lower() in ('printing', 'heating') else QColor("#FF9800")
+        track_col = QColor(bar_color); track_col.setAlpha(45)
+        fill_col  = QColor(bar_color); fill_col.setAlpha(220)
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(track_col)
+        painter.drawRoundedRect(QRect(rx, ry, rw, 6), 3, 3)
+        fill_w = int(rw * (self._progress / 100.0))
+        if fill_w > 0:
+            painter.setBrush(fill_col)
+            painter.drawRoundedRect(QRect(rx, ry, fill_w, 6), 3, 3)
+        ry += 10   # bar + gap
+
+        if _active:
+            # Time remaining + percentage
+            painter.setFont(QFont(SYSTEM_FONT, 9))
+            painter.setPen(self._fg_color(int(alpha * 0.6)))
+            painter.drawText(QRect(rx, ry, rw, 16), Qt.AlignmentFlag.AlignLeft,  self._time_remaining)
+            painter.drawText(QRect(rx, ry, rw, 16), Qt.AlignmentFlag.AlignRight, f"{self._progress:.0f}%")
+
+        # Decide whether to use side-by-side cards or inline temps
+        use_cards = (rw - 8) // 2 >= 52
+        card_h    = 40 if use_cards else 28
+
+        if _active:
+            # Anchored to bottom when active
+            btn_y  = rect.height() - pad - 36
+            card_y = btn_y - 8 - card_h
+        else:
+            # Center cards+buttons in remaining space below the bar
+            content_h = card_h + 8 + 36
+            avail     = rect.height() - ry - pad
+            start_y   = ry + max(4, (avail - content_h) // 2)
+            card_y    = start_y
+            btn_y     = start_y + card_h + 8
+
+        if use_cards:
+            self._draw_temp_cards(painter, rx, card_y, rw, card_h, alpha)
+        else:
+            self._draw_inline_temps(painter, rx, card_y, rw, card_h, alpha)
+        self._draw_action_buttons(painter, rx, btn_y, rw, 36, alpha)
 
     def _draw_stacked_layout(self, painter, rect, alpha):
-        padding = 16
-        cam_h   = int(rect.height() * 0.5)
+        if rect.height() < 210:
+            self._draw_compact_stacked(painter, rect, alpha)
+        else:
+            self._draw_full_stacked(painter, rect, alpha)
 
-        cam_rect = QRect(padding, padding, rect.width() - padding * 2, cam_h)
-        self._draw_camera(painter, cam_rect, alpha)
+    def _draw_full_stacked(self, painter, rect, alpha):
+        pad = 12
+        sw  = rect.width() - pad * 2
 
+        # Close button
         close_size      = 20
-        self._btn_close = QRect(rect.width() - close_size - padding, padding, close_size, close_size)
+        self._btn_close = QRect(rect.width() - close_size - pad, pad, close_size, close_size)
         painter.setFont(get_mdi_font(18))
         painter.setPen(self._fg_color(int(alpha * 0.5)))
         painter.drawText(self._btn_close, Qt.AlignmentFlag.AlignCenter, get_icon('close'))
 
-        bottom_rect = QRect(padding, cam_h + padding * 2, rect.width() - padding * 2, rect.height() - cam_h - padding * 3)
-        self._draw_telemetry_and_controls(painter, bottom_rect, alpha, stacked=True)
+        # State badge right of title in the same header row
+        badge_label = self._state.upper()
+        fm_badge    = QFontMetrics(QFont(SYSTEM_FONT, 9, QFont.Weight.Bold))
+        badge_w     = fm_badge.horizontalAdvance(badge_label) + 18
+        badge_x     = rect.width() - close_size - pad - 6 - badge_w
+        self._draw_state_badge(painter, badge_x, pad + 1, alpha)
+
+        painter.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.Bold))
+        painter.setPen(self._fg_color(alpha))
+        painter.drawText(QRect(pad, pad, badge_x - pad - 4, 22),
+                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text)
+
+        # Bottom section (anchored from bottom upward)
+        _active   = self._is_active_state()
+        btn_y     = rect.height() - pad - 36
+        card_y    = btn_y - 8 - 44
+        cam_top   = pad + 22 + 8
+        bar_color = QColor("#4CAF50") if self._state.lower() in ('printing', 'heating') else QColor("#FF9800")
+
+        # Bar and optional time row sit between camera and temp cards
+        if _active:
+            time_y = card_y - 4 - 16
+            bar_y  = time_y - 4 - 6
+        else:
+            bar_y  = card_y - 10  # bar flush above cards
+
+        # Camera fills space between header and bar
+        cam_h = bar_y - 8 - cam_top
+        if cam_h > 24:
+            self._draw_camera(painter, QRect(pad, cam_top, sw, cam_h), alpha)
+
+        # Progress bar — always visible
+        track_col = QColor(bar_color); track_col.setAlpha(45)
+        fill_col  = QColor(bar_color); fill_col.setAlpha(220)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(track_col)
+        painter.drawRoundedRect(QRect(pad, bar_y, sw, 6), 3, 3)
+        fill_w = int(sw * (self._progress / 100.0))
+        if fill_w > 0:
+            painter.setBrush(fill_col)
+            painter.drawRoundedRect(QRect(pad, bar_y, fill_w, 6), 3, 3)
+
+        if _active:
+            # Time remaining + percentage
+            painter.setFont(QFont(SYSTEM_FONT, 9))
+            painter.setPen(self._fg_color(int(alpha * 0.6)))
+            painter.drawText(QRect(pad, time_y, sw, 16), Qt.AlignmentFlag.AlignLeft,  self._time_remaining)
+            painter.drawText(QRect(pad, time_y, sw, 16), Qt.AlignmentFlag.AlignRight, f"{self._progress:.0f}%")
+
+        self._draw_temp_cards(painter, pad, card_y, sw, 44, alpha)
+        self._draw_action_buttons(painter, pad, btn_y, sw, 36, alpha)
+
+    def _draw_compact_stacked(self, painter, rect, alpha):
+        pad = 12
+        sw  = rect.width() - pad * 2
+        y   = 10
+
+        # Title + close button
+        close_size      = 20
+        self._btn_close = QRect(rect.width() - close_size - pad, y, close_size, close_size)
+        painter.setFont(get_mdi_font(18))
+        painter.setPen(self._fg_color(int(alpha * 0.5)))
+        painter.drawText(self._btn_close, Qt.AlignmentFlag.AlignCenter, get_icon('close'))
+
+        painter.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.Bold))
+        painter.setPen(self._fg_color(alpha))
+        painter.drawText(QRect(pad, y, sw - close_size - 4, 22),
+                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text)
+        y += 28
+
+        # State badge
+        self._draw_state_badge(painter, pad, y, alpha)
+        y += 32   # 20px badge + 12px margin before bar
+
+        # Progress bar — always visible; green when printing, yellow otherwise
+        _active   = self._is_active_state()
+        bar_color = QColor("#4CAF50") if self._state.lower() in ('printing', 'heating') else QColor("#FF9800")
+        track_col = QColor(bar_color); track_col.setAlpha(45)
+        fill_col  = QColor(bar_color); fill_col.setAlpha(220)
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(track_col)
+        painter.drawRoundedRect(QRect(pad, y, sw, 6), 3, 3)
+        fill_w = int(sw * (self._progress / 100.0))
+        if fill_w > 0:
+            painter.setBrush(fill_col)
+            painter.drawRoundedRect(QRect(pad, y, fill_w, 6), 3, 3)
+        y += 10   # bar + gap
+
+        if _active:
+            # Time remaining + percentage
+            painter.setFont(QFont(SYSTEM_FONT, 9))
+            painter.setPen(self._fg_color(int(alpha * 0.6)))
+            painter.drawText(QRect(pad, y, sw, 16), Qt.AlignmentFlag.AlignLeft,  self._time_remaining)
+            painter.drawText(QRect(pad, y, sw, 16), Qt.AlignmentFlag.AlignRight, f"{self._progress:.0f}%")
+            y += 20
+        else:
+            y += 4
+
+        # Inline temp row
+        self._draw_inline_temps(painter, pad, y, sw, 28, alpha)
+        y += 32
+
+        # Action buttons
+        self._draw_action_buttons(painter, pad, y, sw, 36, alpha)
 
     def _draw_camera(self, painter, rect, alpha):
         painter.setBrush(QColor(0, 0, 0, int(alpha * 0.4)))
@@ -945,12 +1133,13 @@ class PrinterOverlay(BaseOverlay):
             x_off = (pw - rect.width())  / 2
             y_off = (ph - rect.height()) / 2
 
-            painter.translate(rect.x(), rect.y())
-            DashboardButtonPainter._draw_pill_label(
-                painter, QRect(0, 0, rect.width(), rect.height()), f"{self._progress:.0f}%",
-                background_pixmap=scaled_pixmap, x_off=x_off, y_off=y_off, position='top-right'
-            )
-            painter.translate(-rect.x(), -rect.y())
+            if self._is_active_state():
+                painter.translate(rect.x(), rect.y())
+                DashboardButtonPainter._draw_pill_label(
+                    painter, QRect(0, 0, rect.width(), rect.height()), f"{self._progress:.0f}%",
+                    background_pixmap=scaled_pixmap, x_off=x_off, y_off=y_off, position='top-right'
+                )
+                painter.translate(-rect.x(), -rect.y())
         else:
             painter.setPen(self._fg_color(int(alpha * 0.3)))
             painter.setFont(get_mdi_font(32))
@@ -958,106 +1147,167 @@ class PrinterOverlay(BaseOverlay):
             painter.setFont(QFont(SYSTEM_FONT, 10))
             painter.drawText(rect.adjusted(0, 40, 0, 0), Qt.AlignmentFlag.AlignCenter, t("overlay.printer.no_feed"))
 
-            painter.translate(rect.x(), rect.y())
-            DashboardButtonPainter._draw_pill_label(
-                painter, QRect(0, 0, rect.width(), rect.height()), f"{self._progress:.0f}%",
-                background_pixmap=None, x_off=0, y_off=0, position='top-right'
-            )
-            painter.translate(-rect.x(), -rect.y())
+            if self._is_active_state():
+                painter.translate(rect.x(), rect.y())
+                DashboardButtonPainter._draw_pill_label(
+                    painter, QRect(0, 0, rect.width(), rect.height()), f"{self._progress:.0f}%",
+                    background_pixmap=None, x_off=0, y_off=0, position='top-right'
+                )
+                painter.translate(-rect.x(), -rect.y())
 
-    def _draw_telemetry_and_controls(self, painter, rect, alpha, stacked=False):
-        y = rect.y()
+    def _draw_state_badge(self, painter, x, y, alpha, pill_pad: int = 18):
+        state_color = self._state_color()
+        state_color.setAlpha(min(255, int(alpha * 0.9)))
 
-        painter.setFont(QFont(SYSTEM_FONT, 12, QFont.Weight.Bold))
-        painter.setPen(self._fg_color(alpha))
-        painter.drawText(QRect(rect.x(), y, rect.width(), 20), Qt.AlignmentFlag.AlignLeft, self._state.upper())
-        y += 32
+        label  = self._state.upper()
+        fm     = QFontMetrics(QFont(SYSTEM_FONT, 9, QFont.Weight.Bold))
+        pill_w = fm.horizontalAdvance(label) + pill_pad
 
-        bar_h    = 4
-        bar_rect = QRect(rect.x(), y, rect.width(), bar_h)
-        painter.setBrush(self._fg_color(40))
-        painter.drawRoundedRect(bar_rect, 2, 2)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(state_color)
+        painter.drawRoundedRect(QRect(x, y, pill_w, 20), 10, 10)
 
-        fill_w = int(rect.width() * (self._progress / 100.0))
-        if fill_w > 0:
-            painter.setBrush(self._color)
-            painter.drawRoundedRect(QRect(rect.x(), y, fill_w, bar_h), 2, 2)
+        painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.Bold))
+        painter.setPen(QColor(255, 255, 255, alpha))
+        painter.drawText(QRect(x, y, pill_w, 20), Qt.AlignmentFlag.AlignCenter, label)
 
-        y += 12
-        painter.setFont(QFont(SYSTEM_FONT, 9))
-        painter.setPen(self._fg_color(alpha))
-        painter.drawText(QRect(rect.x(), y, rect.width(), 20), Qt.AlignmentFlag.AlignRight, self._time_remaining)
+    def _draw_temp_cards(self, painter, x, y, w, h, alpha):
+        _fmt        = lambda v: format_temperature(v, self._printer_source_unit, self._temperature_unit_preference, precision=0, fallback="0")
+        gap         = 8
+        card_w      = (w - gap) // 2
+        icon_colors = [QColor("#FF6D00"), QColor("#42A5F5")]  # orange nozzle, blue bed
 
-        btn_y = rect.bottom() - 36
-        btn_w = (rect.width() - 8) // 2
-        temp_y = btn_y - 36 - 12
+        for i, (icon_name, actual, target) in enumerate([
+            ('printer-3d-nozzle', self._hotend_actual, self._hotend_target),
+            ('square-medium',     self._bed_actual,    self._bed_target),
+        ]):
+            cx        = x + i * (card_w + gap)
+            card_rect = QRect(cx, y, card_w, h)
+            ic        = icon_colors[i]
 
-        box_rect = QRect(rect.x(), temp_y, rect.width(), 36)
-        painter.setBrush(self._fg_color(15))
-        painter.setPen(QPen(self._fg_color(40), 1))
-        painter.drawRoundedRect(box_rect, 6, 6)
+            # Card with colored tint matching its icon
+            border_col = QColor(ic); border_col.setAlpha(130)
+            bg_col     = QColor(ic); bg_col.setAlpha(35)
+            painter.setPen(QPen(border_col, 1.5))
+            painter.setBrush(bg_col)
+            painter.drawRoundedRect(card_rect, 8, 8)
 
-        pause_center = rect.x() + (btn_w // 2)
-        stop_center  = rect.x() + btn_w + 8 + (btn_w // 2)
+            ic_pen   = QColor(ic); ic_pen.setAlpha(min(255, int(alpha * 0.95)))
+            font_val = QFont(SYSTEM_FONT, 10, QFont.Weight.Bold)
+            tx       = cx + 8 + 22
+            tw       = card_w - 8 - 22 - 4
 
-        painter.setPen(self._fg_color(alpha))
-        _fmt       = lambda v: format_temperature(v, self._printer_source_unit, self._temperature_unit_preference, precision=0, fallback="0")
-        nozzle_val = f"{_fmt(self._hotend_actual)}/{_fmt(self._hotend_target)}"
-        bed_val    = f"{_fmt(self._bed_actual)}/{_fmt(self._bed_target)}"
+            if target > 5:
+                half = h // 2
+                painter.setFont(get_mdi_font(15))
+                painter.setPen(ic_pen)
+                painter.drawText(QRect(cx + 8, y, 22, half),
+                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, get_icon(icon_name))
+                painter.setFont(font_val)
+                painter.setPen(self._fg_color(alpha))
+                painter.drawText(QRect(tx, y, tw, half),
+                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, _fmt(actual))
+                painter.setFont(QFont(SYSTEM_FONT, 8))
+                painter.setPen(self._fg_color(int(alpha * 0.55)))
+                painter.drawText(QRect(tx, y + half, tw, half),
+                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, f"→ {_fmt(target)}")
+            else:
+                painter.setFont(get_mdi_font(14))
+                painter.setPen(ic_pen)
+                painter.drawText(QRect(cx + 8, y, 22, h),
+                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, get_icon(icon_name))
+                painter.setFont(font_val)
+                painter.setPen(self._fg_color(alpha))
+                painter.drawText(QRect(tx, y, tw, h),
+                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, _fmt(actual))
 
-        fm_icon = QFontMetrics(get_mdi_font(14))
-        fm_text = QFontMetrics(QFont(SYSTEM_FONT, 10, QFont.Weight.Bold))
+    def _draw_inline_temps(self, painter, x, y, w, h, alpha):
+        # Strip trailing letter from unit ("205°C" → "205°") to save space in compact layout
+        def _fmt_short(v):
+            s = format_temperature(v, self._printer_source_unit, self._temperature_unit_preference, precision=0, fallback="0")
+            return s[:-1] if s and s[-1].isalpha() else s
 
-        nozzle_w = fm_icon.horizontalAdvance(get_icon('printer-3d-nozzle')) + 6 + fm_text.horizontalAdvance(nozzle_val)
-        bed_w    = fm_icon.horizontalAdvance(get_icon('square-medium'))      + 6 + fm_text.horizontalAdvance(bed_val)
+        painter.setPen(QPen(self._fg_color(50), 1.5))
+        painter.setBrush(self._fg_color(20))
+        painter.drawRoundedRect(QRect(x, y, w, h), 8, 8)
 
-        nozzle_x = max(box_rect.x() + 8,     pause_center - (nozzle_w // 2))
-        bed_x    = min(box_rect.right() - 8 - bed_w, stop_center - (bed_w // 2))
+        # Vertical divider
+        mid_x = x + w // 2
+        painter.setPen(QPen(self._fg_color(35), 1))
+        painter.drawLine(mid_x, y + 4, mid_x, y + h - 4)
 
-        nozzle_rect = QRect(int(nozzle_x), temp_y, int(nozzle_w), 36)
-        painter.setFont(get_mdi_font(14))
-        painter.drawText(nozzle_rect, Qt.AlignmentFlag.AlignLeft  | Qt.AlignmentFlag.AlignVCenter, get_icon('printer-3d-nozzle'))
-        painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.Bold))
-        painter.drawText(nozzle_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, nozzle_val)
+        icon_colors = [QColor("#FF6D00"), QColor("#42A5F5")]  # orange nozzle, blue bed
+        half_w      = w // 2
+        for i, (icon_name, actual, target) in enumerate([
+            ('printer-3d-nozzle', self._hotend_actual, self._hotend_target),
+            ('square-medium',     self._bed_actual,    self._bed_target),
+        ]):
+            hx     = x + i * half_w
+            ic_pen = QColor(icon_colors[i]); ic_pen.setAlpha(min(255, int(alpha * 0.95)))
 
-        bed_rect = QRect(int(bed_x), temp_y, int(bed_w), 36)
-        painter.setFont(get_mdi_font(14))
-        painter.drawText(bed_rect, Qt.AlignmentFlag.AlignLeft  | Qt.AlignmentFlag.AlignVCenter, get_icon('square-medium'))
-        painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.Bold))
-        painter.drawText(bed_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, bed_val)
+            painter.setFont(get_mdi_font(12))
+            painter.setPen(ic_pen)
+            painter.drawText(QRect(hx + 4, y, 16, h),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, get_icon(icon_name))
 
-        self._btn_pause = QRect(rect.x(), btn_y, btn_w, 36)
-        pause_color  = self._fg_color(50) if self._hover_pause else self._fg_color(10)
-        pause_border = self._fg_color(100) if self._hover_pause else self._fg_color(30)
-        pause_icon   = 'play' if self._state.lower() == 'paused' else 'pause'
+            # "205°/210°" or just "205°" when target is off/idle
+            if target > 5:
+                val_text = f"{_fmt_short(actual)}/{_fmt_short(target)}"
+            else:
+                val_text = _fmt_short(actual)
+            painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
+            painter.setPen(self._fg_color(alpha))
+            painter.drawText(QRect(hx + 20, y, half_w - 22, h),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, val_text)
 
-        painter.setBrush(pause_color)
-        painter.setPen(QPen(pause_border, 1.5))
-        painter.drawRoundedRect(self._btn_pause, 6, 6)
-        painter.setPen(self._fg_color(alpha))
-        painter.setFont(get_mdi_font(16))
-        painter.drawText(self._btn_pause, Qt.AlignmentFlag.AlignCenter, get_icon(pause_icon))
+    def _draw_action_buttons(self, painter, x, y, w, h, alpha):
+        btn_w      = (w - 8) // 2
+        is_paused  = self._state.lower() == 'paused'
+        pause_icon = 'play' if is_paused else 'pause'
+        pause_label = t("overlay.printer.resume_btn") if is_paused else t("overlay.printer.pause_btn")
+        stop_label  = t("overlay.printer.stop_btn")
 
-        self._btn_stop = QRect(rect.x() + btn_w + 8, btn_y, btn_w, 36)
+        font_text = QFont(SYSTEM_FONT, 10, QFont.Weight.Bold)
+        fm        = QFontMetrics(font_text)
+        icon_w    = 20   # MDI glyph width at 15pt
+        icon_gap  = 6
+        radius    = 8
 
-        if self._confirm_stop_mode:
-            stop_color  = QColor("#D32F2F")
-            stop_border = QColor(255, 100, 100, 200)
-        else:
-            stop_color  = self._fg_color(50) if self._hover_stop else self._fg_color(10)
-            stop_border = self._fg_color(100) if self._hover_stop else self._fg_color(30)
+        def _draw_btn(btn_rect, icon_name, label, is_stop):
+            if is_stop and self._confirm_stop_mode:
+                bg  = QColor("#C62828")
+                bdr = QColor(255, 110, 110, 220)
+            elif is_stop:
+                hover = self._hover_stop
+                bg  = QColor(200, 60, 60, 70 if hover else 45)
+                bdr = QColor(220, 80, 80, 160 if hover else 110)
+            else:
+                hover = self._hover_pause
+                bg  = QColor(60, 110, 200, 70 if hover else 45)
+                bdr = QColor(80, 140, 230, 160 if hover else 110)
 
-        painter.setBrush(stop_color)
-        painter.setPen(QPen(stop_border, 1.5))
-        painter.drawRoundedRect(self._btn_stop, 6, 6)
-        painter.setPen(self._fg_color(alpha))
+            painter.setPen(QPen(bdr, 1.5))
+            painter.setBrush(bg)
+            painter.drawRoundedRect(btn_rect, radius, radius)
+            painter.setPen(self._fg_color(alpha))
 
-        if self._confirm_stop_mode:
-            painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.Bold))
-            painter.drawText(self._btn_stop, Qt.AlignmentFlag.AlignCenter, t("overlay.printer.confirm_stop"))
-        else:
-            painter.setFont(get_mdi_font(16))
-            painter.drawText(self._btn_stop, Qt.AlignmentFlag.AlignCenter, get_icon('stop'))
+            if is_stop and self._confirm_stop_mode:
+                painter.setFont(font_text)
+                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, t("overlay.printer.confirm_stop"))
+            else:
+                painter.setFont(get_mdi_font(15))
+                painter.drawText(QRect(btn_rect.x() + 8, y, icon_w, h),
+                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                                 get_icon(icon_name))
+                painter.setFont(font_text)
+                painter.drawText(QRect(btn_rect.x() + 8 + icon_w + icon_gap, y, btn_rect.width() - 8 - icon_w - icon_gap - 4, h),
+                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
+
+        self._btn_pause = QRect(x, y, btn_w, h)
+        _draw_btn(self._btn_pause, pause_icon, pause_label, False)
+
+        self._btn_stop = QRect(x + btn_w + 8, y, btn_w, h)
+        _draw_btn(self._btn_stop, 'stop', stop_label, True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
