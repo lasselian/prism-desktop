@@ -177,6 +177,9 @@ class Icons:
     # Pin / window pinning
     PIN = "\U000F0403"                 # mdi-pin
 
+    # Support
+    COFFEE = "\U000F0176"              # mdi-coffee
+
 # --- MDI Mapping Logic ---
 
 # --- MDI Mapping Logic ---

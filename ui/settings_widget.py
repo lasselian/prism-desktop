@@ -12,10 +12,10 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QComboBox, QFormLayout,
-    QFrame, QColorDialog, QApplication
+    QFrame, QColorDialog, QApplication, QButtonGroup, QSizePolicy
 )
 from ui.widgets.toggle_switch import ToggleSwitch
-from PyQt6.QtCore import Qt, pyqtSignal, pyqtProperty, pyqtSlot, QUrl, QTimer, QRectF, QPropertyAnimation, QEasingCurve, QThread
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtProperty, pyqtSlot, QUrl, QTimer, QRectF, QPropertyAnimation, QEasingCurve, QThread, QSize
 from PyQt6.QtGui import QFont, QColor, QDesktopServices, QIcon, QPixmap, QConicalGradient, QPen, QBrush, QPainter
 from core.utils import SYSTEM_FONT
 from core.localization_manager import t, current_language, supported_languages, init_localization
@@ -98,39 +98,43 @@ class PinButton(QPushButton):
 class SettingsWidget(QWidget):
     """
     Main settings screen.
-    Uses QFormLayout for clean alignment of labels and fields.
+    Category pills at the top; clicking one shows only that panel below.
+    Window re-animates its height to fit the active panel's content.
     """
-    
+
     settings_saved = pyqtSignal(dict)
     back_requested = pyqtSignal()
-    
+    content_height_changed = pyqtSignal()
+
     def __init__(self, config: dict, theme_manager=None, input_manager=None, current_version="0.0.0", parent=None):
         super().__init__(parent)
         self.config = config
         self.current_version = current_version
         self.theme_manager = theme_manager
         self.input_manager = input_manager
-        
+
         self._test_thread: Optional[ConnectionTestThread] = None
         self._update_thread = None
         self._auto_update_thread = None
         self._geoclue_thread = None
         self._pin_window = False
 
+        self._panels: list = []
+        self._active_panel_idx = 0
+        self._pill_buttons: list = []
+
         self.setup_ui()
         self.load_config()
         self._update_shortcut_controls()
-        
-        # Connect input manager if available
+
         if self.input_manager:
             self.input_manager.recorded.connect(self.on_shortcut_recorded)
-        
+
     def _update_stylesheet(self):
         """Build and apply theme-dependent stylesheet."""
         if self.theme_manager:
             colors = self.theme_manager.get_colors()
         else:
-            # Fallback to dark theme colors
             colors = {
                 'text': '#e0e0e0',
                 'window_text': '#ffffff',
@@ -140,33 +144,34 @@ class SettingsWidget(QWidget):
                 'button_text': '#ffffff',
                 'accent': '#007aff',
             }
-        
-        # Determine if we're in light mode for input styling
+
         is_light = colors.get('text', '#ffffff') == '#1e1e1e'
-        
-        # Input backgrounds: slightly darker/lighter than base
+
         if is_light:
             input_bg = "rgba(0, 0, 0, 0.06)"
             input_border = "rgba(0, 0, 0, 0.25)"
             input_focus_bg = "rgba(0, 0, 0, 0.08)"
-            section_header_color = "#555555"  # Dark gray for light mode
+            section_header_color = "#555555"
+            pill_bg = "rgba(255, 255, 255, 0.85)"
+            pill_border = "rgba(0, 0, 0, 0.12)"
+            pill_hover_bg = "rgba(0, 0, 0, 0.06)"
+            pill_bar_bg = "rgba(0, 0, 0, 0.05)"
+            pill_bar_border = "rgba(0, 0, 0, 0.10)"
+            pill_text_inactive = "rgba(0, 0, 0, 0.45)"
         else:
             input_bg = "rgba(255, 255, 255, 0.08)"
             input_border = "rgba(255, 255, 255, 0.1)"
             input_focus_bg = "rgba(255, 255, 255, 0.12)"
-            section_header_color = "#8e8e93"  # Apple gray for dark mode
-            
-        # Pill Background (Semi-transparent container for readability)
-        if is_light:
-            pill_bg = "rgba(255, 255, 255, 0.85)"
-            pill_border = "rgba(0, 0, 0, 0.12)"
-        else:
+            section_header_color = "#8e8e93"
             pill_bg = "rgba(30, 30, 30, 0.6)"
             pill_border = "rgba(255, 255, 255, 0.05)"
-            
+            pill_hover_bg = "rgba(255, 255, 255, 0.08)"
+            pill_bar_bg = "rgba(255, 255, 255, 0.06)"
+            pill_bar_border = "rgba(255, 255, 255, 0.08)"
+            pill_text_inactive = "rgba(255, 255, 255, 0.45)"
+
         from ui.styles import Typography, Dimensions
-        
-        # Push accent + text color into any ToggleSwitch children already created
+
         accent = colors['accent']
         text   = colors['text']
         for toggle in self.findChildren(ToggleSwitch):
@@ -174,8 +179,8 @@ class SettingsWidget(QWidget):
             toggle.set_text_color(text)
 
         self.setStyleSheet(f"""
-            QWidget {{ 
-                font-family: {Typography.FONT_FAMILY_UI}; 
+            QWidget {{
+                font-family: {Typography.FONT_FAMILY_UI};
                 font-size: {Typography.SIZE_BODY};
                 color: {colors['text']};
             }}
@@ -183,11 +188,6 @@ class SettingsWidget(QWidget):
                 font-size: {Typography.SIZE_HEADER};
                 font-weight: {Typography.WEIGHT_SEMIBOLD};
                 color: {colors['window_text']};
-            }}
-            QLabel#sectionHeader {{
-                font-size: {Typography.SIZE_SMALL};
-                font-weight: {Typography.WEIGHT_BOLD};
-                color: {section_header_color};
             }}
             QLineEdit, QComboBox {{
                 background-color: {input_bg};
@@ -226,14 +226,40 @@ class SettingsWidget(QWidget):
             }}
             QPushButton:hover {{ background-color: {colors['accent']}; color: white; }}
             QPushButton:pressed {{ background-color: {colors['accent']}; }}
-            
+
             QPushButton#primaryBtn {{
                 background-color: {colors['accent']};
                 color: white;
                 border: none;
             }}
             QPushButton#primaryBtn:hover {{ background-color: #006ce6; }}
-            
+
+            QFrame#pillBar {{
+                background-color: {pill_bar_bg};
+                border: 1px solid {pill_bar_border};
+                border-radius: 18px;
+            }}
+
+            QPushButton#categoryPill {{
+                background-color: transparent;
+                border: none;
+                border-radius: 14px;
+                padding: 4px 14px;
+                min-height: 28px;
+                max-height: 28px;
+                font-size: 12px;
+                font-weight: {Typography.WEIGHT_MEDIUM};
+                color: {pill_text_inactive};
+            }}
+            QPushButton#categoryPill:checked {{
+                background-color: {colors['accent']};
+                color: white;
+            }}
+            QPushButton#categoryPill:hover:!checked {{
+                background-color: {pill_hover_bg};
+                color: {colors['text']};
+            }}
+
             QPushButton#rowBtn {{
                 min-width: 42px;
                 max-width: 42px;
@@ -262,12 +288,11 @@ class SettingsWidget(QWidget):
             QPushButton#recordBtn:checked {{
                 background-color: #8E0000;
             }}
-            
+
             QWidget#recordIcon {{
                 background-color: white;
                 border-radius: {Dimensions.RADIUS_MEDIUM};
             }}
-            
 
             QPushButton#updateBtn {{
                 background-color: {colors['button']};
@@ -309,27 +334,45 @@ class SettingsWidget(QWidget):
                 border-color: {colors['accent']};
                 color: white;
             }}
+
+            QPushButton#bmcBtn {{
+                background-color: rgba(255, 187, 51, 0.08);
+                border: 1px solid rgba(255, 187, 51, 0.35);
+                border-radius: {Dimensions.RADIUS_MEDIUM};
+                color: #FFBB33;
+                padding: 0px 14px;
+                min-height: 34px;
+                max-height: 34px;
+                font-size: 13px;
+                font-weight: {Typography.WEIGHT_SEMIBOLD};
+                text-align: left;
+            }}
+            QPushButton#bmcBtn:hover {{
+                background-color: #FFDD00;
+                border-color: #FFDD00;
+                color: #1a0e00;
+            }}
+            QPushButton#bmcBtn:pressed {{
+                background-color: #F5C800;
+                border-color: #F5C800;
+                color: #1a0e00;
+            }}
         """)
-        
+
     def setup_ui(self):
-        # Apply dynamic theming
         self._update_stylesheet()
-        
-        # Main Layout
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(10)
-        
-        # Listen for theme changes
+
         if self.theme_manager:
             self.theme_manager.theme_changed.connect(self._update_stylesheet)
-        
 
-        
         # 1. Header
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 10)
-        
+
         self.back_btn = QPushButton(t("settings.back_btn"))
         self.back_btn.setMinimumWidth(70)
         self.back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -344,52 +387,106 @@ class SettingsWidget(QWidget):
         self.save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.save_btn.setMinimumWidth(70)
         self.save_btn.clicked.connect(self.save_settings)
-        
+
         header_layout.addWidget(self.back_btn)
         header_layout.addWidget(title)
         header_layout.addWidget(self.save_btn)
-        
         layout.addLayout(header_layout)
-        
-        # 2. Pill Container for Form Content
-        self.pill_frame = QFrame()
-        self.pill_frame.setObjectName("settingsPill")
-        self.pill_layout = QVBoxLayout(self.pill_frame)
-        self.pill_layout.setContentsMargins(20, 20, 20, 20)
-        self.pill_layout.setSpacing(10)
 
-        layout.addWidget(self.pill_frame)
+        # 2. Category pill row
+        pill_frame = QFrame()
+        pill_frame.setObjectName("pillBar")
+        pill_row = QHBoxLayout(pill_frame)
+        pill_row.setContentsMargins(4, 4, 4, 4)
+        pill_row.setSpacing(2)
 
-        self.form = None  # Created fresh by each _add_section_header call
-        self._form_sections = []  # Track all section forms for label-width sync
-        
-        # --- Home Assistant Section ---
-        self._add_section_header(t("settings.section.home_assistant"))
+        self._pill_group = QButtonGroup(self)
+        self._pill_group.setExclusive(True)
+
+        pill_labels = [
+            t("settings.section.home_assistant").title(),
+            t("settings.section.appearance").title(),
+            t("settings.section.shortcut").title(),
+            t("settings.section.support").title(),
+        ]
+
+        for i, label in enumerate(pill_labels):
+            btn = QPushButton(label)
+            btn.setObjectName("categoryPill")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            btn.clicked.connect(lambda checked, idx=i: self._switch_panel(idx))
+            self._pill_group.addButton(btn, i)
+            self._pill_buttons.append(btn)
+            pill_row.addWidget(btn)
+
+        self._pill_buttons[0].setChecked(True)
+        layout.addWidget(pill_frame)
+
+        # 3. Build content panels — only the first is visible initially
+        panel_builders = [
+            self._build_ha_panel,
+            self._build_appearance_panel,
+            self._build_shortcut_panel,
+            self._build_support_panel,
+        ]
+        for i, builder in enumerate(panel_builders):
+            panel = builder()
+            panel.setVisible(i == 0)
+            self._panels.append(panel)
+            layout.addWidget(panel)
+
+        self._active_panel_idx = 0
+
+        # Cross-panel signal: border effect drives pin button animation style
+        self.border_effect_combo.currentTextChanged.connect(self.pin_btn.set_effect)
+
+        self._update_stylesheet()
+
+    # -------------------------------------------------------------------------
+    # Panel builders
+    # -------------------------------------------------------------------------
+
+    def _make_pill_panel(self):
+        """Return a (QFrame, QFormLayout) pair styled as a settingsPill."""
+        frame = QFrame()
+        frame.setObjectName("settingsPill")
+        vbox = QVBoxLayout(frame)
+        vbox.setContentsMargins(20, 20, 20, 20)
+        vbox.setSpacing(8)
+        form = QFormLayout()
+        form.setVerticalSpacing(8)
+        form.setHorizontalSpacing(16)
+        vbox.addLayout(form)
+        return frame, form
+
+    def _build_ha_panel(self) -> QFrame:
+        frame, form = self._make_pill_panel()
 
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText(t("settings.ha.url_placeholder"))
-        self.form.addRow(t("settings.ha.url_label"), self.url_input)
+        form.addRow(t("settings.ha.url_label"), self.url_input)
 
         self.token_input = QLineEdit()
         self.token_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.token_input.setPlaceholderText(t("settings.ha.token_placeholder"))
-        self.form.addRow(t("settings.ha.token_label"), self.token_input)
+        form.addRow(t("settings.ha.token_label"), self.token_input)
 
-        # Full-width Test Connection button
         self.test_btn = QPushButton(t("settings.ha.test_btn"))
         self.test_btn.clicked.connect(self.test_connection)
-        self.form.addRow("", self.test_btn)
+        form.addRow("", self.test_btn)
 
-        # Location tracking (Windows + Linux)
         if sys.platform in ('win32', 'linux'):
             self.location_check = ToggleSwitch(t("settings.ha.location_toggle"))
             self.location_check.setToolTip(t("settings.ha.location_tooltip"))
-            self.form.addRow("", self.location_check)
+            form.addRow("", self.location_check)
 
-        # --- Appearance Section ---
-        self._add_section_header(t("settings.section.appearance"))
+        return frame
 
-        # Theme
+    def _build_appearance_panel(self) -> QFrame:
+        frame, form = self._make_pill_panel()
+
         self.theme_combo = QComboBox()
         self.theme_combo.addItems([
             t("settings.appearance.theme_system"),
@@ -397,14 +494,14 @@ class SettingsWidget(QWidget):
             t("settings.appearance.theme_dark"),
         ])
         self.theme_combo.setMinimumWidth(120)
-        self.form.addRow(t("settings.appearance.theme_label"), self.theme_combo)
+        form.addRow(t("settings.appearance.theme_label"), self.theme_combo)
 
         from ui.widgets.effect_combobox import EffectComboBox
         self.border_effect_combo = EffectComboBox()
         self.border_effect_combo.addItems(["Rainbow", "Aurora Borealis", "Prism Shard", "Liquid Mercury", "None"])
         self.border_effect_combo.setMinimumWidth(120)
         self.border_effect_combo.currentTextChanged.connect(self.on_border_effect_changed)
-        self.form.addRow(t("settings.appearance.border_label"), self.border_effect_combo)
+        form.addRow(t("settings.appearance.border_label"), self.border_effect_combo)
 
         self.button_style_combo = QComboBox()
         self.button_style_combo.addItems([
@@ -412,19 +509,18 @@ class SettingsWidget(QWidget):
             t("settings.appearance.button_style_flat"),
         ])
         self.button_style_combo.setMinimumWidth(120)
-        self.form.addRow(t("settings.appearance.button_style_label"), self.button_style_combo)
+        form.addRow(t("settings.appearance.button_style_label"), self.button_style_combo)
 
-        # Language selector
         self._language_codes = list(supported_languages().keys())
         self.language_combo = QComboBox()
         self.language_combo.addItems(list(supported_languages().values()))
         self.language_combo.setMinimumWidth(120)
-        self.form.addRow(t("settings.appearance.language_label"), self.language_combo)
+        form.addRow(t("settings.appearance.language_label"), self.language_combo)
 
         self._language_restart_note = QLabel(t("settings.appearance.language_restart_note"))
         self._language_restart_note.setStyleSheet("color: #aaa; font-size: 11px;")
         self._language_restart_note.hide()
-        self.form.addRow("", self._language_restart_note)
+        form.addRow("", self._language_restart_note)
         self.language_combo.currentIndexChanged.connect(self._on_language_changed)
 
         self.tray_position_combo = QComboBox()
@@ -433,7 +529,7 @@ class SettingsWidget(QWidget):
             t("settings.appearance.tray_top"),
         ])
         self.tray_position_combo.setMinimumWidth(120)
-        self.form.addRow(t("settings.appearance.tray_label"), self.tray_position_combo)
+        form.addRow(t("settings.appearance.tray_label"), self.tray_position_combo)
 
         self.temperature_unit_combo = QComboBox()
         self.temperature_unit_combo.addItems([
@@ -441,14 +537,13 @@ class SettingsWidget(QWidget):
             t("settings.appearance.temp_fahrenheit"),
         ])
         self.temperature_unit_combo.setMinimumWidth(120)
-        self.form.addRow(t("settings.appearance.temp_label"), self.temperature_unit_combo)
+        form.addRow(t("settings.appearance.temp_label"), self.temperature_unit_combo)
 
         self.pages_combo = QComboBox()
         self.pages_combo.addItems(["1", "2", "3", "4"])
         self.pages_combo.setMinimumWidth(120)
-        self.form.addRow(t("settings.appearance.pages_label"), self.pages_combo)
+        form.addRow(t("settings.appearance.pages_label"), self.pages_combo)
 
-        # Toggles
         self.show_dimming_check = ToggleSwitch(t("settings.appearance.dimming_toggle"))
         self.show_dimming_check.setToolTip(t("settings.appearance.dimming_tooltip"))
 
@@ -457,11 +552,13 @@ class SettingsWidget(QWidget):
         if sys.platform.startswith('linux'):
             self.glass_ui_check.setVisible(False)
 
-        self.form.addRow("", self.show_dimming_check)
-        self.form.addRow("", self.glass_ui_check)
-        
-        # --- Shortcut Section ---
-        self._add_section_header(t("settings.section.shortcut"))
+        form.addRow("", self.show_dimming_check)
+        form.addRow("", self.glass_ui_check)
+
+        return frame
+
+    def _build_shortcut_panel(self) -> QFrame:
+        frame, form = self._make_pill_panel()
 
         shortcut_container = QWidget()
         shortcut_container_layout = QVBoxLayout(shortcut_container)
@@ -473,30 +570,28 @@ class SettingsWidget(QWidget):
         self.shortcut_display = QLineEdit()
         self.shortcut_display.setReadOnly(True)
         self.shortcut_display.setPlaceholderText(t("settings.shortcut.placeholder"))
-        
+
         self.record_btn = QPushButton()
         self.record_btn.setObjectName("recordBtn")
         self.record_btn.setCheckable(True)
         self.record_btn.setFixedSize(40, 32)
         self.record_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.record_btn.clicked.connect(self.toggle_recording)
-        
-        # Inner Icon Widget
+
         btn_layout = QHBoxLayout(self.record_btn)
-        btn_layout.setContentsMargins(0,0,0,0)
+        btn_layout.setContentsMargins(0, 0, 0, 0)
         btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
+
         self.record_icon = QWidget()
         self.record_icon.setObjectName("recordIcon")
         self.record_icon.setFixedSize(12, 12)
-        self.record_icon.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents) # Let clicks pass
+        self.record_icon.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         btn_layout.addWidget(self.record_icon)
-        
-        # Layout: Input (80%) - Gap - Button - Gap (10%)
+
         shortcut_row.addWidget(self.shortcut_display, 8)
         shortcut_row.addSpacing(12)
         shortcut_row.addWidget(self.record_btn)
-        shortcut_row.addStretch(2) 
+        shortcut_row.addStretch(2)
         shortcut_container_layout.addLayout(shortcut_row)
 
         self.shortcut_aux = QWidget()
@@ -517,12 +612,36 @@ class SettingsWidget(QWidget):
         shortcut_aux_layout.addWidget(self.kde_shortcuts_btn, 0, Qt.AlignmentFlag.AlignLeft)
         self.shortcut_aux.hide()
         shortcut_container_layout.addWidget(self.shortcut_aux)
-        self.form.addRow(t("settings.shortcut.label"), shortcut_container)
-        
-        # --- Support Section ---
-        self._add_section_header(t("settings.section.support"))
 
-        # Update Check
+        form.addRow(t("settings.shortcut.label"), shortcut_container)
+
+        # --- Button shortcuts list ---
+        vbox = frame.layout()
+        vbox.setSpacing(12)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background-color: rgba(128,128,128,0.25); border: none;")
+        vbox.addWidget(sep)
+
+        sc_header = QLabel(t("settings.shortcut.button_shortcuts"))
+        sc_header.setObjectName("sectionHeader")
+        vbox.addWidget(sc_header)
+
+        self._btn_shortcuts_container = QWidget()
+        self._btn_shortcuts_layout = QVBoxLayout(self._btn_shortcuts_container)
+        self._btn_shortcuts_layout.setContentsMargins(0, 0, 0, 0)
+        self._btn_shortcuts_layout.setSpacing(4)
+        vbox.addWidget(self._btn_shortcuts_container)
+
+        self._refresh_button_shortcuts()
+
+        return frame
+
+    def _build_support_panel(self) -> QFrame:
+        frame, form = self._make_pill_panel()
+
         update_row = QHBoxLayout()
         update_row.setContentsMargins(0, 0, 0, 0)
 
@@ -545,7 +664,6 @@ class SettingsWidget(QWidget):
         self.pin_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.pin_btn.setToolTip(t("settings.appearance.pin_tooltip"))
         self.pin_btn.clicked.connect(self._on_pin_toggled)
-        self.border_effect_combo.currentTextChanged.connect(self.pin_btn.set_effect)
 
         update_row.addWidget(self.update_btn)
         update_row.addSpacing(10)
@@ -553,52 +671,140 @@ class SettingsWidget(QWidget):
         update_row.addStretch()
         update_row.addWidget(self.pin_btn)
 
-        self.form.addRow(t("settings.support.update_label"), update_row)
-        self._sync_form_label_widths()
-        self._update_stylesheet()  # re-run now that toggles exist
+        form.addRow(t("settings.support.update_label"), update_row)
 
-    def _sync_form_label_widths(self):
-        """Force all section forms to use the same label column width."""
-        max_w = 0
-        for form in self._form_sections:
-            for row in range(form.rowCount()):
-                item = form.itemAt(row, QFormLayout.ItemRole.LabelRole)
-                if item and item.widget():
-                    item.widget().ensurePolished()
-                    max_w = max(max_w, item.widget().sizeHint().width())
-        for form in self._form_sections:
-            for row in range(form.rowCount()):
-                item = form.itemAt(row, QFormLayout.ItemRole.LabelRole)
-                if item and item.widget():
-                    item.widget().setMinimumWidth(max_w)
+        # Buy Me a Coffee
+        vbox = frame.layout()
 
-    def _add_section_header(self, text):
-        """Add a section header label and start a fresh form layout for that section."""
-        lbl = QLabel(text)
-        lbl.setObjectName("sectionHeader")
-        self.pill_layout.addWidget(lbl)
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background-color: rgba(128,128,128,0.25); border: none;")
+        vbox.addWidget(sep)
 
-        self.form = QFormLayout()
-        self.form.setVerticalSpacing(8)
-        self.form.setHorizontalSpacing(16)
-        self.pill_layout.addLayout(self.form)
-        self._form_sections.append(self.form)
+        coffee_pix = QPixmap(18, 18)
+        coffee_pix.fill(Qt.GlobalColor.transparent)
+        p = QPainter(coffee_pix)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setFont(get_mdi_font(15))
+        p.setPen(QColor("#FFBB33"))
+        p.drawText(coffee_pix.rect(), Qt.AlignmentFlag.AlignCenter, Icons.COFFEE)
+        p.end()
+
+        self.bmc_btn = QPushButton(f"  {t('settings.support.bmc_btn')}")
+        self.bmc_btn.setObjectName("bmcBtn")
+        self.bmc_btn.setIcon(QIcon(coffee_pix))
+        self.bmc_btn.setIconSize(QSize(16, 16))
+        self.bmc_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.bmc_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl("https://buymeacoffee.com/lasselian"))
+        )
+        vbox.addWidget(self.bmc_btn)
+
+        return frame
+
+    # -------------------------------------------------------------------------
+    # Panel switching
+    # -------------------------------------------------------------------------
+
+    def _switch_panel(self, idx: int):
+        for i, panel in enumerate(self._panels):
+            panel.setVisible(i == idx)
+        self._active_panel_idx = idx
+        if idx == 2:  # Shortcut panel — refresh list in case buttons changed
+            self._refresh_button_shortcuts()
+        # Defer one event-loop tick so Qt finishes measuring new/hidden widgets
+        QTimer.singleShot(0, self.content_height_changed.emit)
+
+    def _refresh_button_shortcuts(self):
+        """Rebuild the button-shortcut list from current config."""
+        from ui.icons import get_icon, get_mdi_font as _mdi_font
+
+        layout = self._btn_shortcuts_layout
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().setParent(None)  # immediate removal, no deferred cleanup
+
+        buttons = self.config.get('buttons', [])
+        assigned = [
+            b for b in buttons
+            if b.get('custom_shortcut', {}).get('enabled') and b.get('custom_shortcut', {}).get('value')
+        ]
+
+        if not assigned:
+            hint = QLabel(t("settings.shortcut.no_button_shortcuts"))
+            hint.setStyleSheet("color: #aaa; font-size: 11px;")
+            layout.addWidget(hint)
+            return
+
+        for btn_cfg in assigned:
+            row = QWidget()
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(0, 4, 0, 4)
+            rl.setSpacing(10)
+
+            icon_lbl = QLabel(get_icon(btn_cfg.get('icon', '')))
+            icon_lbl.setFont(_mdi_font(18))
+            icon_lbl.setFixedWidth(24)
+            icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            color = btn_cfg.get('color', '')
+            if color:
+                icon_lbl.setStyleSheet(f"color: {color}; font-size: 18px;")
+
+            name_lbl = QLabel(btn_cfg.get('label') or btn_cfg.get('entity_id', '—'))
+            name_lbl.setStyleSheet("font-size: 13px;")
+            name_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+            sc_text = self._format_shortcut(btn_cfg['custom_shortcut']['value'])
+            sc_lbl = QLabel(sc_text)
+            sc_lbl.setStyleSheet("color: #888; font-size: 13px;")
+            sc_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+            rl.addWidget(icon_lbl)
+            rl.addWidget(name_lbl)
+            rl.addWidget(sc_lbl)
+
+            row.setMinimumHeight(32)
+            layout.addWidget(row)
+
+    @staticmethod
+    def _format_shortcut(value: str) -> str:
+        """Convert a pynput shortcut string to a human-readable label."""
+        if not value:
+            return ""
+        result = value
+        for token, display in (
+            ('<ctrl>', 'Ctrl'), ('<alt>', 'Alt'), ('<shift>', 'Shift'),
+            ('<cmd>', 'Cmd'), ('<super>', 'Super'), ('<meta>', 'Meta'),
+        ):
+            result = result.replace(token, display)
+        result = result.replace('<', '').replace('>', '')
+        return result
+
+    # -------------------------------------------------------------------------
+    # Height query
+    # -------------------------------------------------------------------------
 
     def get_content_height(self):
         """
-        Calculate the exact height needed to show all settings without scrolling.
-        Used by the Dashboard to resize the window appropriately when switching views.
+        Calculate the exact height needed to show the active panel without scrolling.
+        Uses layout().activate() for a synchronous measurement so newly-added
+        widgets are counted even before the next event-loop cycle.
         """
-        # Force layout update to get accurate size
-        self.adjustSize()
+        self.layout().activate()
         return self.sizeHint().height()
-        
+
+    # -------------------------------------------------------------------------
+    # Config load / save
+    # -------------------------------------------------------------------------
+
     def load_config(self):
         """Load current config values."""
         ha = self.config.get('home_assistant', {})
         self.url_input.setText(ha.get('url', ''))
         self.token_input.setText(ha.get('token', ''))
-        
+
         app = self.config.get('appearance', {})
         theme_map = {'system': 0, 'light': 1, 'dark': 2}
         idx = theme_map.get(app.get('theme', 'system'), 0)
@@ -612,31 +818,31 @@ class SettingsWidget(QWidget):
         self.temperature_unit_combo.setCurrentIndex(
             temperature_unit_map.get(app.get('temperature_unit', 'celsius'), 0)
         )
-        
+
         effect = app.get('border_effect', 'Rainbow')
-        
+
         effect_idx = self.border_effect_combo.findText(effect)
-        
-        # Prevent animation trigger on initial load
+
         self.border_effect_combo.blockSignals(True)
         if effect_idx >= 0:
             self.border_effect_combo.setCurrentIndex(effect_idx)
             self.border_effect_combo.set_effect(effect, animate=False)
         else:
-             self.border_effect_combo.setCurrentIndex(0)
-             self.border_effect_combo.set_effect("Rainbow", animate=False)
-             
+            self.border_effect_combo.setCurrentIndex(0)
+            self.border_effect_combo.set_effect("Rainbow", animate=False)
+
         button_style_map = {'gradient': 0, 'flat': 1}
         self.button_style_combo.setCurrentIndex(
             button_style_map.get(app.get('button_style', 'gradient'), 0)
         )
-             
+
         self.show_dimming_check.setChecked(app.get('show_dimming', False))
         self.glass_ui_check.setChecked(app.get('glass_ui', False) and not sys.platform.startswith('linux'))
         pinned = app.get('pin_window', False)
         self._pin_window = pinned
         self.pin_btn.set_effect(app.get('border_effect', 'Rainbow'))
         self.pin_btn.setChecked(pinned)
+
         pages = app.get('pages', 3)
         self.pages_combo.setCurrentIndex(max(0, min(pages - 1, self.pages_combo.count() - 1)))
 
@@ -650,24 +856,21 @@ class SettingsWidget(QWidget):
             self.location_check.setChecked(
                 self.config.get('mobile_app', {}).get('location_enabled', False)
             )
-             
+
         self.border_effect_combo.blockSignals(False)
-        
-        
+
         sc = self.config.get('shortcut', {})
         self.shortcut_display.setText(sc.get('value', ''))
         self._update_shortcut_controls()
-        
+
     def save_settings(self):
         """Save and emit config."""
         self._cleanup_threads()
-        
-        # HA
+
         if 'home_assistant' not in self.config: self.config['home_assistant'] = {}
         self.config['home_assistant']['url'] = self.url_input.text().strip()
         self.config['home_assistant']['token'] = self.token_input.text().strip()
-        
-        # Appearance
+
         theme_map = {0: 'system', 1: 'light', 2: 'dark'}
         if self.theme_manager:
             self.theme_manager.set_theme(theme_map.get(self.theme_combo.currentIndex(), 'system'))
@@ -694,14 +897,11 @@ class SettingsWidget(QWidget):
             new_location_enabled = self.location_check.isChecked()
             self.config.setdefault('mobile_app', {})['location_enabled'] = new_location_enabled
 
-            # On Linux, verify GeoClue2 is available when first enabling
             if sys.platform == 'linux' and new_location_enabled:
                 self._check_geoclue2_and_setup()
 
-        # Shortcut handled by record signal, but good to ensure consistency
-        # (Shortcut saves immediately on record in config dict)
         if 'shortcut' not in self.config: self.config['shortcut'] = {}
-        
+
         self.settings_saved.emit(self.config)
 
         if new_language != old_language:
@@ -709,7 +909,9 @@ class SettingsWidget(QWidget):
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(300, lambda: notify_language_restart(self.window()))
 
-    # --- Linux location helpers ---
+    # -------------------------------------------------------------------------
+    # Linux location helpers
+    # -------------------------------------------------------------------------
 
     def _check_geoclue2_and_setup(self):
         """Check GeoClue2 availability on Linux and create .desktop file."""
@@ -738,7 +940,9 @@ class SettingsWidget(QWidget):
         self._geoclue_thread.done.connect(_on_done)
         self._geoclue_thread.start()
 
-    # --- Logic ---
+    # -------------------------------------------------------------------------
+    # Logic / event handlers
+    # -------------------------------------------------------------------------
 
     def _on_language_changed(self, index: int):
         selected_lang = self._language_codes[index]
@@ -748,9 +952,6 @@ class SettingsWidget(QWidget):
 
     def on_border_effect_changed(self, text):
         self.border_effect_combo.set_effect(text)
-
-
-
 
     def _on_pin_toggled(self, checked: bool):
         self._pin_window = checked
@@ -768,17 +969,14 @@ class SettingsWidget(QWidget):
         if not self.input_manager:
             self.record_btn.setChecked(False)
             return
-            
+
         if checked:
-            # Stop State (Square)
             self.record_icon.setStyleSheet("background-color: white; border-radius: 2px;")
             self.shortcut_display.setText(t("settings.shortcut.recording"))
             self.input_manager.start_recording()
         else:
-            # Record State (Circle)
             self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
             self.input_manager.restore_shortcut()
-            # Restore previous text if cancelled
             sc = self.config.get('shortcut', {})
             if self.shortcut_display.text() == t("settings.shortcut.recording"):
                 self.shortcut_display.setText(sc.get('value', ''))
@@ -787,23 +985,19 @@ class SettingsWidget(QWidget):
     def on_shortcut_recorded(self, shortcut):
         if not self.record_btn.isChecked():
             return
-            
+
         self.record_btn.setChecked(False)
-        # Reset Icon
         self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
         self.shortcut_display.setText(shortcut.get('value', ''))
         if 'shortcut' not in self.config: self.config['shortcut'] = {}
         self.config['shortcut'] = shortcut
-        
-        # Immediately re-register the new shortcut so it works without needing Save
+
         self.input_manager.update_shortcut(shortcut)
 
     def _should_delegate_shortcuts_to_kde(self) -> bool:
-        """Return whether KDE owns global shortcut changes on this system."""
         return sys.platform == 'linux' and is_kde_wayland_session()
 
     def _is_unsupported_wayland_shortcut_env(self) -> bool:
-        """Return whether app-toggle shortcuts are unsupported on this Wayland desktop."""
         return sys.platform == 'linux' and is_wayland_session() and not supports_wayland_global_shortcuts()
 
     def _update_shortcut_controls(self):
@@ -851,7 +1045,6 @@ class SettingsWidget(QWidget):
 
     def open_kde_shortcuts(self):
         """Open KDE's shortcut settings module when possible."""
-        # Strip AppImage library overrides so system KDE tools use their own libs.
         env = os.environ.copy()
         for key in ("LD_LIBRARY_PATH", "LD_PRELOAD"):
             env.pop(key, None)
@@ -882,7 +1075,6 @@ class SettingsWidget(QWidget):
             self._test_thread.quit()
             self._test_thread.wait(500)
 
-        # Run connection check in background to avoid freezing UI
         self._test_thread = ConnectionTestThread(url, token)
         self._test_thread.finished.connect(self.on_test_complete)
         self._test_thread.start()
@@ -938,19 +1130,18 @@ class SettingsWidget(QWidget):
             )
             QTimer.singleShot(3000, self._set_version_label_expanded)
 
-
     def check_for_updates(self):
         """Start update check."""
         self._cleanup_threads()
         self.update_btn.setEnabled(False)
         self.update_label.setText(t("settings.support.checking"))
-        
+
         self._update_thread = UpdateCheckerThread(self.current_version)
         self._update_thread.update_available.connect(self.on_update_available)
         self._update_thread.up_to_date.connect(self.on_up_to_date)
         self._update_thread.error_occurred.connect(self.on_update_error)
         self._update_thread.start()
-        
+
     @pyqtSlot(str)
     def on_update_available(self, tag):
         self.update_btn.setEnabled(True)
@@ -1001,7 +1192,7 @@ class SettingsWidget(QWidget):
         self.update_label.setText(t("settings.support.up_to_date"))
         self.update_label.setStyleSheet("color: #34A853; font-size: 11px;")
         QTimer.singleShot(3000, self._set_version_label_collapsed)
-        
+
     @pyqtSlot(str)
     def on_update_error(self, error):
         self.update_btn.setEnabled(True)
@@ -1021,4 +1212,3 @@ class SettingsWidget(QWidget):
         if self._geoclue_thread and self._geoclue_thread.isRunning():
             self._geoclue_thread.quit()
             self._geoclue_thread.wait(500)
-

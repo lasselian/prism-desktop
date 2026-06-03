@@ -1666,6 +1666,7 @@ class Dashboard(QWidget):
         self.settings_widget = SettingsWidget(config, self.theme_manager, input_manager, self.version, self)
         self.settings_widget.back_requested.connect(self.hide_settings)
         self.settings_widget.settings_saved.connect(self._on_settings_saved)
+        self.settings_widget.content_height_changed.connect(self._on_settings_content_changed)
         
         # Wrap in ScrollArea for smooth animation (avoids squashing)
         self.settings_scroll = QScrollArea()
@@ -1985,6 +1986,34 @@ class Dashboard(QWidget):
         self._anim_start_width = self.width()
         self._fixed_width = grid_width
         self.transition_to('grid')
+
+    def _on_settings_content_changed(self):
+        """Re-animate window height when the active settings panel changes."""
+        if self._current_view != 'settings':
+            return
+        # Release and re-lock the inner widget's fixed height so the new
+        # panel's content drives the size rather than the previous panel's.
+        if self.settings_widget:
+            self.settings_widget.setMinimumSize(0, 0)
+            self.settings_widget.setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
+            self.settings_widget.setFixedHeight(self.settings_widget.get_content_height())
+        target_h = self._calculate_view_height('settings')
+        if abs(target_h - self.height()) < 4:
+            return
+        # Unlock window size constraints (locked by _on_transition_done after the previous animation)
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
+        # Refresh anchors from the current geometry so height animation stays anchored correctly
+        self._anchor_top_y = self.geometry().y()
+        self._anchor_bottom_y = self.geometry().y() + self.height()
+        self._animation_timer.stop()
+        self._anim_start_height = self.height()
+        self._anim_target_height = target_h
+        self._anim_start_time = time.perf_counter()
+        self._anim_duration = 0.2
+        # _anim_start_width intentionally NOT set — no width change during panel switch,
+        # and setting it would use the stale _anchor_right_x causing an x-axis jump.
+        self._animation_timer.start()
 
     def _on_animation_frame(self):
         """Custom high-precision animation loop."""
