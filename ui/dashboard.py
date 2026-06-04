@@ -1687,6 +1687,7 @@ class Dashboard(QWidget):
         
         # Clear cached height so it re-calculates with new settings widget
         self._cached_settings_height = None
+        self._settings_locked_height = None
 
         # Init Button Editor (Embedded)
         # Create a placeholder instance to be ready
@@ -1843,20 +1844,18 @@ class Dashboard(QWidget):
             return (self._rows * 80) + ((self._rows - 1) * 8)
             
         elif view_name == 'settings':
-            # Calculate dynamic settings height
+            if self._settings_locked_height is not None:
+                return self._settings_locked_height
+            # Fallback if called before show_settings locks it
             if self.settings_widget:
-                # Always recalculate for accurate sizing
                 content_h = self.settings_widget.get_content_height()
-                settings_height = content_h + 30  # Small padding for container margins
-                
-                # Clamp against screen height
+                settings_height = content_h + 30
                 screen = QApplication.primaryScreen()
                 if screen:
                     max_h = screen.availableGeometry().height() * 0.9
                     settings_height = max(300, min(settings_height, int(max_h)))
                 else:
                     settings_height = max(300, min(settings_height, 800))
-                    
                 return settings_height
             return 450
             
@@ -1887,8 +1886,10 @@ class Dashboard(QWidget):
             if self.settings_widget:
                 self.settings_widget.setMinimumSize(0, 0)
                 self.settings_widget.setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
-                # Testing if this fixes linux clipping issue
-                self.settings_widget.setFixedHeight(self.settings_widget.get_content_height())
+                if self._is_top_anchored():
+                    # Top-anchored: size to current panel; will animate on each switch.
+                    self.settings_widget.setFixedHeight(self.settings_widget.get_content_height())
+                # Bottom-anchored: height already fixed to max in show_settings; don't override.
         
         elif target_view == 'edit_button':
             if hasattr(self, 'edit_widget'):
@@ -1972,6 +1973,27 @@ class Dashboard(QWidget):
         self._dismiss_banner_immediate()
         if self.overlay_manager:
             self.overlay_manager.close_all_overlays()
+
+        # Bottom-anchored: lock height to the tallest panel so panel switches never
+        # move the window top (which would shift the pill buttons under the cursor).
+        # Top-anchored: let each panel animate to its natural height (window grows
+        # downward, pills stay in place).
+        if self.settings_widget and not self._is_top_anchored():
+            # Unlock any stale size constraints before measuring, so the
+            # layout is free to report its true preferred height.
+            self.settings_widget.setMinimumSize(0, 0)
+            self.settings_widget.setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
+            content_h = self.settings_widget.get_max_content_height()
+            settings_height = content_h + 30
+            screen = QApplication.primaryScreen()
+            if screen:
+                max_screen_h = screen.availableGeometry().height() * 0.9
+                settings_height = max(300, min(settings_height, int(max_screen_h)))
+            else:
+                settings_height = max(300, min(settings_height, 800))
+            self._settings_locked_height = settings_height
+            self.settings_widget.setFixedHeight(content_h)
+
         # Expand to at least 6 columns wide when entering settings
         min_settings_cols = 6
         target_width = max(self._fixed_width, calculate_width(min_settings_cols))
@@ -1982,17 +2004,21 @@ class Dashboard(QWidget):
     def hide_settings(self):
         """Morph from Settings view back to Grid view."""
         self._dismiss_banner_immediate()
+        self._settings_locked_height = None
         grid_width = calculate_width(self._cols)
         self._anim_start_width = self.width()
         self._fixed_width = grid_width
         self.transition_to('grid')
 
     def _on_settings_content_changed(self):
-        """Re-animate window height when the active settings panel changes."""
+        """Re-animate window height when the active settings panel changes.
+        Only runs when top-anchored — bottom-anchored uses a fixed height so the
+        pill buttons never shift under the cursor.
+        """
         if self._current_view != 'settings':
             return
-        # Release and re-lock the inner widget's fixed height so the new
-        # panel's content drives the size rather than the previous panel's.
+        if not self._is_top_anchored():
+            return
         if self.settings_widget:
             self.settings_widget.setMinimumSize(0, 0)
             self.settings_widget.setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
@@ -2000,10 +2026,8 @@ class Dashboard(QWidget):
         target_h = self._calculate_view_height('settings')
         if abs(target_h - self.height()) < 4:
             return
-        # Unlock window size constraints (locked by _on_transition_done after the previous animation)
         self.setMinimumSize(0, 0)
         self.setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
-        # Refresh anchors from the current geometry so height animation stays anchored correctly
         self._anchor_top_y = self.geometry().y()
         self._anchor_bottom_y = self.geometry().y() + self.height()
         self._animation_timer.stop()
@@ -2011,8 +2035,6 @@ class Dashboard(QWidget):
         self._anim_target_height = target_h
         self._anim_start_time = time.perf_counter()
         self._anim_duration = 0.2
-        # _anim_start_width intentionally NOT set — no width change during panel switch,
-        # and setting it would use the stale _anchor_right_x causing an x-axis jump.
         self._animation_timer.start()
 
     def _on_animation_frame(self):

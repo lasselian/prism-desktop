@@ -9,6 +9,7 @@ import socket
 import uuid
 import logging
 import aiohttp
+import psutil
 from typing import Optional
 
 from core.build_info import APP_VERSION
@@ -28,7 +29,33 @@ SENSORS = [
         "icon": "mdi:account-check",
         "state": "logged-out",  # initial/default state sent at registration — not a mutable field
     },
+    {
+        "type": "sensor",
+        "unique_id": "cpu_usage",
+        "name": "CPU Usage",
+        "icon": "mdi:cpu-64-bit",
+        "state": 0,
+        "unit_of_measurement": "%",
+        "state_class": "measurement",
+    },
+    {
+        "type": "sensor",
+        "unique_id": "ram_usage",
+        "name": "RAM Usage",
+        "icon": "mdi:memory",
+        "state": 0,
+        "unit_of_measurement": "%",
+        "state_class": "measurement",
+    },
 ]
+
+
+def get_system_metrics() -> dict:
+    """Return current CPU and RAM usage as percentages."""
+    return {
+        "cpu_usage": round(psutil.cpu_percent(interval=None), 1),
+        "ram_usage": round(psutil.virtual_memory().percent, 1),
+    }
 
 APP_NAME = "Prism Desktop"
 MANUFACTURER = "lasselian"

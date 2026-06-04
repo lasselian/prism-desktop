@@ -12,3 +12,4 @@ cryptography>=41.0.0
 secretstorage>=3.2; sys_platform == 'linux'
 dbus-next>=0.2.3; sys_platform == 'linux'
 qasync>=0.27.1
+psutil>=5.9.0

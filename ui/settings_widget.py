@@ -154,10 +154,10 @@ class SettingsWidget(QWidget):
             section_header_color = "#555555"
             pill_bg = "rgba(255, 255, 255, 0.85)"
             pill_border = "rgba(0, 0, 0, 0.12)"
-            pill_hover_bg = "rgba(0, 0, 0, 0.06)"
-            pill_bar_bg = "rgba(0, 0, 0, 0.05)"
-            pill_bar_border = "rgba(0, 0, 0, 0.10)"
-            pill_text_inactive = "rgba(0, 0, 0, 0.45)"
+            pill_hover_bg = "rgba(0, 0, 0, 0.07)"
+            pill_bar_bg = "rgba(0, 0, 0, 0.06)"
+            pill_bar_border = "rgba(0, 0, 0, 0.14)"
+            pill_text_inactive = "rgba(0, 0, 0, 0.52)"
         else:
             input_bg = "rgba(255, 255, 255, 0.08)"
             input_border = "rgba(255, 255, 255, 0.1)"
@@ -165,10 +165,10 @@ class SettingsWidget(QWidget):
             section_header_color = "#8e8e93"
             pill_bg = "rgba(30, 30, 30, 0.6)"
             pill_border = "rgba(255, 255, 255, 0.05)"
-            pill_hover_bg = "rgba(255, 255, 255, 0.08)"
-            pill_bar_bg = "rgba(255, 255, 255, 0.06)"
-            pill_bar_border = "rgba(255, 255, 255, 0.08)"
-            pill_text_inactive = "rgba(255, 255, 255, 0.45)"
+            pill_hover_bg = "rgba(255, 255, 255, 0.09)"
+            pill_bar_bg = "rgba(255, 255, 255, 0.07)"
+            pill_bar_border = "rgba(255, 255, 255, 0.12)"
+            pill_text_inactive = "rgba(255, 255, 255, 0.52)"
 
         from ui.styles import Typography, Dimensions
 
@@ -237,19 +237,19 @@ class SettingsWidget(QWidget):
             QFrame#pillBar {{
                 background-color: {pill_bar_bg};
                 border: 1px solid {pill_bar_border};
-                border-radius: 18px;
+                border-radius: 12px;
             }}
 
             QPushButton#categoryPill {{
                 background-color: transparent;
                 border: none;
-                border-radius: 14px;
-                padding: 4px 14px;
-                min-height: 28px;
-                max-height: 28px;
+                border-radius: 8px;
+                padding: 6px 12px;
+                min-height: 32px;
                 font-size: 12px;
                 font-weight: {Typography.WEIGHT_MEDIUM};
                 color: {pill_text_inactive};
+                text-align: left;
             }}
             QPushButton#categoryPill:checked {{
                 background-color: {colors['accent']};
@@ -393,12 +393,18 @@ class SettingsWidget(QWidget):
         header_layout.addWidget(self.save_btn)
         layout.addLayout(header_layout)
 
-        # 2. Category pill row
+        # 2. Body: left sidebar + right content area
+        body_layout = QHBoxLayout()
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(12)
+
+        # Left sidebar
         pill_frame = QFrame()
         pill_frame.setObjectName("pillBar")
-        pill_row = QHBoxLayout(pill_frame)
-        pill_row.setContentsMargins(4, 4, 4, 4)
-        pill_row.setSpacing(2)
+        pill_frame.setFixedWidth(140)
+        pill_col = QVBoxLayout(pill_frame)
+        pill_col.setContentsMargins(5, 5, 5, 5)
+        pill_col.setSpacing(3)
 
         self._pill_group = QButtonGroup(self)
         self._pill_group.setExclusive(True)
@@ -419,12 +425,20 @@ class SettingsWidget(QWidget):
             btn.clicked.connect(lambda checked, idx=i: self._switch_panel(idx))
             self._pill_group.addButton(btn, i)
             self._pill_buttons.append(btn)
-            pill_row.addWidget(btn)
+            pill_col.addWidget(btn)
 
+        pill_col.addStretch()
         self._pill_buttons[0].setChecked(True)
-        layout.addWidget(pill_frame)
+        body_layout.addWidget(pill_frame)
 
-        # 3. Build content panels — only the first is visible initially
+        # Right content area
+        content_widget = QWidget()
+        self._content_widget = content_widget
+        content_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+
         panel_builders = [
             self._build_ha_panel,
             self._build_appearance_panel,
@@ -435,7 +449,11 @@ class SettingsWidget(QWidget):
             panel = builder()
             panel.setVisible(i == 0)
             self._panels.append(panel)
-            layout.addWidget(panel)
+            content_layout.addWidget(panel)
+
+        content_layout.addStretch(1)
+        body_layout.addWidget(content_widget)
+        layout.addLayout(body_layout)
 
         self._active_panel_idx = 0
 
@@ -786,14 +804,36 @@ class SettingsWidget(QWidget):
     # Height query
     # -------------------------------------------------------------------------
 
+    def _activate_all_layouts(self):
+        if hasattr(self, '_content_widget') and self._content_widget.layout():
+            self._content_widget.layout().activate()
+        self.layout().activate()
+
     def get_content_height(self):
         """
         Calculate the exact height needed to show the active panel without scrolling.
-        Uses layout().activate() for a synchronous measurement so newly-added
-        widgets are counted even before the next event-loop cycle.
+        Activates nested layouts so measurements include newly-added widgets.
         """
-        self.layout().activate()
+        self._activate_all_layouts()
         return self.sizeHint().height()
+
+    def get_max_content_height(self) -> int:
+        """Return the height required by the tallest panel.
+        Temporarily cycles through each panel to measure it, then restores the active one.
+        """
+        original_idx = self._active_panel_idx
+        max_h = 0
+        for i in range(len(self._panels)):
+            for j, p in enumerate(self._panels):
+                p.setVisible(j == i)
+            self._activate_all_layouts()
+            h = self.sizeHint().height()
+            if h > max_h:
+                max_h = h
+        for j, p in enumerate(self._panels):
+            p.setVisible(j == original_idx)
+        self._activate_all_layouts()
+        return max_h
 
     # -------------------------------------------------------------------------
     # Config load / save

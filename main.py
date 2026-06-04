@@ -61,7 +61,7 @@ from ui.tray_manager import TrayManager
 from services.notifications import NotificationManager
 from services.input_manager import InputManager, ButtonShortcutManager
 from services.local_ipc import LocalCommandServer
-from services.mobile_app import register_mobile_app, send_location_update, register_sensors, update_sensor_states, build_sensor_state_payload, SENSORS as MOBILE_APP_SENSORS
+from services.mobile_app import register_mobile_app, send_location_update, register_sensors, update_sensor_states, build_sensor_state_payload, get_system_metrics, SENSORS as MOBILE_APP_SENSORS
 from services.location_manager import get_location
 from ui.icons import load_mdi_font, icon_signals
 from services.update_checker import UpdateCheckerThread
@@ -110,6 +110,9 @@ class PrismDesktopApp(QObject):
 
         # Location reporting (Windows only)
         self._location_task: Optional[asyncio.Task] = None
+
+        # System metrics reporting (CPU/RAM)
+        self._metrics_task: Optional[asyncio.Task] = None
         
         # Cache for entity list (for editor)
         self._available_entities: list[dict] = []
@@ -411,6 +414,7 @@ class PrismDesktopApp(QObject):
     def stop_all_threads(self):
         """Stop all background threads."""
         self._stop_location_loop()
+        self._stop_metrics_loop()
         self.stop_websocket()
 
         if self.tray_manager:
@@ -578,6 +582,7 @@ class PrismDesktopApp(QObject):
             # Clear mobile_app registration so we re-register with the new HA instance
             self.config.setdefault("mobile_app", {}).pop("webhook_id", None)
             self._stop_location_loop()
+            self._stop_metrics_loop()
             self.stop_websocket()
             await self.ha_client.close()
 
@@ -990,6 +995,9 @@ class PrismDesktopApp(QObject):
         if self.config.get('mobile_app', {}).get('location_enabled', False):
             self._start_location_loop()
 
+        # Start periodic CPU/RAM metrics reporting
+        self._start_metrics_loop()
+
     async def _push_sensor_state(self, value: bool):
         """Push the logged_in sensor state to HA. Best-effort — errors are swallowed."""
         webhook_id = self.config.get('mobile_app', {}).get('webhook_id', '')
@@ -1022,6 +1030,33 @@ class PrismDesktopApp(QObject):
                 if location:
                     await send_location_update(ha_url, webhook_id, location)
                 await asyncio.sleep(900)  # 15 minutes
+        except asyncio.CancelledError:
+            pass
+
+    def _start_metrics_loop(self):
+        """Start (or restart) the periodic CPU/RAM metrics update task."""
+        if self._metrics_task and not self._metrics_task.done():
+            self._metrics_task.cancel()
+        self._metrics_task = asyncio.create_task(self._metrics_update_loop())
+
+    def _stop_metrics_loop(self):
+        """Cancel the metrics update task if running."""
+        if self._metrics_task and not self._metrics_task.done():
+            self._metrics_task.cancel()
+            self._metrics_task = None
+
+    async def _metrics_update_loop(self):
+        """Periodically read CPU/RAM usage and push sensor states to Home Assistant."""
+        ha_config = self.config.get('home_assistant', {})
+        ha_url = ha_config.get('url', '')
+        webhook_id = self.config.get('mobile_app', {}).get('webhook_id', '')
+        if not ha_url or not webhook_id:
+            return
+        try:
+            while True:
+                metrics = get_system_metrics()
+                await update_sensor_states(ha_url, webhook_id, metrics)
+                await asyncio.sleep(30)
         except asyncio.CancelledError:
             pass
 

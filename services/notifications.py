@@ -9,6 +9,7 @@ import platform
 import subprocess
 import logging
 import os
+import sys
 import tempfile
 from typing import Optional
 from PyQt6.QtWidgets import QSystemTrayIcon
@@ -21,6 +22,8 @@ class NotificationManager(QObject):
     """Native system notifications with image support."""
 
     APP_NAME = "Prism Desktop"
+    APP_ID = "com.prismdesktop.app"
+    _windows_registered = False
 
     def __init__(self, tray_icon: QSystemTrayIcon = None, ha_client=None):
         super().__init__()
@@ -44,12 +47,39 @@ class NotificationManager(QObject):
         else:
             self._show_fallback(title, message)
 
+    def _get_icon_path(self) -> Optional[str]:
+        candidates = [
+            os.path.join(getattr(sys, '_MEIPASS', ''), 'icon.png'),
+            os.path.join(os.path.dirname(sys.executable), 'icon.png'),
+            os.path.join(os.path.dirname(__file__), '..', 'icon.png'),
+        ]
+        for p in candidates:
+            if p and os.path.isfile(p):
+                return os.path.abspath(p)
+        return None
+
+    def _register_windows_app(self) -> None:
+        """Register app with Windows so it appears in notification settings."""
+        try:
+            from win11toast import register
+            icon_path = self._get_icon_path()
+            kwargs = {}
+            if icon_path:
+                kwargs['icon'] = icon_path
+            register(self.APP_ID, self.APP_NAME, **kwargs)
+            logger.info("[Notify] Registered Prism Desktop with Windows notification system")
+        except Exception as e:
+            logger.warning(f"[Notify] Windows app registration failed: {e}")
+        NotificationManager._windows_registered = True
+
     def _show_windows(self, title: str, message: str, image_path: Optional[str] = None):
         """Windows: use win11toast (native Windows ToastNotification API)."""
         try:
             from win11toast import toast
+            if not NotificationManager._windows_registered:
+                self._register_windows_app()
             kwargs = {
-                'app_id': self.APP_NAME,
+                'app_id': self.APP_ID,
             }
             if image_path and os.path.isfile(image_path):
                 kwargs['image'] = {
