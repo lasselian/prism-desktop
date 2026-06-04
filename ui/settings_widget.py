@@ -479,28 +479,49 @@ class SettingsWidget(QWidget):
         vbox.addLayout(form)
         return frame, form
 
-    def _build_ha_panel(self) -> QFrame:
-        frame, form = self._make_pill_panel()
+    def _build_ha_panel(self) -> QWidget:
+        container = QWidget()
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(8)
+
+        # Credentials pill
+        cred_frame, cred_form = self._make_pill_panel()
 
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText(t("settings.ha.url_placeholder"))
-        form.addRow(t("settings.ha.url_label"), self.url_input)
+        cred_form.addRow(t("settings.ha.url_label"), self.url_input)
 
         self.token_input = QLineEdit()
         self.token_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.token_input.setPlaceholderText(t("settings.ha.token_placeholder"))
-        form.addRow(t("settings.ha.token_label"), self.token_input)
+        cred_form.addRow(t("settings.ha.token_label"), self.token_input)
 
         self.test_btn = QPushButton(t("settings.ha.test_btn"))
         self.test_btn.clicked.connect(self.test_connection)
-        form.addRow("", self.test_btn)
+        cred_form.addRow("", self.test_btn)
+
+        vbox.addWidget(cred_frame)
+
+        # Toggles pill — all data-sending toggles grouped together
+        toggle_frame, toggle_form = self._make_pill_panel()
 
         if sys.platform in ('win32', 'linux'):
             self.location_check = ToggleSwitch(t("settings.ha.location_toggle"))
             self.location_check.setToolTip(t("settings.ha.location_tooltip"))
-            form.addRow("", self.location_check)
+            toggle_form.addRow("", self.location_check)
 
-        return frame
+        self.send_cpu_check = ToggleSwitch(t("settings.ha.send_cpu_toggle"))
+        self.send_cpu_check.setToolTip(t("settings.ha.send_cpu_tooltip"))
+        toggle_form.addRow("", self.send_cpu_check)
+
+        self.send_ram_check = ToggleSwitch(t("settings.ha.send_ram_toggle"))
+        self.send_ram_check.setToolTip(t("settings.ha.send_ram_tooltip"))
+        toggle_form.addRow("", self.send_ram_check)
+
+        vbox.addWidget(toggle_frame)
+
+        return container
 
     def _build_appearance_panel(self) -> QFrame:
         frame, form = self._make_pill_panel()
@@ -897,6 +918,10 @@ class SettingsWidget(QWidget):
                 self.config.get('mobile_app', {}).get('location_enabled', False)
             )
 
+        mobile_cfg = self.config.get('mobile_app', {})
+        self.send_cpu_check.setChecked(mobile_cfg.get('send_cpu', False))
+        self.send_ram_check.setChecked(mobile_cfg.get('send_ram', False))
+
         self.border_effect_combo.blockSignals(False)
 
         sc = self.config.get('shortcut', {})
@@ -939,6 +964,9 @@ class SettingsWidget(QWidget):
 
             if sys.platform == 'linux' and new_location_enabled:
                 self._check_geoclue2_and_setup()
+
+        self.config.setdefault('mobile_app', {})['send_cpu'] = self.send_cpu_check.isChecked()
+        self.config.setdefault('mobile_app', {})['send_ram'] = self.send_ram_check.isChecked()
 
         if 'shortcut' not in self.config: self.config['shortcut'] = {}
 

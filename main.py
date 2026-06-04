@@ -1054,8 +1054,15 @@ class PrismDesktopApp(QObject):
             return
         try:
             while True:
-                metrics = get_system_metrics()
-                await update_sensor_states(ha_url, webhook_id, metrics)
+                mobile_cfg = self.config.get('mobile_app', {})
+                all_metrics = get_system_metrics()
+                metrics = {}
+                if mobile_cfg.get('send_cpu', False):
+                    metrics['cpu_usage'] = all_metrics['cpu_usage']
+                if mobile_cfg.get('send_ram', False):
+                    metrics['ram_usage'] = all_metrics['ram_usage']
+                if metrics:
+                    await update_sensor_states(ha_url, webhook_id, metrics)
                 await asyncio.sleep(30)
         except asyncio.CancelledError:
             pass
