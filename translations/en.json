@@ -35,6 +35,7 @@
   "settings.appearance.pages_label": "Dashboard Pages:",
   "settings.appearance.language_label": "Language:",
   "settings.appearance.language_restart_note": "Restart required to apply language change",
+  "settings.appearance.toggles_label": "OPTIONS",
   "settings.appearance.dimming_toggle": "Show dimming",
   "settings.appearance.dimming_tooltip": "Fade button color based on brightness level",
   "settings.appearance.glass_toggle": "Glass UI (EXPERIMENTAL)",
@@ -207,5 +208,6 @@
   "notification_banner.yes": "Yes",
   "notification_banner.no": "No",
   "sun.until_sunset": "UNTIL SUNSET",
-  "sun.until_sunrise": "UNTIL SUNRISE"
+  "sun.until_sunrise": "UNTIL SUNRISE",
+  "settings.support.bug_btn": "Report a Bug"
 }

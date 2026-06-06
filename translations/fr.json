@@ -34,6 +34,7 @@
   "settings.appearance.pages_label": "Pages du tableau de bord :",
   "settings.appearance.language_label": "Langue :",
   "settings.appearance.language_restart_note": "Redémarrage requis pour appliquer le changement de langue",
+  "settings.appearance.toggles_label": "OPTIONS",
   "settings.appearance.dimming_toggle": "Afficher l'atténuation",
   "settings.appearance.dimming_tooltip": "Atténue la couleur du bouton selon le niveau de luminosité",
   "settings.appearance.glass_toggle": "Interface verre (EXPÉRIMENTAL)",
@@ -186,5 +187,6 @@
   "notification_banner.no": "Non",
   "sun.until_sunset": "AU COUCHER",
   "sun.until_sunrise": "AU LEVER",
-  "settings.ha.send_to_ha_label": "Envoyer à Home Assistant"
+  "settings.ha.send_to_ha_label": "Envoyer à Home Assistant",
+  "settings.support.bug_btn": "Signaler un bug"
 }

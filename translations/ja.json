@@ -34,6 +34,7 @@
   "settings.appearance.pages_label": "ダッシュボードのページ数：",
   "settings.appearance.language_label": "言語：",
   "settings.appearance.language_restart_note": "言語変更を適用するには再起動が必要です",
+  "settings.appearance.toggles_label": "オプション",
   "settings.appearance.dimming_toggle": "調光を表示",
   "settings.appearance.dimming_tooltip": "輝度レベルに応じてボタンの色をフェードします",
   "settings.appearance.glass_toggle": "ガラス UI（実験的）",
@@ -186,5 +187,6 @@
   "notification_banner.no": "いいえ",
   "sun.until_sunset": "日の入りまで",
   "sun.until_sunrise": "日の出まで",
-  "settings.ha.send_to_ha_label": "Home Assistant に送信"
+  "settings.ha.send_to_ha_label": "Home Assistant に送信",
+  "settings.support.bug_btn": "バグを報告"
 }

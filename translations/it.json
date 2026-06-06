@@ -34,6 +34,7 @@
   "settings.appearance.pages_label": "Pagine del pannello:",
   "settings.appearance.language_label": "Lingua:",
   "settings.appearance.language_restart_note": "Riavvio richiesto per applicare il cambio di lingua",
+  "settings.appearance.toggles_label": "OPZIONI",
   "settings.appearance.dimming_toggle": "Mostra attenuazione",
   "settings.appearance.dimming_tooltip": "Attenua il colore del pulsante in base al livello di luminosità",
   "settings.appearance.glass_toggle": "Interfaccia vetro (SPERIMENTALE)",
@@ -186,5 +187,6 @@
   "notification_banner.no": "No",
   "sun.until_sunset": "FINO AL TRAMONTO",
   "sun.until_sunrise": "FINO ALL'ALBA",
-  "settings.ha.send_to_ha_label": "Invia a Home Assistant"
+  "settings.ha.send_to_ha_label": "Invia a Home Assistant",
+  "settings.support.bug_btn": "Segnala un bug"
 }

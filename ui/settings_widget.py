@@ -66,8 +66,22 @@ class SettingsWidget(QWidget):
         self._active_panel_idx = 0
         self._pill_buttons: list = []
 
+        self._debounce_timer = QTimer()
+        self._debounce_timer.setSingleShot(True)
+        self._debounce_timer.setInterval(1200)
+        self._debounce_timer.timeout.connect(self._trigger_auto_test)
+
+        self._poll_timer = QTimer()
+        self._poll_timer.setInterval(30_000)
+        self._poll_timer.timeout.connect(self._trigger_auto_test)
+
         self.setup_ui()
         self.load_config()
+        self.url_input.textChanged.connect(self._on_credential_changed)
+        self.token_input.textChanged.connect(self._on_credential_changed)
+        self._poll_timer.start()
+        if self.url_input.text().strip() and self.token_input.text().strip():
+            QTimer.singleShot(600, self._trigger_auto_test)
         self._update_shortcut_controls()
 
         if self.input_manager:
@@ -278,11 +292,34 @@ class SettingsWidget(QWidget):
                 color: white;
             }}
 
-            QPushButton#bmcBtn {{
-                background-color: rgba(255, 187, 51, 0.08);
-                border: 1px solid rgba(255, 187, 51, 0.35);
+            QPushButton#bugBtn {{
+                background-color: {"rgba(230, 81, 0, 0.07)" if is_light else "rgba(230, 81, 0, 0.08)"};
+                border: 1px solid {"rgba(230, 81, 0, 0.30)" if is_light else "rgba(230, 81, 0, 0.35)"};
                 border-radius: {Dimensions.RADIUS_MEDIUM};
-                color: #FFBB33;
+                color: {"#C84000" if is_light else "#E65100"};
+                padding: 0px 14px;
+                min-height: 34px;
+                max-height: 34px;
+                font-size: 13px;
+                font-weight: {Typography.WEIGHT_SEMIBOLD};
+                text-align: left;
+            }}
+            QPushButton#bugBtn:hover {{
+                background-color: #E65100;
+                border-color: #E65100;
+                color: white;
+            }}
+            QPushButton#bugBtn:pressed {{
+                background-color: #BF360C;
+                border-color: #BF360C;
+                color: white;
+            }}
+
+            QPushButton#bmcBtn {{
+                background-color: {"rgba(180, 120, 0, 0.07)" if is_light else "rgba(255, 187, 51, 0.08)"};
+                border: 1px solid {"rgba(180, 120, 0, 0.30)" if is_light else "rgba(255, 187, 51, 0.35)"};
+                border-radius: {Dimensions.RADIUS_MEDIUM};
+                color: {"#8A6000" if is_light else "#FFBB33"};
                 padding: 0px 14px;
                 min-height: 34px;
                 max-height: 34px;
@@ -291,14 +328,14 @@ class SettingsWidget(QWidget):
                 text-align: left;
             }}
             QPushButton#bmcBtn:hover {{
-                background-color: #FFDD00;
-                border-color: #FFDD00;
-                color: #1a0e00;
+                background-color: {"#B87800" if is_light else "#FFDD00"};
+                border-color: {"#B87800" if is_light else "#FFDD00"};
+                color: white;
             }}
             QPushButton#bmcBtn:pressed {{
-                background-color: #F5C800;
-                border-color: #F5C800;
-                color: #1a0e00;
+                background-color: {"#9A6400" if is_light else "#F5C800"};
+                border-color: {"#9A6400" if is_light else "#F5C800"};
+                color: white;
             }}
         """)
 
@@ -406,18 +443,28 @@ class SettingsWidget(QWidget):
     # Panel builders
     # -------------------------------------------------------------------------
 
+    _SECTION_HEADER_STYLE = (
+        "font-size: 11px; font-weight: 600; color: #8e8e93; "
+        "letter-spacing: 0.5px; margin-bottom: 4px;"
+    )
+
     def _make_pill_panel(self):
         """Return a (QFrame, QFormLayout) pair styled as a settingsPill."""
         frame = QFrame()
         frame.setObjectName("settingsPill")
         vbox = QVBoxLayout(frame)
-        vbox.setContentsMargins(20, 20, 20, 20)
+        vbox.setContentsMargins(16, 16, 16, 16)
         vbox.setSpacing(8)
         form = QFormLayout()
         form.setVerticalSpacing(8)
         form.setHorizontalSpacing(16)
         vbox.addLayout(form)
         return frame, form
+
+    def _make_section_header(self, text: str) -> QLabel:
+        label = QLabel(text.upper())
+        label.setStyleSheet(self._SECTION_HEADER_STYLE)
+        return label
 
     def _build_ha_panel(self) -> QWidget:
         container = QWidget()
@@ -437,17 +484,18 @@ class SettingsWidget(QWidget):
         self.token_input.setPlaceholderText(t("settings.ha.token_placeholder"))
         cred_form.addRow(t("settings.ha.token_label"), self.token_input)
 
-        self.test_btn = QPushButton(t("settings.ha.test_btn"))
-        self.test_btn.clicked.connect(self.test_connection)
-        cred_form.addRow("", self.test_btn)
+        self._conn_status_label = QLabel()
+        self._conn_status_label.setStyleSheet("font-size: 11px;")
+        self._conn_status_label.setWordWrap(True)
+        self._conn_status_label.hide()
+        cred_form.addRow("", self._conn_status_label)
 
         vbox.addWidget(cred_frame)
 
         # Toggles pill — all data-sending toggles grouped together
         toggle_frame, toggle_form = self._make_pill_panel()
 
-        send_label = QLabel(t("settings.ha.send_to_ha_label"))
-        send_label.setStyleSheet("font-size: 11px; font-weight: 600; color: #8e8e93; letter-spacing: 0.5px; margin-bottom: 6px;")
+        send_label = self._make_section_header(t("settings.ha.send_to_ha_label"))
         toggle_frame.layout().insertWidget(0, send_label)
 
         if sys.platform in ('win32', 'linux'):
@@ -467,8 +515,14 @@ class SettingsWidget(QWidget):
 
         return container
 
-    def _build_appearance_panel(self) -> QFrame:
-        frame, form = self._make_pill_panel()
+    def _build_appearance_panel(self) -> QWidget:
+        container = QWidget()
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(8)
+
+        # Settings pill
+        settings_frame, form = self._make_pill_panel()
 
         self.theme_combo = QComboBox()
         self.theme_combo.addItems([
@@ -527,26 +581,41 @@ class SettingsWidget(QWidget):
         self.pages_combo.setMinimumWidth(120)
         form.addRow(t("settings.appearance.pages_label"), self.pages_combo)
 
+        vbox.addWidget(settings_frame)
+
+        # Toggles pill
+        toggle_frame, toggle_form = self._make_pill_panel()
+
+        toggle_label = self._make_section_header(t("settings.appearance.toggles_label"))
+        toggle_frame.layout().insertWidget(0, toggle_label)
+
         self.show_dimming_check = ToggleSwitch(t("settings.appearance.dimming_toggle"))
         self.show_dimming_check.setToolTip(t("settings.appearance.dimming_tooltip"))
+        toggle_form.addRow("", self.show_dimming_check)
 
         self.glass_ui_check = ToggleSwitch(t("settings.appearance.glass_toggle"))
         self.glass_ui_check.setToolTip(t("settings.appearance.glass_tooltip"))
         if sys.platform.startswith('linux'):
             self.glass_ui_check.setVisible(False)
+        toggle_form.addRow("", self.glass_ui_check)
 
         self.pin_check = ToggleSwitch(t("settings.appearance.pin_toggle"))
         self.pin_check.setToolTip(t("settings.appearance.pin_tooltip"))
         self.pin_check.toggled.connect(self._on_pin_toggled)
+        toggle_form.addRow("", self.pin_check)
 
-        form.addRow("", self.show_dimming_check)
-        form.addRow("", self.glass_ui_check)
-        form.addRow("", self.pin_check)
+        vbox.addWidget(toggle_frame)
 
-        return frame
+        return container
 
-    def _build_shortcut_panel(self) -> QFrame:
-        frame, form = self._make_pill_panel()
+    def _build_shortcut_panel(self) -> QWidget:
+        container = QWidget()
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(8)
+
+        # App toggle shortcut pill
+        shortcut_frame, form = self._make_pill_panel()
 
         shortcut_container = QWidget()
         shortcut_container_layout = QVBoxLayout(shortcut_container)
@@ -576,10 +645,9 @@ class SettingsWidget(QWidget):
         self.record_icon.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         btn_layout.addWidget(self.record_icon)
 
-        shortcut_row.addWidget(self.shortcut_display, 8)
-        shortcut_row.addSpacing(12)
+        shortcut_row.addWidget(self.shortcut_display)
+        shortcut_row.addSpacing(8)
         shortcut_row.addWidget(self.record_btn)
-        shortcut_row.addStretch(2)
         shortcut_container_layout.addLayout(shortcut_row)
 
         self.shortcut_aux = QWidget()
@@ -602,33 +670,34 @@ class SettingsWidget(QWidget):
         shortcut_container_layout.addWidget(self.shortcut_aux)
 
         form.addRow(t("settings.shortcut.label"), shortcut_container)
+        vbox.addWidget(shortcut_frame)
 
-        # --- Button shortcuts list ---
-        vbox = frame.layout()
-        vbox.setSpacing(12)
+        # Button shortcuts pill
+        btn_sc_frame, _ = self._make_pill_panel()
+        btn_sc_vbox = btn_sc_frame.layout()
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setFixedHeight(1)
-        sep.setStyleSheet("background-color: rgba(128,128,128,0.25); border: none;")
-        vbox.addWidget(sep)
-
-        sc_header = QLabel(t("settings.shortcut.button_shortcuts"))
-        sc_header.setObjectName("sectionHeader")
-        vbox.addWidget(sc_header)
+        sc_header = self._make_section_header(t("settings.shortcut.button_shortcuts"))
+        btn_sc_vbox.insertWidget(0, sc_header)
 
         self._btn_shortcuts_container = QWidget()
         self._btn_shortcuts_layout = QVBoxLayout(self._btn_shortcuts_container)
         self._btn_shortcuts_layout.setContentsMargins(0, 0, 0, 0)
         self._btn_shortcuts_layout.setSpacing(4)
-        vbox.addWidget(self._btn_shortcuts_container)
+        btn_sc_vbox.addWidget(self._btn_shortcuts_container)
 
         self._refresh_button_shortcuts()
+        vbox.addWidget(btn_sc_frame)
 
-        return frame
+        return container
 
-    def _build_support_panel(self) -> QFrame:
-        frame, form = self._make_pill_panel()
+    def _build_support_panel(self) -> QWidget:
+        container = QWidget()
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(8)
+
+        # Update pill
+        update_frame, form = self._make_pill_panel()
 
         update_row = QHBoxLayout()
         update_row.setContentsMargins(0, 0, 0, 0)
@@ -650,15 +719,30 @@ class SettingsWidget(QWidget):
         update_row.addStretch()
 
         form.addRow(t("settings.support.update_label"), update_row)
+        vbox.addWidget(update_frame)
 
-        # Buy Me a Coffee
-        vbox = frame.layout()
+        # Links pill
+        links_frame, _ = self._make_pill_panel()
+        links_vbox = links_frame.layout()
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setFixedHeight(1)
-        sep.setStyleSheet("background-color: rgba(128,128,128,0.25); border: none;")
-        vbox.addWidget(sep)
+        bug_pix = QPixmap(18, 18)
+        bug_pix.fill(Qt.GlobalColor.transparent)
+        p = QPainter(bug_pix)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setFont(get_mdi_font(15))
+        p.setPen(QColor("#E65100"))
+        p.drawText(bug_pix.rect(), Qt.AlignmentFlag.AlignCenter, Icons.ALERT_CIRCLE_OUTLINE)
+        p.end()
+
+        self.bug_btn = QPushButton(f"  {t('settings.support.bug_btn')}")
+        self.bug_btn.setObjectName("bugBtn")
+        self.bug_btn.setIcon(QIcon(bug_pix))
+        self.bug_btn.setIconSize(QSize(16, 16))
+        self.bug_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.bug_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl("https://github.com/lasselian/prism-desktop/issues"))
+        )
+        links_vbox.addWidget(self.bug_btn)
 
         coffee_pix = QPixmap(18, 18)
         coffee_pix.fill(Qt.GlobalColor.transparent)
@@ -677,9 +761,11 @@ class SettingsWidget(QWidget):
         self.bmc_btn.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl("https://buymeacoffee.com/lasselian"))
         )
-        vbox.addWidget(self.bmc_btn)
+        links_vbox.addWidget(self.bmc_btn)
 
-        return frame
+        vbox.addWidget(links_frame)
+
+        return container
 
     # -------------------------------------------------------------------------
     # Panel switching
@@ -1063,30 +1149,44 @@ class SettingsWidget(QWidget):
 
         QDesktopServices.openUrl(QUrl("settings://keyboard/shortcuts"))
 
-    def test_connection(self):
+    def _on_credential_changed(self):
+        self._debounce_timer.stop()
+        if not self.url_input.text().strip() or not self.token_input.text().strip():
+            self._set_conn_status("idle")
+        else:
+            self._debounce_timer.start()
+
+    def _trigger_auto_test(self):
         url = self.url_input.text().strip()
         token = self.token_input.text().strip()
-
         if not url or not token:
-            from ui.notifications import notify_missing_credentials
-            notify_missing_credentials(self.window())
+            self._set_conn_status("idle")
             return
-
-        self.test_btn.setEnabled(False)
-
         if self._test_thread and self._test_thread.isRunning():
-            self._test_thread.quit()
-            self._test_thread.wait(500)
-
+            return
+        self._set_conn_status("checking")
         self._test_thread = ConnectionTestThread(url, token)
         self._test_thread.finished.connect(self.on_test_complete)
         self._test_thread.start()
 
+    def _set_conn_status(self, state: str, detail: str = ""):
+        if state == "idle":
+            self._conn_status_label.hide()
+            return
+        color = {"checking": "#8e8e93", "ok": "#34A853", "error": "#e53935"}.get(state, "#8e8e93")
+        if state == "ok":
+            text = "●  Connected"
+        elif state == "error":
+            text = f"●  {detail}" if detail else "●  Connection failed"
+        else:
+            text = "●  Checking…"
+        self._conn_status_label.setStyleSheet(f"font-size: 11px; color: {color};")
+        self._conn_status_label.setText(text)
+        self._conn_status_label.show()
+
     @pyqtSlot(bool, str)
-    def on_test_complete(self, success, message):
-        self.test_btn.setEnabled(True)
-        from ui.notifications import notify_connection_test_result
-        notify_connection_test_result(self.window(), success, message)
+    def on_test_complete(self, success: bool, message: str):
+        self._set_conn_status("ok" if success else "error", message)
 
     _VERSION_STYLE = 'style="color: #aaa; font-size: 11px; text-decoration: none;"'
     _HASH_STYLE = 'style="color: #FFC90E; font-size: 11px; text-decoration: none;"'
@@ -1203,6 +1303,8 @@ class SettingsWidget(QWidget):
         self.update_label.setToolTip(error)
 
     def _cleanup_threads(self):
+        self._debounce_timer.stop()
+        self._poll_timer.stop()
         if self._test_thread and self._test_thread.isRunning():
             self._test_thread.quit()
             self._test_thread.wait(500)

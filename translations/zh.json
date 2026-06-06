@@ -34,6 +34,7 @@
   "settings.appearance.pages_label": "仪表盘页数：",
   "settings.appearance.language_label": "语言：",
   "settings.appearance.language_restart_note": "需要重启以应用语言更改",
+  "settings.appearance.toggles_label": "选项",
   "settings.appearance.dimming_toggle": "显示亮度调节",
   "settings.appearance.dimming_tooltip": "根据亮度级别淡化按钮颜色",
   "settings.appearance.glass_toggle": "毛玻璃界面（实验性）",
@@ -186,5 +187,6 @@
   "notification_banner.no": "否",
   "sun.until_sunset": "距日落",
   "sun.until_sunrise": "距日出",
-  "settings.ha.send_to_ha_label": "发送到 Home Assistant"
+  "settings.ha.send_to_ha_label": "发送到 Home Assistant",
+  "settings.support.bug_btn": "报告错误"
 }

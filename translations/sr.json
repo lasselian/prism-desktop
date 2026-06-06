@@ -34,6 +34,7 @@
   "settings.appearance.pages_label": "Broj ekrana:",
   "settings.appearance.language_label": "Jezik:",
   "settings.appearance.language_restart_note": "Neophodno je restartovati program da bi se primenio novi jezik",
+  "settings.appearance.toggles_label": "OPCIJE",
   "settings.appearance.dimming_toggle": "Pokaži kontrolu intenziteta",
   "settings.appearance.dimming_tooltip": "Zatamni boju dugmeta na osnovu nivoa osvetljaja",
   "settings.appearance.glass_toggle": "Korisnički izgled mutnog stakla / Glass UI (EXPERIMENTALNO)",
@@ -186,5 +187,6 @@
   "notification_banner.no": "Ne",
   "sun.until_sunset": "DO ZALASKA SUNCA",
   "sun.until_sunrise": "DO IZLASKA SUNCA",
-  "settings.ha.send_to_ha_label": "Pošalji Home Assistant-u"
+  "settings.ha.send_to_ha_label": "Pošalji Home Assistant-u",
+  "settings.support.bug_btn": "Prijavi grešku"
 }

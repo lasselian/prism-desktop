@@ -34,6 +34,7 @@
   "settings.appearance.pages_label": "Dashbord-sider:",
   "settings.appearance.language_label": "Språk:",
   "settings.appearance.language_restart_note": "Omstart kreves for å bruke språkendringen",
+  "settings.appearance.toggles_label": "ALTERNATIVER",
   "settings.appearance.dimming_toggle": "Vis dimming",
   "settings.appearance.dimming_tooltip": "Tøm knappefargen basert på lysnivå",
   "settings.appearance.glass_toggle": "Glass-UI (EKSPERIMENTELT)",
@@ -186,5 +187,6 @@
   "notification_banner.no": "Nei",
   "sun.until_sunset": "SOLNEDGANG",
   "sun.until_sunrise": "SOLOPPGANG",
-  "settings.ha.send_to_ha_label": "Send til Home Assistant"
+  "settings.ha.send_to_ha_label": "Send til Home Assistant",
+  "settings.support.bug_btn": "Rapporter en feil"
 }

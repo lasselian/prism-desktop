@@ -34,6 +34,7 @@
   "settings.appearance.pages_label": "עמודי לוח מחוונים:",
   "settings.appearance.language_label": "שפה:",
   "settings.appearance.language_restart_note": "נדרשת הפעלה מחדש כדי להחיל את שינוי השפה",
+  "settings.appearance.toggles_label": "אפשרויות",
   "settings.appearance.dimming_toggle": "הצגת עמעום",
   "settings.appearance.dimming_tooltip": "עמעום צבע הכפתור בהתאם לרמת הבהירות",
   "settings.appearance.glass_toggle": "ממשק זכוכית (ניסיוני)",
@@ -206,5 +207,6 @@
   "notification_banner.yes": "כן",
   "notification_banner.no": "לא",
   "sun.until_sunset": "עד השקיעה",
-  "sun.until_sunrise": "עד הזריחה"
+  "sun.until_sunrise": "עד הזריחה",
+  "settings.support.bug_btn": "דווח על באג"
 }

@@ -34,6 +34,7 @@
   "settings.appearance.pages_label": "Páginas del panel:",
   "settings.appearance.language_label": "Idioma:",
   "settings.appearance.language_restart_note": "Se requiere reiniciar para aplicar el cambio de idioma",
+  "settings.appearance.toggles_label": "OPCIONES",
   "settings.appearance.dimming_toggle": "Mostrar atenuación",
   "settings.appearance.dimming_tooltip": "Atenúa el color del botón según el nivel de brillo",
   "settings.appearance.glass_toggle": "Interfaz de cristal (EXPERIMENTAL)",
@@ -186,5 +187,6 @@
   "notification_banner.no": "No",
   "sun.until_sunset": "HASTA EL OCASO",
   "sun.until_sunrise": "HASTA EL AMANECER",
-  "settings.ha.send_to_ha_label": "Enviar a Home Assistant"
+  "settings.ha.send_to_ha_label": "Enviar a Home Assistant",
+  "settings.support.bug_btn": "Reportar un error"
 }

@@ -34,6 +34,7 @@
   "settings.appearance.pages_label": "Dashboardsider:",
   "settings.appearance.language_label": "Sprog:",
   "settings.appearance.language_restart_note": "Genstart krævet for at anvende sprogændring",
+  "settings.appearance.toggles_label": "INDSTILLINGER",
   "settings.appearance.dimming_toggle": "Vis dæmpning",
   "settings.appearance.dimming_tooltip": "Ton knapfarve baseret på lysniveau",
   "settings.appearance.glass_toggle": "Glasgrænseflade (EKSPERIMENTEL)",
@@ -186,5 +187,6 @@
   "notification_banner.no": "Nej",
   "sun.until_sunset": "SOLNEDGANG",
   "sun.until_sunrise": "SOLOPGANG",
-  "settings.ha.send_to_ha_label": "Send til Home Assistant"
+  "settings.ha.send_to_ha_label": "Send til Home Assistant",
+  "settings.support.bug_btn": "Rapportér en fejl"
 }

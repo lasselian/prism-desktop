@@ -34,6 +34,7 @@
   "settings.appearance.pages_label": "Kojelaudan sivut:",
   "settings.appearance.language_label": "Kieli:",
   "settings.appearance.language_restart_note": "Kielenvaihdos vaatii uudelleenkäynnistyksen",
+  "settings.appearance.toggles_label": "ASETUKSET",
   "settings.appearance.dimming_toggle": "Näytä himmennys",
   "settings.appearance.dimming_tooltip": "Himmentää painikkeen väriä kirkkausasteen mukaan",
   "settings.appearance.glass_toggle": "Lasi-käyttöliittymä (KOKEELLINEN)",
@@ -186,5 +187,6 @@
   "notification_banner.no": "Ei",
   "sun.until_sunset": "AURINGONLASKUUN",
   "sun.until_sunrise": "AURINGONNOUSUUN",
-  "settings.ha.send_to_ha_label": "Lähetä Home Assistantille"
+  "settings.ha.send_to_ha_label": "Lähetä Home Assistantille",
+  "settings.support.bug_btn": "Ilmoita virheestä"
 }

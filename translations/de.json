@@ -34,6 +34,7 @@
   "settings.appearance.pages_label": "Dashboard-Seiten:",
   "settings.appearance.language_label": "Sprache:",
   "settings.appearance.language_restart_note": "Neustart erforderlich, um die Sprachänderung anzuwenden",
+  "settings.appearance.toggles_label": "OPTIONEN",
   "settings.appearance.dimming_toggle": "Abdunklung anzeigen",
   "settings.appearance.dimming_tooltip": "Blendet die Schaltflächenfarbe basierend auf dem Helligkeitsniveau aus",
   "settings.appearance.glass_toggle": "Glas-Oberfläche (EXPERIMENTELL)",
@@ -186,5 +187,6 @@
   "notification_banner.no": "Nein",
   "sun.until_sunset": "SONNENUNTERGANG",
   "sun.until_sunrise": "SONNENAUFGANG",
-  "settings.ha.send_to_ha_label": "An Home Assistant senden"
+  "settings.ha.send_to_ha_label": "An Home Assistant senden",
+  "settings.support.bug_btn": "Fehler melden"
 }
