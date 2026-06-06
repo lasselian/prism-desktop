@@ -19,7 +19,12 @@ _SUPPORTED_LANGUAGES = {
     "zh": "中文（简体）",
     "zh-TW": "中文（繁體）",
     "ja": "日本語",
+    "he": "עברית",
 }
+
+# Languages written right-to-left. The UI applies an RTL layout direction
+# for these so labels, forms and menus mirror correctly.
+_RTL_LANGUAGES = {"he"}
 
 
 class _LocalizationManager:
@@ -58,6 +63,10 @@ class _LocalizationManager:
     def current_language(self) -> str:
         return self._language
 
+    @property
+    def is_rtl(self) -> bool:
+        return self._language in _RTL_LANGUAGES
+
     @staticmethod
     def supported_languages() -> dict:
         return dict(_SUPPORTED_LANGUAGES)
@@ -76,6 +85,10 @@ def t(key: str, **kwargs) -> str:
 
 def current_language() -> str:
     return _manager.current_language
+
+
+def is_rtl() -> bool:
+    return _manager.is_rtl
 
 
 def supported_languages() -> dict:

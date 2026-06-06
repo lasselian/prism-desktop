@@ -537,14 +537,14 @@ class ButtonEditWidget(QWidget):
         self.color_button_row = color_btn_row_layout
 
         self.preset_colors = [
-            ("#4285F4", "Blue"),
-            ("#34A853", "Green"),
-            ("#B71C1C", "Red"),
-            ("#E65100", "Orange"),
-            ("#6A1B9A", "Purple"),
-            ("#AD1457", "Pink"),
-            ("#607D8B", "Gray"),
-            ("#3C3C3C", "Sensor Gray"),
+            ("#4285F4", t("button_editor.color.blue")),
+            ("#34A853", t("button_editor.color.green")),
+            ("#B71C1C", t("button_editor.color.red")),
+            ("#E65100", t("button_editor.color.orange")),
+            ("#6A1B9A", t("button_editor.color.purple")),
+            ("#AD1457", t("button_editor.color.pink")),
+            ("#607D8B", t("button_editor.color.gray")),
+            ("#3C3C3C", t("button_editor.color.sensor_gray")),
         ]
 
         self.color_buttons = []
@@ -574,7 +574,7 @@ class ButtonEditWidget(QWidget):
         self.rainbow_btn.setObjectName("colorBtn")
         self.rainbow_btn.setFixedSize(24, 24)
         self.rainbow_btn.setCheckable(True)
-        self.rainbow_btn.setToolTip("Custom color")
+        self.rainbow_btn.setToolTip(t("button_editor.color.custom_tooltip"))
         self.rainbow_btn.setStyleSheet("""
             background: qlineargradient(x1:0, y1:1, x2:1, y2:0,
                 stop:0 #ff0000, stop:0.17 #ffff00, stop:0.33 #00ff00,
@@ -614,7 +614,7 @@ class ButtonEditWidget(QWidget):
         self.save_color_btn = QPushButton("+")
         self.save_color_btn.setObjectName("colorSaveBtn")
         self.save_color_btn.setFixedSize(32, 32)
-        self.save_color_btn.setToolTip("Save as swatch")
+        self.save_color_btn.setToolTip(t("button_editor.color.save_swatch_tooltip"))
         self.save_color_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         picker_bottom_row.addWidget(self.save_color_btn)
 

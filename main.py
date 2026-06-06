@@ -47,7 +47,7 @@ if __name__ == '__main__' and TOGGLE_ARG in sys.argv[1:]:
 
 import qasync
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QObject, pyqtSlot, QTimer, QRect
+from PyQt6.QtCore import QObject, pyqtSlot, QTimer, QRect, Qt
 from PyQt6.QtGui import QPixmap
 
 from core.config_manager import ConfigManager
@@ -69,7 +69,7 @@ from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtCore import QUrl
 from core.temperature_utils import normalize_temperature_unit
 from core.build_info import APP_VERSION, get_display_version
-from core.localization_manager import init_localization
+from core.localization_manager import init_localization, is_rtl
 
 DISPLAY_VERSION = get_display_version()
 
@@ -1240,5 +1240,9 @@ if __name__ == '__main__':
     with loop:
         load_mdi_font()
         init_localization(_read_language_from_config())
+        # Mirror the UI for right-to-left languages (e.g. Hebrew). Must be set on
+        # the application before any widgets are created so they inherit it.
+        if is_rtl():
+            app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         controller = PrismDesktopApp()
         loop.run_forever()

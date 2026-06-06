@@ -1843,6 +1843,9 @@ class DashboardButton(QFrame):
         if self.config and self.config.get('type') == 'forbidden':
             return
         menu = QMenu(self)
+        # The button lives under the LTR-pinned grid; align the menu (and its
+        # submenus) with the application direction so it mirrors under RTL.
+        menu.setLayoutDirection(QApplication.layoutDirection())
         menu.setStyleSheet("""
             QMenu {
                 background-color: #2b2b2b;

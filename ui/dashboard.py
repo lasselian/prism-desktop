@@ -913,6 +913,10 @@ class Dashboard(QWidget):
         
         # 1. Main Grid
         self.grid_widget = QWidget()
+        # The grid is a fixed-orientation spatial layout: button positions are
+        # stored as absolute (row, col) and drag/resize logic assumes a stable
+        # column order. Pin it to LTR so it never mirrors under an RTL locale.
+        self.grid_widget.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         self.grid = QGridLayout(self.grid_widget)
         self.grid.setSpacing(BUTTON_SPACING)
         self.grid.setContentsMargins(GRID_MARGIN_LEFT, GRID_MARGIN_TOP, GRID_MARGIN_RIGHT, GRID_MARGIN_BOTTOM)
@@ -941,6 +945,9 @@ class Dashboard(QWidget):
             
         # 2. Footer
         self.footer_widget = QWidget()
+        # Keep the footer LTR so the Home Assistant / page-indicator / Settings
+        # ordering and navigation stay consistent regardless of locale.
+        self.footer_widget.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         
         # Note: Footer fade-in animation logic is handled dynamically in 
         # _fade_in_footer() to avoid "wrapped C/C++ object deleted" crashes.
