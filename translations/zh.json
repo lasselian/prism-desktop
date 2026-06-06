@@ -11,11 +11,11 @@
   "settings.ha.token_label": "令牌：",
   "settings.ha.token_placeholder": "长期访问令牌",
   "settings.ha.test_btn": "测试连接",
-  "settings.ha.location_toggle": "向 Home Assistant 发送位置",
+  "settings.ha.location_toggle": "位置",
   "settings.ha.location_tooltip": "通过移动应用集成定期上报此设备的位置",
-  "settings.ha.send_cpu_toggle": "向 Home Assistant 发送 CPU 使用率",
+  "settings.ha.send_cpu_toggle": "CPU 使用率",
   "settings.ha.send_cpu_tooltip": "通过移动应用集成定期上报此设备的 CPU 使用率",
-  "settings.ha.send_ram_toggle": "向 Home Assistant 发送 RAM 使用率",
+  "settings.ha.send_ram_toggle": "RAM 使用率",
   "settings.ha.send_ram_tooltip": "通过移动应用集成定期上报此设备的 RAM 使用率",
   "settings.appearance.theme_label": "主题：",
   "settings.appearance.theme_system": "跟随系统",
@@ -185,5 +185,6 @@
   "notification_banner.yes": "是",
   "notification_banner.no": "否",
   "sun.until_sunset": "距日落",
-  "sun.until_sunrise": "距日出"
+  "sun.until_sunrise": "距日出",
+  "settings.ha.send_to_ha_label": "发送到 Home Assistant"
 }

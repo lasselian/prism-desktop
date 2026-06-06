@@ -11,11 +11,11 @@
   "settings.ha.token_label": "Token:",
   "settings.ha.token_placeholder": "Pitkäaikainen käyttöoikeustunnus",
   "settings.ha.test_btn": "Testaa yhteys",
-  "settings.ha.location_toggle": "Lähetä sijainti Home Assistantille",
+  "settings.ha.location_toggle": "Sijainti",
   "settings.ha.location_tooltip": "Raportoi tämän laitteen sijainnin säännöllisesti mobiilisovelluksen integraation kautta",
-  "settings.ha.send_cpu_toggle": "Lähetä CPU-käyttö Home Assistantille",
+  "settings.ha.send_cpu_toggle": "CPU-käyttö",
   "settings.ha.send_cpu_tooltip": "Raportoi tämän laitteen CPU-käytön säännöllisesti mobiilisovelluksen integraation kautta",
-  "settings.ha.send_ram_toggle": "Lähetä RAM-käyttö Home Assistantille",
+  "settings.ha.send_ram_toggle": "RAM-käyttö",
   "settings.ha.send_ram_tooltip": "Raportoi tämän laitteen RAM-käytön säännöllisesti mobiilisovelluksen integraation kautta",
   "settings.appearance.theme_label": "Teema:",
   "settings.appearance.theme_system": "Järjestelmä",
@@ -185,5 +185,6 @@
   "notification_banner.yes": "Kyllä",
   "notification_banner.no": "Ei",
   "sun.until_sunset": "AURINGONLASKUUN",
-  "sun.until_sunrise": "AURINGONNOUSUUN"
+  "sun.until_sunrise": "AURINGONNOUSUUN",
+  "settings.ha.send_to_ha_label": "Lähetä Home Assistantille"
 }

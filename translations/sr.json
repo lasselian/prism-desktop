@@ -11,11 +11,11 @@
   "settings.ha.token_label": "Token:",
   "settings.ha.token_placeholder": "Long-Lived Access Token",
   "settings.ha.test_btn": "Testiraj vezu",
-  "settings.ha.location_toggle": "Pošalji lokaciju Home Assistant-u",
+  "settings.ha.location_toggle": "Lokacija",
   "settings.ha.location_tooltip": "Periodično izveštava o lokaciji ovog uredjaja putem Mobile App integracije (HA)",
-  "settings.ha.send_cpu_toggle": "Pošalji korišćenje CPU-a Home Assistant-u",
+  "settings.ha.send_cpu_toggle": "Korišćenje CPU-a",
   "settings.ha.send_cpu_tooltip": "Periodično izveštava o korišćenju CPU-a ovog uredjaja putem Mobile App integracije (HA)",
-  "settings.ha.send_ram_toggle": "Pošalji korišćenje RAM-a Home Assistant-u",
+  "settings.ha.send_ram_toggle": "Korišćenje RAM-a",
   "settings.ha.send_ram_tooltip": "Periodično izveštava o korišćenju RAM-a ovog uredjaja putem Mobile App integracije (HA)",
   "settings.appearance.theme_label": "Tema:",
   "settings.appearance.theme_system": "Sistem",
@@ -185,5 +185,6 @@
   "notification_banner.yes": "Da",
   "notification_banner.no": "Ne",
   "sun.until_sunset": "DO ZALASKA SUNCA",
-  "sun.until_sunrise": "DO IZLASKA SUNCA"
+  "sun.until_sunrise": "DO IZLASKA SUNCA",
+  "settings.ha.send_to_ha_label": "Pošalji Home Assistant-u"
 }

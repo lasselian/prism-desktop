@@ -11,11 +11,11 @@
   "settings.ha.token_label": "Token:",
   "settings.ha.token_placeholder": "Långlivad åtkomsttoken",
   "settings.ha.test_btn": "Testa anslutning",
-  "settings.ha.location_toggle": "Skicka plats till Home Assistant",
+  "settings.ha.location_toggle": "Plats",
   "settings.ha.location_tooltip": "Rapporterar enhetens plats regelbundet via Mobilapp-integrationen",
-  "settings.ha.send_cpu_toggle": "Skicka CPU-användning till Home Assistant",
+  "settings.ha.send_cpu_toggle": "CPU-användning",
   "settings.ha.send_cpu_tooltip": "Rapporterar enhetens CPU-användning regelbundet via Mobilapp-integrationen",
-  "settings.ha.send_ram_toggle": "Skicka RAM-användning till Home Assistant",
+  "settings.ha.send_ram_toggle": "RAM-användning",
   "settings.ha.send_ram_tooltip": "Rapporterar enhetens RAM-användning regelbundet via Mobilapp-integrationen",
   "settings.appearance.theme_label": "Tema:",
   "settings.appearance.theme_system": "System",
@@ -185,5 +185,6 @@
   "notification_banner.yes": "Ja",
   "notification_banner.no": "Nej",
   "sun.until_sunset": "SOLNEDGÅNG",
-  "sun.until_sunrise": "SOLUPPGÅNG"
+  "sun.until_sunrise": "SOLUPPGÅNG",
+  "settings.ha.send_to_ha_label": "Skicka till Home Assistant"
 }

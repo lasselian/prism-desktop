@@ -11,11 +11,11 @@
   "settings.ha.token_label": "Jeton :",
   "settings.ha.token_placeholder": "Jeton d'accès longue durée",
   "settings.ha.test_btn": "Tester la connexion",
-  "settings.ha.location_toggle": "Envoyer la position à Home Assistant",
+  "settings.ha.location_toggle": "Position",
   "settings.ha.location_tooltip": "Signale périodiquement la position de cet appareil via l'intégration Application Mobile",
-  "settings.ha.send_cpu_toggle": "Envoyer l'utilisation CPU à Home Assistant",
+  "settings.ha.send_cpu_toggle": "Utilisation CPU",
   "settings.ha.send_cpu_tooltip": "Signale périodiquement l'utilisation CPU de cet appareil via l'intégration Application Mobile",
-  "settings.ha.send_ram_toggle": "Envoyer l'utilisation RAM à Home Assistant",
+  "settings.ha.send_ram_toggle": "Utilisation RAM",
   "settings.ha.send_ram_tooltip": "Signale périodiquement l'utilisation RAM de cet appareil via l'intégration Application Mobile",
   "settings.appearance.theme_label": "Thème :",
   "settings.appearance.theme_system": "Système",
@@ -185,5 +185,6 @@
   "notification_banner.yes": "Oui",
   "notification_banner.no": "Non",
   "sun.until_sunset": "AU COUCHER",
-  "sun.until_sunrise": "AU LEVER"
+  "sun.until_sunrise": "AU LEVER",
+  "settings.ha.send_to_ha_label": "Envoyer à Home Assistant"
 }

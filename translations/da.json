@@ -11,11 +11,11 @@
   "settings.ha.token_label": "Token:",
   "settings.ha.token_placeholder": "Langtidsholdbar adgangstoken",
   "settings.ha.test_btn": "Test forbindelse",
-  "settings.ha.location_toggle": "Send placering til Home Assistant",
+  "settings.ha.location_toggle": "Placering",
   "settings.ha.location_tooltip": "Rapporterer denne enheds placering periodisk via Mobilapp-integrationen",
-  "settings.ha.send_cpu_toggle": "Send CPU-forbrug til Home Assistant",
+  "settings.ha.send_cpu_toggle": "CPU-forbrug",
   "settings.ha.send_cpu_tooltip": "Rapporterer periodisk denne enheds CPU-forbrug via Mobilapp-integrationen",
-  "settings.ha.send_ram_toggle": "Send RAM-forbrug til Home Assistant",
+  "settings.ha.send_ram_toggle": "RAM-forbrug",
   "settings.ha.send_ram_tooltip": "Rapporterer periodisk denne enheds RAM-forbrug via Mobilapp-integrationen",
   "settings.appearance.theme_label": "Tema:",
   "settings.appearance.theme_system": "System",
@@ -185,5 +185,6 @@
   "notification_banner.yes": "Ja",
   "notification_banner.no": "Nej",
   "sun.until_sunset": "SOLNEDGANG",
-  "sun.until_sunrise": "SOLOPGANG"
+  "sun.until_sunrise": "SOLOPGANG",
+  "settings.ha.send_to_ha_label": "Send til Home Assistant"
 }

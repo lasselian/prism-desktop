@@ -11,11 +11,11 @@
   "settings.ha.token_label": "Token:",
   "settings.ha.token_placeholder": "Langlebiges Zugriffstoken",
   "settings.ha.test_btn": "Verbindung testen",
-  "settings.ha.location_toggle": "Standort an Home Assistant senden",
+  "settings.ha.location_toggle": "Standort",
   "settings.ha.location_tooltip": "Meldet den Standort dieses Geräts regelmäßig über die Mobile-App-Integration",
-  "settings.ha.send_cpu_toggle": "CPU-Auslastung an Home Assistant senden",
+  "settings.ha.send_cpu_toggle": "CPU-Auslastung",
   "settings.ha.send_cpu_tooltip": "Meldet die CPU-Auslastung dieses Geräts regelmäßig über die Mobile-App-Integration",
-  "settings.ha.send_ram_toggle": "RAM-Auslastung an Home Assistant senden",
+  "settings.ha.send_ram_toggle": "RAM-Auslastung",
   "settings.ha.send_ram_tooltip": "Meldet die RAM-Auslastung dieses Geräts regelmäßig über die Mobile-App-Integration",
   "settings.appearance.theme_label": "Design:",
   "settings.appearance.theme_system": "System",
@@ -185,5 +185,6 @@
   "notification_banner.yes": "Ja",
   "notification_banner.no": "Nein",
   "sun.until_sunset": "SONNENUNTERGANG",
-  "sun.until_sunrise": "SONNENAUFGANG"
+  "sun.until_sunrise": "SONNENAUFGANG",
+  "settings.ha.send_to_ha_label": "An Home Assistant senden"
 }

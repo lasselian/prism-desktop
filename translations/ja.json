@@ -11,11 +11,11 @@
   "settings.ha.token_label": "トークン：",
   "settings.ha.token_placeholder": "長期アクセストークン",
   "settings.ha.test_btn": "接続をテスト",
-  "settings.ha.location_toggle": "位置情報を Home Assistant に送信",
+  "settings.ha.location_toggle": "位置情報",
   "settings.ha.location_tooltip": "モバイルアプリ連携を通じて、このデバイスの位置情報を定期的に報告します",
-  "settings.ha.send_cpu_toggle": "CPU使用率を Home Assistant に送信",
+  "settings.ha.send_cpu_toggle": "CPU使用率",
   "settings.ha.send_cpu_tooltip": "モバイルアプリ連携を通じて、このデバイスのCPU使用率を定期的に報告します",
-  "settings.ha.send_ram_toggle": "RAM使用率を Home Assistant に送信",
+  "settings.ha.send_ram_toggle": "RAM使用率",
   "settings.ha.send_ram_tooltip": "モバイルアプリ連携を通じて、このデバイスのRAM使用率を定期的に報告します",
   "settings.appearance.theme_label": "テーマ：",
   "settings.appearance.theme_system": "システム",
@@ -185,5 +185,6 @@
   "notification_banner.yes": "はい",
   "notification_banner.no": "いいえ",
   "sun.until_sunset": "日の入りまで",
-  "sun.until_sunrise": "日の出まで"
+  "sun.until_sunrise": "日の出まで",
+  "settings.ha.send_to_ha_label": "Home Assistant に送信"
 }

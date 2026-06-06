@@ -446,6 +446,10 @@ class SettingsWidget(QWidget):
         # Toggles pill — all data-sending toggles grouped together
         toggle_frame, toggle_form = self._make_pill_panel()
 
+        send_label = QLabel(t("settings.ha.send_to_ha_label"))
+        send_label.setStyleSheet("font-size: 11px; font-weight: 600; color: #8e8e93; letter-spacing: 0.5px; margin-bottom: 6px;")
+        toggle_frame.layout().insertWidget(0, send_label)
+
         if sys.platform in ('win32', 'linux'):
             self.location_check = ToggleSwitch(t("settings.ha.location_toggle"))
             self.location_check.setToolTip(t("settings.ha.location_tooltip"))
