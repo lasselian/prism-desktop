@@ -269,6 +269,12 @@ class SettingsWidget(QWidget):
                 border-radius: 16px;
             }}
 
+            QFrame#statusInnerPill {{
+                background-color: {"rgba(0,0,0,0.05)" if is_light else "rgba(255,255,255,0.05)"};
+                border: 1px solid {"rgba(0,0,0,0.10)" if is_light else "rgba(255,255,255,0.08)"};
+                border-radius: 8px;
+            }}
+
             QPushButton#pinBtn {{
                 background-color: transparent;
                 border: 1px solid {colors['border']};
@@ -484,11 +490,19 @@ class SettingsWidget(QWidget):
         self.token_input.setPlaceholderText(t("settings.ha.token_placeholder"))
         cred_form.addRow(t("settings.ha.token_label"), self.token_input)
 
+        # Status inner pill — lives inside the credentials pill
+        self._conn_status_pill = QFrame()
+        self._conn_status_pill.setObjectName("statusInnerPill")
+        status_vbox = QVBoxLayout(self._conn_status_pill)
+        status_vbox.setContentsMargins(10, 6, 10, 6)
+        status_vbox.setSpacing(0)
+
         self._conn_status_label = QLabel()
-        self._conn_status_label.setStyleSheet("font-size: 11px;")
         self._conn_status_label.setWordWrap(True)
-        self._conn_status_label.hide()
-        cred_form.addRow("", self._conn_status_label)
+        status_vbox.addWidget(self._conn_status_label)
+
+        self._conn_status_pill.hide()
+        cred_frame.layout().addWidget(self._conn_status_pill)
 
         vbox.addWidget(cred_frame)
 
@@ -1171,7 +1185,7 @@ class SettingsWidget(QWidget):
 
     def _set_conn_status(self, state: str, detail: str = ""):
         if state == "idle":
-            self._conn_status_label.hide()
+            self._conn_status_pill.hide()
             return
         color = {"checking": "#8e8e93", "ok": "#34A853", "error": "#e53935"}.get(state, "#8e8e93")
         if state == "ok":
@@ -1182,7 +1196,7 @@ class SettingsWidget(QWidget):
             text = "●  Checking…"
         self._conn_status_label.setStyleSheet(f"font-size: 11px; color: {color};")
         self._conn_status_label.setText(text)
-        self._conn_status_label.show()
+        self._conn_status_pill.show()
 
     @pyqtSlot(bool, str)
     def on_test_complete(self, success: bool, message: str):
