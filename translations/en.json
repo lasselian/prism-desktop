@@ -138,6 +138,7 @@
   "button_editor.type.vacuum": "Vacuum",
   "button_editor.type.weather": "Weather",
   "button_editor.type.3d_printer": "3D Printer",
+  "button_editor.type.pin_window": "Pin Window",
   "button_editor.automation_toggle": "Toggle",
   "button_editor.automation_trigger": "Trigger",
   "button_editor.automation_tooltip": "Toggle enables/disables the automation. Trigger runs it immediately.",

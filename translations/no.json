@@ -120,6 +120,7 @@
   "button_editor.type.vacuum": "Støvsuger",
   "button_editor.type.weather": "Vær",
   "button_editor.type.3d_printer": "3D-skriver",
+  "button_editor.type.pin_window": "Fest vindu",
   "button_editor.automation_toggle": "Veksle",
   "button_editor.automation_trigger": "Utløs",
   "button_editor.automation_tooltip": "Veksle aktiverer/deaktiverer automatiseringen. Utløs kjører den umiddelbart.",

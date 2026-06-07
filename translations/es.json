@@ -120,6 +120,7 @@
   "button_editor.type.vacuum": "Aspiradora",
   "button_editor.type.weather": "Tiempo",
   "button_editor.type.3d_printer": "Impresora 3D",
+  "button_editor.type.pin_window": "Anclar ventana",
   "button_editor.automation_toggle": "Alternar",
   "button_editor.automation_trigger": "Activar",
   "button_editor.automation_tooltip": "Alternar activa/desactiva la automatización. Activar la ejecuta inmediatamente.",

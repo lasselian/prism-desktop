@@ -120,6 +120,7 @@
   "button_editor.type.vacuum": "Støvsuger",
   "button_editor.type.weather": "Vejr",
   "button_editor.type.3d_printer": "3D-printer",
+  "button_editor.type.pin_window": "Fastgør vindue",
   "button_editor.automation_toggle": "Skift",
   "button_editor.automation_trigger": "Udløs",
   "button_editor.automation_tooltip": "Skift aktiverer/deaktiverer automatiseringen. Udløs kører den øjeblikkeligt.",

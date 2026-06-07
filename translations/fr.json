@@ -120,6 +120,7 @@
   "button_editor.type.vacuum": "Aspirateur",
   "button_editor.type.weather": "Météo",
   "button_editor.type.3d_printer": "Imprimante 3D",
+  "button_editor.type.pin_window": "Épingler la fenêtre",
   "button_editor.automation_toggle": "Basculer",
   "button_editor.automation_trigger": "Déclencher",
   "button_editor.automation_tooltip": "Basculer active/désactive l'automatisation. Déclencher l'exécute immédiatement.",

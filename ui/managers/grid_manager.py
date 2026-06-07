@@ -40,7 +40,8 @@ class GridManager:
         
         # 3. Apply Placements
         for btn, r, c, span_y, span_x in placements:
-            if not (btn.config and btn.config.get('entity_id')):
+            is_local = btn.config and btn.config.get('type') == 'pin_window'
+            if not (btn.config and (btn.config.get('entity_id') or is_local)):
                  btn.config = {}
                  # Invalidate content fingerprint so the empty view updater
                  # always runs its label show() calls, even if a prior path
@@ -69,14 +70,15 @@ class GridManager:
         forbidden_cells = self.layout_engine.get_forbidden_cells()
         if forbidden_cells:
             for btn, r, c, span_y, span_x in placements:
-                if (r, c) in forbidden_cells and not (btn.config and btn.config.get('entity_id')):
+                is_local = btn.config and btn.config.get('type') == 'pin_window'
+                if (r, c) in forbidden_cells and not (btn.config and (btn.config.get('entity_id') or is_local)):
                     btn.config = {'type': 'forbidden'}
                     btn._content_fp = None
                     btn.update_content()
                     btn.update_style()
-        
+
         for btn, r, c, span_y, span_x in placements:
-            if btn.config and btn.config.get('entity_id'):
+            if btn.config and (btn.config.get('entity_id') or btn.config.get('type') == 'pin_window'):
                 btn.raise_()
             
         placed_buttons = set(p[0] for p in placements)
@@ -138,7 +140,7 @@ class GridManager:
         
         config_idx = 0
         for cfg in configs:
-            if not cfg.get('entity_id'):
+            if not cfg.get('entity_id') and cfg.get('type') != 'pin_window':
                 continue
             
             r = cfg.get('row', 0)
@@ -162,7 +164,9 @@ class GridManager:
                 new_entity = cfg.get('entity_id')
                 
                 button.config = cfg
-                
+                if cfg.get('type') == 'pin_window':
+                    button._app_config = self.dashboard.config
+
                 if old_entity != new_entity:
                     button.reset_state()
                     if new_entity and new_entity in self.dashboard._entity_states:

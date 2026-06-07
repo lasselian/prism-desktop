@@ -35,7 +35,7 @@ class GridLayoutEngine:
         empty_buttons = []
         
         for button in buttons:
-            if button.config and button.config.get('entity_id'):
+            if button.config and (button.config.get('entity_id') or button.config.get('type') == 'pin_window'):
                 configured_buttons.append(button)
             else:
                 empty_buttons.append(button)
@@ -155,14 +155,14 @@ class GridLayoutEngine:
         for btn in all_buttons:
             if btn is resizing_btn:
                 continue
-            if not btn.config or not btn.config.get('entity_id'):
+            if not btn.config or not (btn.config.get('entity_id') or btn.config.get('type') == 'pin_window'):
                 continue
-            
+
             br = btn.config.get('row', 0)
             bc = btn.config.get('col', 0)
             bsx = getattr(btn, 'span_x', btn.config.get('span_x', 1))
             bsy = getattr(btn, 'span_y', btn.config.get('span_y', 1))
-            
+
             # Check if any cell of this button overlaps the new footprint
             overlaps = False
             for dy in range(bsy):
@@ -191,7 +191,7 @@ class GridLayoutEngine:
         for btn in all_buttons:
             if btn is resizing_btn:
                 continue
-            if not btn.config or not btn.config.get('entity_id'):
+            if not btn.config or not (btn.config.get('entity_id') or btn.config.get('type') == 'pin_window'):
                 continue
             if id(btn) in displaced_set:
                 continue

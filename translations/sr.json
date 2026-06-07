@@ -120,6 +120,7 @@
   "button_editor.type.vacuum": "Usisivač",
   "button_editor.type.weather": "Vreme",
   "button_editor.type.3d_printer": "3D Printer",
+  "button_editor.type.pin_window": "Fiksiraj prozor",
   "button_editor.automation_toggle": "Prebacivač stanja",
   "button_editor.automation_trigger": "Okidač",
   "button_editor.automation_tooltip": "Prebacivač stanja omogućava-onemogućava automatiku. Okidač startuje automatiku odmah.",

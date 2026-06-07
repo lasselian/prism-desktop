@@ -137,6 +137,7 @@
   "button_editor.type.vacuum": "שואב אבק",
   "button_editor.type.weather": "מזג אוויר",
   "button_editor.type.3d_printer": "מדפסת תלת-ממד",
+  "button_editor.type.pin_window": "הצמדת חלון",
   "button_editor.automation_toggle": "החלפת מצב",
   "button_editor.automation_trigger": "הפעלה",
   "button_editor.automation_tooltip": "החלפת מצב מפעילה/משביתה את האוטומציה. הפעלה מריצה אותה מיד.",

@@ -1609,6 +1609,15 @@ class Dashboard(QWidget):
                 QTimer.singleShot(100, self._check_hide)
         super().changeEvent(event)
     
+    def refresh_pin_buttons(self):
+        """Redraw all pin_window buttons to reflect the current pin state."""
+        for btn in self.buttons:
+            if btn.config.get('type') == 'pin_window':
+                btn._app_config = self.config
+                btn._content_fp = None
+                btn.update_content()
+                btn.update_style()
+
     def _check_hide(self):
         # If we are not the active window, close.
         if self._ignore_focus_loss:

@@ -511,6 +511,8 @@ class DashboardButton(QFrame):
             self._update_input_number_view()
         elif btn_type == 'sun':
             self._update_sun_view()
+        elif btn_type == 'pin_window':
+            self._update_pin_window_view()
         else:
             self._update_default_view(btn_type)
             
@@ -926,6 +928,16 @@ class DashboardButton(QFrame):
         self.setCursor(Qt.CursorShape.ArrowCursor)
         self.setProperty("type", "sun")
         self.update()
+
+    def _update_pin_window_view(self):
+        """Pin Window button — icon and state reflect current app pin setting."""
+        is_pinned = getattr(self, '_app_config', {}).get('appearance', {}).get('pin_window', False)
+        self._state = 'on' if is_pinned else 'off'
+        self.value_label.setFont(get_mdi_font(26))
+        self.value_label.setText(Icons.PIN if is_pinned else get_icon('pin-off'))
+        self.name_label.hide()
+        self.setProperty("type", "pin_window")
+        self.value_label.show()
 
     def _update_default_view(self, btn_type):
         """Default view for switch, light, lock, etc."""
@@ -1410,7 +1422,7 @@ class DashboardButton(QFrame):
     def mouseMoveEvent(self, event):
         """Handle drag start and hover effects."""
         # Check for resize handle hover (only for configured buttons, not Add buttons)
-        is_configured = self.config and self.config.get('entity_id')
+        is_configured = self.config and (self.config.get('entity_id') or self.config.get('type') == 'pin_window')
         
         if not self._drag_start_pos:
             rect = self.rect()

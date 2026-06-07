@@ -120,6 +120,7 @@
   "button_editor.type.vacuum": "ロボット掃除機",
   "button_editor.type.weather": "天気",
   "button_editor.type.3d_printer": "3D プリンター",
+  "button_editor.type.pin_window": "ウィンドウを固定",
   "button_editor.automation_toggle": "切り替え",
   "button_editor.automation_trigger": "トリガー",
   "button_editor.automation_tooltip": "切り替え：オートメーションを有効/無効にします。トリガー：すぐに実行します。",

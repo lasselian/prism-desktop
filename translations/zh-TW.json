@@ -120,6 +120,7 @@
   "button_editor.type.vacuum": "掃地機器人",
   "button_editor.type.weather": "天氣",
   "button_editor.type.3d_printer": "3D 列印機",
+  "button_editor.type.pin_window": "固定視窗",
   "button_editor.automation_toggle": "切換",
   "button_editor.automation_trigger": "觸發",
   "button_editor.automation_tooltip": "切換：啟用/停用自動化。觸發：立即執行。",

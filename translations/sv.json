@@ -120,6 +120,7 @@
   "button_editor.type.vacuum": "Dammsugare",
   "button_editor.type.weather": "Väder",
   "button_editor.type.3d_printer": "3D-skrivare",
+  "button_editor.type.pin_window": "Fäst fönster",
   "button_editor.automation_toggle": "Växla",
   "button_editor.automation_trigger": "Utlös",
   "button_editor.automation_tooltip": "Växla aktiverar/inaktiverar automatiseringen. Utlös kör den omedelbart.",

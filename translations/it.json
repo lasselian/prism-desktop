@@ -120,6 +120,7 @@
   "button_editor.type.vacuum": "Aspirapolvere",
   "button_editor.type.weather": "Meteo",
   "button_editor.type.3d_printer": "Stampante 3D",
+  "button_editor.type.pin_window": "Blocca finestra",
   "button_editor.automation_toggle": "Attiva/disattiva",
   "button_editor.automation_trigger": "Avvia",
   "button_editor.automation_tooltip": "Attiva/disattiva abilita o disabilita l'automazione. Avvia la esegue immediatamente.",

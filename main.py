@@ -859,6 +859,14 @@ class PrismDesktopApp(QObject):
         _create_task_safe(self._handle_button_click(config))
 
     async def _handle_button_click(self, config):
+        if config.get('type') == 'pin_window':
+            current = self.config.get('appearance', {}).get('pin_window', False)
+            self.config.setdefault('appearance', {})['pin_window'] = not current
+            self.save_config()
+            if self.dashboard:
+                self.dashboard.refresh_pin_buttons()
+            return
+
         entity_id = config.get('entity_id', '')
         if entity_id:
             state = await self.ha_client.get_state(entity_id)

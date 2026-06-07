@@ -120,6 +120,7 @@
   "button_editor.type.vacuum": "Pölynimuri",
   "button_editor.type.weather": "Sää",
   "button_editor.type.3d_printer": "3D-tulostin",
+  "button_editor.type.pin_window": "Kiinnitä ikkuna",
   "button_editor.automation_toggle": "Kytke",
   "button_editor.automation_trigger": "Käynnistä",
   "button_editor.automation_tooltip": "Kytkeminen ottaa automaation käyttöön tai poistaa sen käytöstä. Käynnistys ajaa sen välittömästi.",

@@ -120,6 +120,7 @@
   "button_editor.type.vacuum": "Saugroboter",
   "button_editor.type.weather": "Wetter",
   "button_editor.type.3d_printer": "3D-Drucker",
+  "button_editor.type.pin_window": "Fenster anheften",
   "button_editor.automation_toggle": "Umschalten",
   "button_editor.automation_trigger": "Auslösen",
   "button_editor.automation_tooltip": "Umschalten aktiviert/deaktiviert die Automatisierung. Auslösen führt sie sofort aus.",

@@ -80,6 +80,7 @@ class ButtonEditWidget(QWidget):
         ("Light / Switch", "switch"),
         ("Lock", "lock"),
         ("Media Player", "media_player"),
+        ("Pin Window", "pin_window"),
         ("Scene", "scene"),
         ("Script", "script"),
         ("Sensor", "widget"),
@@ -102,6 +103,7 @@ class ButtonEditWidget(QWidget):
             (t("button_editor.type.light_switch"), "switch"),
             (t("button_editor.type.lock"), "lock"),
             (t("button_editor.type.media_player"), "media_player"),
+            (t("button_editor.type.pin_window"), "pin_window"),
             (t("button_editor.type.scene"), "scene"),
             (t("button_editor.type.script"), "script"),
             (t("button_editor.type.sensor"), "widget"),
@@ -943,28 +945,31 @@ class ButtonEditWidget(QWidget):
         self.printer_stop_label.setVisible(is_printer)
         self.printer_stop_combo.setVisible(is_printer)
         
-        # Hide standard entity picker if 3D printer
-        self.entity_combo.setVisible(not is_printer)
-        self.form.labelForField(self.entity_combo).setVisible(not is_printer)
-        
+        is_pin = current_type == 'pin_window'
+
+        # Hide standard entity picker if 3D printer or pin_window (no entity needed)
+        self.entity_combo.setVisible(not is_printer and not is_pin)
+        self.form.labelForField(self.entity_combo).setVisible(not is_printer and not is_pin)
+
         # Disable appearance section for camera (no icon/color needed)
         self._set_appearance_enabled(not is_camera)
-        
-        # Sun has no label and no shortcut — hide those rows
-        is_sun = current_type == 'sun'
-        self.label_input.setVisible(not is_sun)
-        if self.form.labelForField(self.label_input):
-            self.form.labelForField(self.label_input).setVisible(not is_sun)
 
-        self.shortcut_header.setVisible(not is_sun)
-        self.custom_shortcut_check.setVisible(not is_sun)
-        self.shortcut_keys_container.setVisible(not is_sun)
+        # Sun and pin_window have no label and no shortcut — hide those rows
+        is_sun = current_type == 'sun'
+        _hide_label_shortcut = is_sun or is_pin
+        self.label_input.setVisible(not _hide_label_shortcut)
+        if self.form.labelForField(self.label_input):
+            self.form.labelForField(self.label_input).setVisible(not _hide_label_shortcut)
+
+        self.shortcut_header.setVisible(not _hide_label_shortcut)
+        self.custom_shortcut_check.setVisible(not _hide_label_shortcut)
+        self.shortcut_keys_container.setVisible(not _hide_label_shortcut)
         if self.form.labelForField(self.shortcut_keys_container):
-            self.form.labelForField(self.shortcut_keys_container).setVisible(not is_sun)
+            self.form.labelForField(self.shortcut_keys_container).setVisible(not _hide_label_shortcut)
 
         # Icon Visibility
-        # Remove option to choose icon for sensors, 3D printers, and sun (painter handles it)
-        show_icon = current_type not in ['widget', '3d_printer', 'sun']
+        # Remove option to choose icon for sensors, 3D printers, sun, and pin_window (icon is state-driven)
+        show_icon = current_type not in ['widget', '3d_printer', 'sun', 'pin_window']
         self.icon_input.setVisible(show_icon)
         if hasattr(self, 'icon_label'):
             self.icon_label.setVisible(show_icon)
@@ -976,8 +981,8 @@ class ButtonEditWidget(QWidget):
             self.form.setRowVisible(self.entry_animation_toggle, False)
 
         # Color Option Visibility
-        # Remove for Weather, Camera, and Sun (dot color is position-based)
-        show_color = current_type not in ['weather', 'camera', 'sun']
+        # Remove for Weather, Camera, Sun, and pin_window (color is not applicable)
+        show_color = current_type not in ['weather', 'camera', 'sun', 'pin_window']
         if hasattr(self, 'color_widget'):
             self.color_widget.setVisible(show_color)
         if hasattr(self, 'color_label'):
