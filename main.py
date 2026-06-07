@@ -334,7 +334,10 @@ class PrismDesktopApp(QObject):
         self.dashboard.move_to_page_requested.connect(self.on_move_to_page_requested)
 
         self.dashboard._init_settings_widget(self.config, self.input_manager)
-        
+        sw = self.dashboard.settings_widget
+        sw.shortcut_deleted.connect(self._update_button_shortcuts)
+        sw.shortcut_deleted.connect(self.save_config)
+
         self.tray_manager = TrayManager(
             on_left_click=self._toggle_dashboard,
             on_quit=self._quit,

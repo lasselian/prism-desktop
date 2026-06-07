@@ -1683,6 +1683,8 @@ class Dashboard(QWidget):
         self.settings_widget.back_requested.connect(self.hide_settings)
         self.settings_widget.settings_saved.connect(self._on_settings_saved)
         self.settings_widget.content_height_changed.connect(self._on_settings_content_changed)
+        self.settings_widget.open_button_editor_requested.connect(self._on_settings_open_editor)
+        self.settings_widget.request_delete_shortcut.connect(self._on_settings_delete_shortcut)
         
         # Wrap in ScrollArea for smooth animation (avoids squashing)
         self.settings_scroll = QScrollArea()
@@ -1768,6 +1770,18 @@ class Dashboard(QWidget):
         self.settings_saved.emit(config)
         self.hide_settings()
             
+    def _on_settings_open_editor(self, btn_cfg: dict):
+        """Open the button editor for a specific button (triggered from settings shortcut list)."""
+        slot = btn_cfg.get('row', 0) * self._cols + btn_cfg.get('col', 0)
+        self.edit_button_requested.emit(slot)
+
+    def _on_settings_delete_shortcut(self, btn_cfg: dict):
+        """Show a confirm banner then delete the shortcut on confirmation."""
+        name = btn_cfg.get('label') or btn_cfg.get('entity_id', 'this button')
+        msg = f"Remove shortcut for '{name}'?"
+        sw = self.settings_widget
+        self.show_confirm_banner(msg, on_confirm=lambda: sw.apply_shortcut_delete(btn_cfg))
+
     def _on_edit_saved(self, config: dict):
         """Handle save from embedded editor."""
         # Find existing button config to update or append?

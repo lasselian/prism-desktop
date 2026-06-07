@@ -180,6 +180,10 @@ class Icons:
     # Support
     COFFEE = "\U000F0176"              # mdi-coffee
 
+    # Editing / management
+    PENCIL_OUTLINE = "\U000F03EB"      # mdi-pencil (F03EB; outline variant not in bundled font)
+    TRASH_CAN_OUTLINE = "\U000F0A79"   # mdi-trash-can-outline
+
 # --- MDI Mapping Logic ---
 
 # --- MDI Mapping Logic ---

@@ -15,8 +15,9 @@ from PyQt6.QtWidgets import (
     QFrame, QColorDialog, QApplication, QButtonGroup, QSizePolicy
 )
 from ui.widgets.toggle_switch import ToggleSwitch
-from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QUrl, QTimer, QThread, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QUrl, QTimer, QThread, QSize, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QColor, QDesktopServices, QIcon, QPixmap, QPainter
+from PyQt6.QtWidgets import QGraphicsOpacityEffect
 from core.utils import SYSTEM_FONT
 from core.localization_manager import t, current_language, supported_languages, init_localization
 
@@ -40,6 +41,116 @@ except Exception:
     def supports_wayland_global_shortcuts():
         return False
 
+class _ShortcutRow(QWidget):
+    """A shortcut list row with hover-reveal edit and delete action buttons.
+
+    Uses WA_Hover + a single stylesheet so Qt handles the hover state during
+    paint — no enterEvent/leaveEvent required, works inside QScrollArea.
+    """
+
+    edit_clicked = pyqtSignal(dict)
+    delete_clicked = pyqtSignal(dict)
+
+    def __init__(self, btn_cfg: dict, is_light: bool, parent=None):
+        super().__init__(parent)
+        self.btn_cfg = btn_cfg
+        self.setObjectName("shortcutRow")
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+
+        from ui.icons import get_icon, get_mdi_font as _mdi_font
+
+        rl = QHBoxLayout(self)
+        rl.setContentsMargins(0, 4, 0, 4)
+        rl.setSpacing(10)
+
+        text_color = "#1e1e1e" if is_light else "#e0e0e0"
+
+        icon_lbl = QLabel(get_icon(btn_cfg.get('icon', '')))
+        icon_lbl.setFont(_mdi_font(18))
+        icon_lbl.setFixedWidth(24)
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        color = btn_cfg.get('color', '')
+        icon_lbl.setStyleSheet(f"color: {color if color else text_color}; font-size: 18px;")
+
+        name_lbl = QLabel(btn_cfg.get('label') or btn_cfg.get('entity_id', '—'))
+        name_lbl.setStyleSheet(f"color: {text_color}; font-size: 13px; background: transparent;")
+        name_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+        sc_val = btn_cfg.get('custom_shortcut', {}).get('value', '')
+        sc_text = SettingsWidget._format_shortcut(sc_val)
+        sc_lbl = QLabel(sc_text)
+        sc_lbl.setStyleSheet("color: #888; font-size: 13px; background: transparent;")
+        sc_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        # Action buttons — always in layout; CSS hides them at rest and reveals on hover
+        edit_btn = QPushButton(Icons.PENCIL_OUTLINE)
+        edit_btn.setObjectName("editBtn")
+        edit_btn.setFont(_mdi_font(15))
+        edit_btn.setFixedSize(24, 24)
+        edit_btn.setToolTip("Edit shortcut")
+        edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        edit_btn.clicked.connect(lambda: self.edit_clicked.emit(self.btn_cfg))
+
+        delete_btn = QPushButton(Icons.TRASH_CAN_OUTLINE)
+        delete_btn.setObjectName("deleteBtn")
+        delete_btn.setFont(_mdi_font(15))
+        delete_btn.setFixedSize(24, 24)
+        delete_btn.setToolTip("Remove shortcut")
+        delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        delete_btn.clicked.connect(lambda: self.delete_clicked.emit(self.btn_cfg))
+
+        rl.addWidget(icon_lbl)
+        rl.addWidget(name_lbl)
+        rl.addWidget(sc_lbl)
+        rl.addWidget(edit_btn)
+        rl.addWidget(delete_btn)
+
+        self.setMinimumHeight(32)
+
+        if is_light:
+            row_hover_bg = "rgba(0,0,0,0.05)"
+            btn_rest = "rgba(0,0,0,0.15)"
+            btn_hover = "rgba(0,0,0,0.55)"
+        else:
+            row_hover_bg = "rgba(255,255,255,0.06)"
+            btn_rest = "rgba(255,255,255,0.15)"
+            btn_hover = "#888"
+        self.setStyleSheet(f"""
+            QWidget#shortcutRow {{
+                background: transparent;
+                border-radius: 6px;
+            }}
+            QWidget#shortcutRow:hover {{
+                background: {row_hover_bg};
+            }}
+            QWidget#shortcutRow QPushButton#editBtn,
+            QWidget#shortcutRow QPushButton#deleteBtn {{
+                background: transparent;
+                border: none;
+                color: {btn_rest};
+                border-radius: 4px;
+                min-width: 24px;
+                max-width: 24px;
+                min-height: 24px;
+                max-height: 24px;
+                padding: 0px;
+            }}
+            QWidget#shortcutRow:hover QPushButton#editBtn,
+            QWidget#shortcutRow:hover QPushButton#deleteBtn {{
+                background: transparent;
+                color: {btn_hover};
+            }}
+            QWidget#shortcutRow QPushButton#editBtn:hover {{
+                background: rgba(128,128,128,0.15);
+                color: #bbb;
+            }}
+            QWidget#shortcutRow QPushButton#deleteBtn:hover {{
+                background: rgba(220,80,80,0.15);
+                color: #e05252;
+            }}
+        """)
+
+
 class SettingsWidget(QWidget):
     """
     Main settings screen.
@@ -50,6 +161,9 @@ class SettingsWidget(QWidget):
     settings_saved = pyqtSignal(dict)
     back_requested = pyqtSignal()
     content_height_changed = pyqtSignal()
+    open_button_editor_requested = pyqtSignal(dict)
+    request_delete_shortcut = pyqtSignal(dict)
+    shortcut_deleted = pyqtSignal()
 
     def __init__(self, config: dict, theme_manager=None, input_manager=None, current_version="0.0.0", parent=None):
         super().__init__(parent)
@@ -783,8 +897,6 @@ class SettingsWidget(QWidget):
 
     def _refresh_button_shortcuts(self):
         """Rebuild the button-shortcut list from current config."""
-        from ui.icons import get_icon, get_mdi_font as _mdi_font
-
         layout = self._btn_shortcuts_layout
         while layout.count():
             item = layout.takeAt(0)
@@ -803,35 +915,56 @@ class SettingsWidget(QWidget):
             layout.addWidget(hint)
             return
 
+        is_light = self.theme_manager.get_effective_theme() == 'light' if self.theme_manager else False
         for btn_cfg in assigned:
-            row = QWidget()
-            rl = QHBoxLayout(row)
-            rl.setContentsMargins(0, 4, 0, 4)
-            rl.setSpacing(10)
-
-            icon_lbl = QLabel(get_icon(btn_cfg.get('icon', '')))
-            icon_lbl.setFont(_mdi_font(18))
-            icon_lbl.setFixedWidth(24)
-            icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            color = btn_cfg.get('color', '')
-            if color:
-                icon_lbl.setStyleSheet(f"color: {color}; font-size: 18px;")
-
-            name_lbl = QLabel(btn_cfg.get('label') or btn_cfg.get('entity_id', '—'))
-            name_lbl.setStyleSheet("font-size: 13px;")
-            name_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-
-            sc_text = self._format_shortcut(btn_cfg['custom_shortcut']['value'])
-            sc_lbl = QLabel(sc_text)
-            sc_lbl.setStyleSheet("color: #888; font-size: 13px;")
-            sc_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-
-            rl.addWidget(icon_lbl)
-            rl.addWidget(name_lbl)
-            rl.addWidget(sc_lbl)
-
-            row.setMinimumHeight(32)
+            row = _ShortcutRow(btn_cfg, is_light=is_light, parent=self)
+            row.edit_clicked.connect(self._on_edit_shortcut)
+            row.delete_clicked.connect(self._on_delete_shortcut)
             layout.addWidget(row)
+
+    def _on_edit_shortcut(self, btn_cfg: dict):
+        self.open_button_editor_requested.emit(btn_cfg)
+
+    def _on_delete_shortcut(self, btn_cfg: dict):
+        self.request_delete_shortcut.emit(btn_cfg)
+
+    def apply_shortcut_delete(self, btn_cfg: dict):
+        """Called by dashboard after the confirm banner is accepted."""
+        for btn in self.config.get('buttons', []):
+            if (btn.get('row') == btn_cfg.get('row') and
+                    btn.get('col') == btn_cfg.get('col') and
+                    btn.get('page', 0) == btn_cfg.get('page', 0)):
+                btn['custom_shortcut'] = {'enabled': False, 'value': ''}
+                break
+
+        self.shortcut_deleted.emit()
+
+        target = self._find_row_widget(btn_cfg)
+        if target:
+            eff = QGraphicsOpacityEffect(target)
+            target.setGraphicsEffect(eff)
+            anim = QPropertyAnimation(eff, b"opacity")
+            anim.setDuration(200)
+            anim.setEasingCurve(QEasingCurve.Type.InCubic)
+            anim.setStartValue(1.0)
+            anim.setEndValue(0.0)
+            anim.finished.connect(self._refresh_button_shortcuts)
+            self._delete_anim = anim  # prevent GC
+            anim.start()
+        else:
+            self._refresh_button_shortcuts()
+
+    def _find_row_widget(self, btn_cfg: dict):
+        layout = self._btn_shortcuts_layout
+        for i in range(layout.count()):
+            w = layout.itemAt(i).widget()
+            if w and hasattr(w, 'btn_cfg'):
+                bc = w.btn_cfg
+                if (bc.get('row') == btn_cfg.get('row') and
+                        bc.get('col') == btn_cfg.get('col') and
+                        bc.get('page', 0) == btn_cfg.get('page', 0)):
+                    return w
+        return None
 
     @staticmethod
     def _format_shortcut(value: str) -> str:
