@@ -921,7 +921,7 @@ class PrinterOverlay(BaseOverlay):
         # Header: title left, compact state badge right (before close)
         _badge_pad  = 12
         badge_label = self._state.upper()
-        fm_badge    = QFontMetrics(QFont(SYSTEM_FONT, 9, QFont.Weight.Bold))
+        fm_badge    = QFontMetrics(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
         badge_w     = fm_badge.horizontalAdvance(badge_label) + _badge_pad
         badge_x     = max(rx + 4, rect.width() - close_size - pad - 4 - badge_w)
         self._draw_state_badge(painter, badge_x, ry + 1, alpha, pill_pad=_badge_pad)
@@ -954,7 +954,7 @@ class PrinterOverlay(BaseOverlay):
 
         if _active:
             # Time remaining + percentage
-            painter.setFont(QFont(SYSTEM_FONT, 9))
+            painter.setFont(QFont(SYSTEM_FONT, 8))
             painter.setPen(self._fg_color(int(alpha * 0.6)))
             painter.drawText(QRect(rx, ry, rw, 16), Qt.AlignmentFlag.AlignLeft,  self._time_remaining)
             painter.drawText(QRect(rx, ry, rw, 16), Qt.AlignmentFlag.AlignRight, f"{self._progress:.0f}%")
@@ -1000,7 +1000,7 @@ class PrinterOverlay(BaseOverlay):
 
         # State badge right of title in the same header row
         badge_label = self._state.upper()
-        fm_badge    = QFontMetrics(QFont(SYSTEM_FONT, 9, QFont.Weight.Bold))
+        fm_badge    = QFontMetrics(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
         badge_w     = fm_badge.horizontalAdvance(badge_label) + 18
         badge_x     = rect.width() - close_size - pad - 6 - badge_w
         self._draw_state_badge(painter, badge_x, pad + 1, alpha)
@@ -1042,7 +1042,7 @@ class PrinterOverlay(BaseOverlay):
 
         if _active:
             # Time remaining + percentage
-            painter.setFont(QFont(SYSTEM_FONT, 9))
+            painter.setFont(QFont(SYSTEM_FONT, 8))
             painter.setPen(self._fg_color(int(alpha * 0.6)))
             painter.drawText(QRect(pad, time_y, sw, 16), Qt.AlignmentFlag.AlignLeft,  self._time_remaining)
             painter.drawText(QRect(pad, time_y, sw, 16), Qt.AlignmentFlag.AlignRight, f"{self._progress:.0f}%")
@@ -1070,7 +1070,7 @@ class PrinterOverlay(BaseOverlay):
 
         # State badge
         self._draw_state_badge(painter, pad, y, alpha)
-        y += 32   # 20px badge + 12px margin before bar
+        y += 28   # 16px badge + 12px margin before bar
 
         # Progress bar — always visible; green when printing, yellow otherwise
         _active   = self._is_active_state()
@@ -1089,7 +1089,7 @@ class PrinterOverlay(BaseOverlay):
 
         if _active:
             # Time remaining + percentage
-            painter.setFont(QFont(SYSTEM_FONT, 9))
+            painter.setFont(QFont(SYSTEM_FONT, 8))
             painter.setPen(self._fg_color(int(alpha * 0.6)))
             painter.drawText(QRect(pad, y, sw, 16), Qt.AlignmentFlag.AlignLeft,  self._time_remaining)
             painter.drawText(QRect(pad, y, sw, 16), Qt.AlignmentFlag.AlignRight, f"{self._progress:.0f}%")
@@ -1160,16 +1160,16 @@ class PrinterOverlay(BaseOverlay):
         state_color.setAlpha(min(255, int(alpha * 0.9)))
 
         label  = self._state.upper()
-        fm     = QFontMetrics(QFont(SYSTEM_FONT, 9, QFont.Weight.Bold))
+        fm     = QFontMetrics(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
         pill_w = fm.horizontalAdvance(label) + pill_pad
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(state_color)
-        painter.drawRoundedRect(QRect(x, y, pill_w, 20), 10, 10)
+        painter.drawRoundedRect(QRect(x, y, pill_w, 16), 8, 8)
 
-        painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.Bold))
+        painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
         painter.setPen(QColor(255, 255, 255, alpha))
-        painter.drawText(QRect(x, y, pill_w, 20), Qt.AlignmentFlag.AlignCenter, label)
+        painter.drawText(QRect(x, y, pill_w, 16), Qt.AlignmentFlag.AlignCenter, label)
 
     def _draw_temp_cards(self, painter, x, y, w, h, alpha):
         _fmt        = lambda v: format_temperature(v, self._printer_source_unit, self._temperature_unit_preference, precision=0, fallback="0")
@@ -1193,7 +1193,7 @@ class PrinterOverlay(BaseOverlay):
             painter.drawRoundedRect(card_rect, 8, 8)
 
             ic_pen   = QColor(ic); ic_pen.setAlpha(min(255, int(alpha * 0.95)))
-            font_val = QFont(SYSTEM_FONT, 10, QFont.Weight.Bold)
+            font_val = QFont(SYSTEM_FONT, 9, QFont.Weight.Bold)
             tx       = cx + 8 + 22
             tw       = card_w - 8 - 22 - 4
 
