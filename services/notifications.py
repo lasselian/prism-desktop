@@ -23,12 +23,12 @@ class NotificationManager(QObject):
 
     APP_NAME = "Prism Desktop"
     APP_ID = "com.prismdesktop.app"
-    _windows_registered = False
 
     def __init__(self, tray_icon: QSystemTrayIcon = None, ha_client=None):
         super().__init__()
         self.tray_icon = tray_icon
         self.ha_client = ha_client
+        self._windows_registered = False
 
     def set_ha_client(self, client):
         """Update the HA client reference."""
@@ -67,7 +67,7 @@ class NotificationManager(QObject):
             if icon_path:
                 kwargs['icon'] = icon_path
             register(self.APP_ID, self.APP_NAME, **kwargs)
-            NotificationManager._windows_registered = True
+            self._windows_registered = True
             logger.info("[Notify] Registered Prism Desktop with Windows notification system")
         except Exception as e:
             logger.warning(f"[Notify] Windows app registration failed: {e}")
@@ -76,7 +76,7 @@ class NotificationManager(QObject):
         """Windows: use win11toast (native Windows ToastNotification API)."""
         try:
             from win11toast import toast
-            if not NotificationManager._windows_registered:
+            if not self._windows_registered:
                 self._register_windows_app()
             kwargs = {
                 'app_id': self.APP_ID,

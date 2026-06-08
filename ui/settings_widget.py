@@ -167,12 +167,13 @@ class SettingsWidget(QWidget):
     request_delete_shortcut = pyqtSignal(dict)
     shortcut_deleted = pyqtSignal()
 
-    def __init__(self, config: dict, theme_manager=None, input_manager=None, current_version="0.0.0", parent=None):
+    def __init__(self, config: dict, theme_manager=None, input_manager=None, current_version="0.0.0", parent=None, dashboard=None):
         super().__init__(parent)
         self.config = config
         self.current_version = current_version
         self.theme_manager = theme_manager
         self.input_manager = input_manager
+        self.dashboard = dashboard
 
         self._test_thread: Optional[ConnectionTestThread] = None
         self._update_thread = None
@@ -1209,7 +1210,7 @@ class SettingsWidget(QWidget):
         self.border_effect_combo.set_effect(text)
 
     def _on_pin_toggled(self, checked: bool):
-        self.config.setdefault('appearance', {})['pin_window'] = checked
+        pass  # save_settings() reads pin_check.isChecked() directly
 
     def toggle_recording(self, checked):
         if self._should_delegate_shortcuts_to_kde():
@@ -1353,6 +1354,9 @@ class SettingsWidget(QWidget):
     def on_test_complete(self, success: bool, message: str):
         try:
             self._set_conn_status("ok" if success else "error", message)
+            if not success and self.dashboard:
+                from ui.notifications import notify_connection_test_result
+                notify_connection_test_result(self.dashboard, success, message)
         except RuntimeError:
             pass  # slot fired after widget was destroyed (save-then-close race)
 

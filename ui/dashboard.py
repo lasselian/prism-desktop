@@ -1676,7 +1676,7 @@ class Dashboard(QWidget):
         self._settings_input_manager = input_manager
         
         # IMPORT Settings Widget
-        self.settings_widget = SettingsWidget(config, self.theme_manager, input_manager, self.version, self)
+        self.settings_widget = SettingsWidget(config, self.theme_manager, input_manager, self.version, self, dashboard=self)
         self.settings_widget.back_requested.connect(self.hide_settings)
         self.settings_widget.settings_saved.connect(self._on_settings_saved)
         self.settings_widget.content_height_changed.connect(self._on_settings_content_changed)
@@ -1769,10 +1769,13 @@ class Dashboard(QWidget):
             
     def _on_settings_open_editor(self, btn_cfg: dict):
         """Open the button editor for a specific button (triggered from settings shortcut list)."""
-        # Stash the button's page so _open_button_editor uses it instead of the
-        # currently visible page, which may differ on multi-page dashboards.
+        # Stash the button's page/row/col so _open_button_editor uses the stored
+        # position rather than recalculating from the live _cols (which may differ
+        # from the column count when the button was originally placed).
         self._settings_editor_page = btn_cfg.get('page', 0)
-        slot = btn_cfg.get('row', 0) * self._cols + btn_cfg.get('col', 0)
+        self._settings_editor_row = btn_cfg.get('row', 0)
+        self._settings_editor_col = btn_cfg.get('col', 0)
+        slot = self._settings_editor_row * self._cols + self._settings_editor_col
         self.edit_button_requested.emit(slot)
 
     def _on_settings_delete_shortcut(self, btn_cfg: dict):

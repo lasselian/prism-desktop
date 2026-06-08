@@ -113,6 +113,9 @@ class PrismDesktopApp(QObject):
 
         # System metrics reporting (CPU/RAM)
         self._metrics_task: Optional[asyncio.Task] = None
+
+        # Lock to prevent TOCTOU race on pin_window toggle
+        self._pin_lock = asyncio.Lock()
         
         # Cache for entity list (for editor)
         self._available_entities: list[dict] = []
@@ -635,12 +638,19 @@ class PrismDesktopApp(QObject):
         if not self.dashboard: return
         if not self.dashboard.isVisible(): self.dashboard.show()
 
-        # Convert runtime slot to (row, col) for lookup, scoped to the correct page.
         # When opened from settings, _on_settings_open_editor stashes the button's
-        # actual page so we don't use the currently visible page (which may differ).
-        row = slot // self.dashboard._cols
-        col = slot % self.dashboard._cols
+        # actual page/row/col so we don't recalculate from the live _cols (which may
+        # have changed since the button was placed).
+        stashed_row = getattr(self.dashboard, '_settings_editor_row', None)
+        stashed_col = getattr(self.dashboard, '_settings_editor_col', None)
         page = getattr(self.dashboard, '_settings_editor_page', None)
+        if stashed_row is not None:
+            row, col = stashed_row, stashed_col
+            del self.dashboard._settings_editor_row
+            del self.dashboard._settings_editor_col
+        else:
+            row = slot // self.dashboard._cols
+            col = slot % self.dashboard._cols
         if page is not None:
             del self.dashboard._settings_editor_page
         else:
@@ -875,8 +885,9 @@ class PrismDesktopApp(QObject):
 
     async def _handle_button_click(self, config):
         if config.get('type') == 'pin_window':
-            current = self.config.get('appearance', {}).get('pin_window', False)
-            self.config.setdefault('appearance', {})['pin_window'] = not current
+            async with self._pin_lock:
+                current = self.config.get('appearance', {}).get('pin_window', False)
+                self.config.setdefault('appearance', {})['pin_window'] = not current
             self.save_config()
             if self.dashboard:
                 self.dashboard.refresh_pin_buttons()
@@ -1032,7 +1043,8 @@ class PrismDesktopApp(QObject):
         """Start (or restart) the periodic location update task."""
         if self._location_task and not self._location_task.done():
             self._location_task.cancel()
-        self._location_task = asyncio.create_task(self._location_update_loop())
+        QTimer.singleShot(0, lambda: setattr(self, '_location_task',
+            asyncio.create_task(self._location_update_loop())))
 
     def _stop_location_loop(self):
         """Cancel the location update task if running."""
@@ -1060,7 +1072,8 @@ class PrismDesktopApp(QObject):
         """Start (or restart) the periodic CPU/RAM metrics update task."""
         if self._metrics_task and not self._metrics_task.done():
             self._metrics_task.cancel()
-        self._metrics_task = asyncio.create_task(self._metrics_update_loop())
+        QTimer.singleShot(0, lambda: setattr(self, '_metrics_task',
+            asyncio.create_task(self._metrics_update_loop())))
 
     def _stop_metrics_loop(self):
         """Cancel the metrics update task if running."""
