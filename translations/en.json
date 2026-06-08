@@ -4,7 +4,7 @@
   "settings.save_btn": "Save",
   "settings.section.home_assistant": "HOME ASSISTANT",
   "settings.section.appearance": "APPEARANCE",
-  "settings.section.shortcut": "SHORTCUT",
+  "settings.section.shortcut": "SHORTCUTS",
   "settings.section.support": "SUPPORT",
   "settings.ha.url_label": "URL:",
   "settings.ha.url_placeholder": "http://homeassistant.local:8123",

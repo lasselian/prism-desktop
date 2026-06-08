@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QLabel, QApplication, QGraphicsDropShadowEffect, QMenu,
-    QGraphicsOpacityEffect
+    QGraphicsOpacityEffect, QGraphicsEffect
 )
 from PyQt6.QtCore import (
     Qt, QPoint, QPointF, pyqtSignal, QPropertyAnimation, QEasingCurve, 
@@ -62,6 +62,71 @@ def _compute_fraction(num, vmin, vmax):
     if span <= 0:
         return None
     return max(0.0, min(1.0, (float(num) - float(vmin)) / span))
+
+
+class ButtonMorphEffect(QGraphicsEffect):
+    """Single compositing effect that handles both drag-fade opacity and spring-resize scale.
+
+    Qt only allows one QGraphicsEffect per widget, so this combines both concerns.
+    Disabled by default; auto-enabled when either opacity < 1 or scale != 1.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._opacity = 1.0
+        self._sx = 1.0
+        self._sy = 1.0
+
+    # --- pyqtProperty accessors so QPropertyAnimation can drive them ---
+
+    def get_sx(self): return self._sx
+    def set_sx(self, v):
+        self._sx = v
+        self.update()
+    sx = pyqtProperty(float, get_sx, set_sx)
+
+    def get_sy(self): return self._sy
+    def set_sy(self, v):
+        self._sy = v
+        self.update()
+    sy = pyqtProperty(float, get_sy, set_sy)
+
+    def get_opacity(self): return self._opacity
+    def set_opacity_prop(self, v):
+        self._opacity = v
+        self.update()
+    opacity_prop = pyqtProperty(float, get_opacity, set_opacity_prop)
+
+    def _refresh_enabled(self):
+        needs = (self._opacity < 0.999 or
+                 abs(self._sx - 1.0) > 0.003 or
+                 abs(self._sy - 1.0) > 0.003)
+        self.setEnabled(needs)
+
+    def boundingRectFor(self, source_rect):
+        # Small extra margin so a brief spring overshoot isn't clipped.
+        m = max(source_rect.width(), source_rect.height()) * 0.08 + 4
+        return source_rect.adjusted(-m, -m, m, m)
+
+    def draw(self, painter):
+        px, offset = self.sourcePixmap(Qt.CoordinateSystem.LogicalCoordinates)
+        if px.isNull():
+            return
+        w = float(px.width())
+        h = float(px.height())
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        painter.setOpacity(self._opacity)
+        sx, sy = self._sx, self._sy
+        if abs(sx - 1.0) < 0.003 and abs(sy - 1.0) < 0.003:
+            painter.drawPixmap(offset, px)
+        else:
+            # Anchor to top-left so the button grows toward the resize handle (bottom-right)
+            painter.drawPixmap(
+                QRectF(float(offset.x()), float(offset.y()), w * sx, h * sy),
+                px,
+                QRectF(0.0, 0.0, w, h),
+            )
+
 
 class DashboardButton(QFrame):
     """Button or widget in the grid."""
@@ -223,26 +288,31 @@ class DashboardButton(QFrame):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
         
-        # Pre-warm opacity effect for smoother animations
-        self._opacity_eff = QGraphicsOpacityEffect(self)
-        self._opacity_eff.setOpacity(1.0)
-        self._opacity_eff.setEnabled(False) # Disable by default to save cost
-        self.setGraphicsEffect(self._opacity_eff)
+        # Single compositing effect — handles both drag-fade and spring-resize
+        self._morph_eff = ButtonMorphEffect(self)
+        self._morph_eff.setEnabled(False)
+        self.setGraphicsEffect(self._morph_eff)
+
+        # Spring morph animations (must come after _morph_eff is created)
+        _morph_easing = QEasingCurve(QEasingCurve.Type.OutBack)
+        _morph_easing.setOvershoot(0.8)
+        self.morph_x_anim = QPropertyAnimation(self._morph_eff, b"sx")
+        self.morph_x_anim.setDuration(260)
+        self.morph_x_anim.setEasingCurve(_morph_easing)
+        self.morph_y_anim = QPropertyAnimation(self._morph_eff, b"sy")
+        self.morph_y_anim.setDuration(260)
+        self.morph_y_anim.setEasingCurve(_morph_easing)
+        self.morph_x_anim.finished.connect(self._on_morph_finished)
+        self.morph_y_anim.finished.connect(self._on_morph_finished)
         
     def set_faded(self, opacity: float):
-        """Set fade level (0.0 - 1.0). Auto-enables effect if needed."""
-        # Lazy init if missing (fixes AttributeError if init failed or caching issues)
-        if not hasattr(self, '_opacity_eff'):
-            self._opacity_eff = QGraphicsOpacityEffect(self)
-            self._opacity_eff.setOpacity(1.0)
-            self._opacity_eff.setEnabled(False)
-            self.setGraphicsEffect(self._opacity_eff)
-
-        if opacity >= 1.0:
-            self._opacity_eff.setEnabled(False)
-        else:
-            self._opacity_eff.setEnabled(True)
-            self._opacity_eff.setOpacity(opacity)
+        """Set drag-fade level (0.0–1.0). Auto-enables the morph effect when needed."""
+        if not hasattr(self, '_morph_eff'):
+            self._morph_eff = ButtonMorphEffect(self)
+            self._morph_eff.setEnabled(False)
+            self.setGraphicsEffect(self._morph_eff)
+        self._morph_eff._opacity = max(0.0, min(1.0, opacity))
+        self._morph_eff._refresh_enabled()
             
     def set_opacity(self, opacity: float):
         """Standard public method for setting overall button opacity."""
@@ -268,11 +338,11 @@ class DashboardButton(QFrame):
     
     def get_resize_handle_opacity(self):
         return self._resize_handle_opacity
-        
+
     def set_resize_handle_opacity(self, val):
         self._resize_handle_opacity = val
-        self.update() 
-        
+        self.update()
+
     resize_handle_opacity = pyqtProperty(float, get_resize_handle_opacity, set_resize_handle_opacity)
     
     def get_input_blink_opacity(self):
@@ -341,22 +411,73 @@ class DashboardButton(QFrame):
 
     show_dimming = pyqtProperty(bool, get_show_dimming, set_show_dimming)
 
-    def set_spans(self, x, y):
+    def set_spans(self, x, y, animate=False):
         """Update spans and resize widget."""
+        old_w = self.width()
+        old_h = self.height()
         self.span_x = x
         self.span_y = y
         # Calculate new size based on grid units (90x80) + spacing (8)
         w = 90 * x + (8 * (x - 1))
         h = 80 * y + (8 * (y - 1))
         self.setFixedSize(w, h)
-        
+
+        _will_animate = animate and (old_w != w or old_h != h)
+
+        if _will_animate:
+            # Spring morph: compute where the button visually is right now (handles
+            # chaining mid-animation), then animate the effect's scale to 1.0.
+            cur_sx = self._morph_eff._sx
+            cur_sy = self._morph_eff._sy
+            start_sx = (cur_sx * old_w) / w if w > 0 else 1.0
+            start_sy = (cur_sy * old_h) / h if h > 0 else 1.0
+            self.morph_x_anim.stop()
+            self.morph_y_anim.stop()
+            self._morph_eff._sx = start_sx
+            self._morph_eff._sy = start_sy
+            self._morph_eff.setEnabled(True)
+            if abs(start_sx - 1.0) > 0.01:
+                self.morph_x_anim.setStartValue(start_sx)
+                self.morph_x_anim.setEndValue(1.0)
+                self.morph_x_anim.start()
+            else:
+                self._morph_eff._sx = 1.0
+            if abs(start_sy - 1.0) > 0.01:
+                self.morph_y_anim.setStartValue(start_sy)
+                self.morph_y_anim.setEndValue(1.0)
+                self.morph_y_anim.start()
+            else:
+                self._morph_eff._sy = 1.0
+
         # Re-apply camera image to fit new size immediately
         if self._last_camera_pixmap and not self._last_camera_pixmap.isNull():
              self.set_camera_image(self._last_camera_pixmap)
-             
+
         # Force content update to adapt layout (1x1 -> 2x1 etc)
         self.update_content()
+
+        if _will_animate:
+            # Qt already repositioned the labels inside the new larger widget, so
+            # sourcePixmap() during the morph shows text in its final position but
+            # scaled down — causing a mid-transition glitch.  Hide labels now so
+            # the morph only animates the background; restore them in _on_morph_finished.
+            self.value_label.hide()
+            self.name_label.hide()
+            self._relabel_after_morph = True
+
         self.update()
+
+    def _on_morph_finished(self):
+        """Disable the morph effect once both animations have settled to 1.0."""
+        if (self.morph_x_anim.state() != QPropertyAnimation.State.Running and
+                self.morph_y_anim.state() != QPropertyAnimation.State.Running):
+            self._morph_eff._sx = 1.0
+            self._morph_eff._sy = 1.0
+            self._morph_eff._refresh_enabled()
+            if getattr(self, '_relabel_after_morph', False):
+                self._relabel_after_morph = False
+                self._content_fp = None  # bypass cache so labels are restored
+                self.update_content()
 
     def trigger_feedback(self):
         """Start the feedback animation."""
@@ -1291,7 +1412,6 @@ class DashboardButton(QFrame):
         """Custom paint event for effects."""
         # First draw normal style (background)
         super().paintEvent(event)
-        
         # Delegate painting logic to helper
         DashboardButtonPainter.paint(self, event)
     

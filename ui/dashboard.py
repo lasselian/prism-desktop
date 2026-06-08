@@ -556,7 +556,7 @@ class Dashboard(QWidget):
                 break
         
         # Update button instance size (but DON'T rebuild grid during drag)
-        source_btn.set_spans(valid_span_x, valid_span_y)
+        source_btn.set_spans(valid_span_x, valid_span_y, animate=True)
 
         # Live preview: rebuild grid without disrupting mouse events
         self.rebuild_grid(preview_mode=True)
@@ -717,19 +717,16 @@ class Dashboard(QWidget):
         """Animate opacity for specific buttons."""
         for btn in self.buttons:
             if btn.slot in slot_indices:
-                # Ensure effect is enabled
-                btn._opacity_eff.setEnabled(True)
-                
-                # Create animation
-                anim = QPropertyAnimation(btn._opacity_eff, b"opacity", btn)
+                eff = btn._morph_eff
+                eff._opacity = 0.0
+                eff.setEnabled(True)
+
+                anim = QPropertyAnimation(eff, b"opacity_prop", btn)
                 anim.setStartValue(0.0)
                 anim.setEndValue(1.0)
                 anim.setDuration(600)
                 anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-                
-                # Disable effect when done
-                anim.finished.connect(lambda b=btn: b._opacity_eff.setEnabled(False))
-                
+                anim.finished.connect(lambda b=btn: b._morph_eff._refresh_enabled())
                 anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
     
     def _check_pending_resize(self):
@@ -1772,6 +1769,9 @@ class Dashboard(QWidget):
             
     def _on_settings_open_editor(self, btn_cfg: dict):
         """Open the button editor for a specific button (triggered from settings shortcut list)."""
+        # Stash the button's page so _open_button_editor uses it instead of the
+        # currently visible page, which may differ on multi-page dashboards.
+        self._settings_editor_page = btn_cfg.get('page', 0)
         slot = btn_cfg.get('row', 0) * self._cols + btn_cfg.get('col', 0)
         self.edit_button_requested.emit(slot)
 

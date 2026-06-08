@@ -67,10 +67,10 @@ class NotificationManager(QObject):
             if icon_path:
                 kwargs['icon'] = icon_path
             register(self.APP_ID, self.APP_NAME, **kwargs)
+            NotificationManager._windows_registered = True
             logger.info("[Notify] Registered Prism Desktop with Windows notification system")
         except Exception as e:
             logger.warning(f"[Notify] Windows app registration failed: {e}")
-        NotificationManager._windows_registered = True
 
     def _show_windows(self, title: str, message: str, image_path: Optional[str] = None):
         """Windows: use win11toast (native Windows ToastNotification API)."""

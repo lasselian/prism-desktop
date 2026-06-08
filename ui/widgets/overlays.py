@@ -1267,6 +1267,7 @@ class PrinterOverlay(BaseOverlay):
         pause_label = t("overlay.printer.resume_btn") if is_paused else t("overlay.printer.pause_btn")
         stop_label  = t("overlay.printer.stop_btn")
 
+        show_text = btn_w >= 80
         font_text = QFont(SYSTEM_FONT, 10, QFont.Weight.Bold)
         fm        = QFontMetrics(font_text)
         icon_w    = 20   # MDI glyph width at 15pt
@@ -1294,14 +1295,17 @@ class PrinterOverlay(BaseOverlay):
             if is_stop and self._confirm_stop_mode:
                 painter.setFont(font_text)
                 painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, t("overlay.printer.confirm_stop"))
-            else:
+            elif show_text:
                 painter.setFont(get_mdi_font(15))
-                painter.drawText(QRect(btn_rect.x() + 8, y, icon_w, h),
+                painter.drawText(QRect(btn_rect.x() + 8, btn_rect.y(), icon_w, btn_rect.height()),
                                  Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                                  get_icon(icon_name))
                 painter.setFont(font_text)
-                painter.drawText(QRect(btn_rect.x() + 8 + icon_w + icon_gap, y, btn_rect.width() - 8 - icon_w - icon_gap - 4, h),
+                painter.drawText(QRect(btn_rect.x() + 8 + icon_w + icon_gap, btn_rect.y(), btn_rect.width() - 8 - icon_w - icon_gap - 4, btn_rect.height()),
                                  Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
+            else:
+                painter.setFont(get_mdi_font(16))
+                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon(icon_name))
 
         self._btn_pause = QRect(x, y, btn_w, h)
         _draw_btn(self._btn_pause, pause_icon, pause_label, False)

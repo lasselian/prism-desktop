@@ -600,6 +600,12 @@ class PrismDesktopApp(QObject):
                 self._start_location_loop()
             else:
                 self._stop_location_loop()
+            # Sync metrics loop (loop exits immediately when no webhook_id, so safe to call always)
+            mobile_cfg = self.config.get('mobile_app', {})
+            if mobile_cfg.get('send_cpu', False) or mobile_cfg.get('send_ram', False):
+                self._start_metrics_loop()
+            else:
+                self._stop_metrics_loop()
 
     @pyqtSlot(dict)
     def _on_embedded_settings_saved(self, new_config: dict):
@@ -629,10 +635,16 @@ class PrismDesktopApp(QObject):
         if not self.dashboard: return
         if not self.dashboard.isVisible(): self.dashboard.show()
 
-        # Convert runtime slot to (row, col) for lookup, scoped to current page
+        # Convert runtime slot to (row, col) for lookup, scoped to the correct page.
+        # When opened from settings, _on_settings_open_editor stashes the button's
+        # actual page so we don't use the currently visible page (which may differ).
         row = slot // self.dashboard._cols
         col = slot % self.dashboard._cols
-        page = self._current_page()
+        page = getattr(self.dashboard, '_settings_editor_page', None)
+        if page is not None:
+            del self.dashboard._settings_editor_page
+        else:
+            page = self._current_page()
 
         buttons = self.config.get('buttons', [])
         existing_config = next(

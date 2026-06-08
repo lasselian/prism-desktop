@@ -57,7 +57,7 @@ class _ShortcutRow(QWidget):
         self.setObjectName("shortcutRow")
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
-        from ui.icons import get_icon, get_mdi_font as _mdi_font
+        from ui.icons import get_icon, get_mdi_font as _mdi_font, get_icon_for_type
 
         rl = QHBoxLayout(self)
         rl.setContentsMargins(0, 4, 0, 4)
@@ -65,7 +65,9 @@ class _ShortcutRow(QWidget):
 
         text_color = "#1e1e1e" if is_light else "#e0e0e0"
 
-        icon_lbl = QLabel(get_icon(btn_cfg.get('icon', '')))
+        _custom_icon = btn_cfg.get('icon', '')
+        _icon_char = get_icon(_custom_icon) if _custom_icon else get_icon_for_type(btn_cfg.get('type', 'switch'))
+        icon_lbl = QLabel(_icon_char)
         icon_lbl.setFont(_mdi_font(18))
         icon_lbl.setFixedWidth(24)
         icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -179,6 +181,7 @@ class SettingsWidget(QWidget):
         self._panels: list = []
         self._active_panel_idx = 0
         self._pill_buttons: list = []
+        self._delete_anims: list = []  # keep in-flight QPropertyAnimations alive
 
         self._debounce_timer = QTimer()
         self._debounce_timer.setSingleShot(True)
@@ -193,7 +196,6 @@ class SettingsWidget(QWidget):
         self.load_config()
         self.url_input.textChanged.connect(self._on_credential_changed)
         self.token_input.textChanged.connect(self._on_credential_changed)
-        self._poll_timer.start()
         if self.url_input.text().strip() and self.token_input.text().strip():
             QTimer.singleShot(600, self._trigger_auto_test)
         self._update_shortcut_controls()
@@ -454,6 +456,14 @@ class SettingsWidget(QWidget):
             }}
         """)
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._poll_timer.start()
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self._poll_timer.stop()
+
     def setup_ui(self):
         self._update_stylesheet()
 
@@ -636,6 +646,36 @@ class SettingsWidget(QWidget):
         vbox.setContentsMargins(0, 0, 0, 0)
         vbox.setSpacing(8)
 
+        # Language pill (top)
+        # Compute label column width to match the settings pill below
+        _fm = self.fontMetrics()
+        _widest = max(
+            t("settings.appearance.theme_label"),
+            t("settings.appearance.border_label"),
+            t("settings.appearance.button_style_label"),
+            t("settings.appearance.tray_label"),
+            t("settings.appearance.temp_label"),
+            t("settings.appearance.pages_label"),
+            key=lambda s: _fm.horizontalAdvance(s),
+        )
+        _label_col_w = _fm.horizontalAdvance(_widest) + 4
+
+        lang_frame, lang_form = self._make_pill_panel()
+        self._language_codes = list(supported_languages().keys())
+        self.language_combo = QComboBox()
+        self.language_combo.addItems(list(supported_languages().values()))
+        self.language_combo.setMinimumWidth(120)
+        _lang_lbl = QLabel(t("settings.appearance.language_label"))
+        _lang_lbl.setMinimumWidth(_label_col_w)
+        lang_form.addRow(_lang_lbl, self.language_combo)
+
+        self._language_restart_note = QLabel(t("settings.appearance.language_restart_note"))
+        self._language_restart_note.setStyleSheet("color: #aaa; font-size: 11px;")
+        self._language_restart_note.hide()
+        lang_form.addRow("", self._language_restart_note)
+        self.language_combo.currentIndexChanged.connect(self._on_language_changed)
+        vbox.addWidget(lang_frame)
+
         # Settings pill
         settings_frame, form = self._make_pill_panel()
 
@@ -662,18 +702,6 @@ class SettingsWidget(QWidget):
         ])
         self.button_style_combo.setMinimumWidth(120)
         form.addRow(t("settings.appearance.button_style_label"), self.button_style_combo)
-
-        self._language_codes = list(supported_languages().keys())
-        self.language_combo = QComboBox()
-        self.language_combo.addItems(list(supported_languages().values()))
-        self.language_combo.setMinimumWidth(120)
-        form.addRow(t("settings.appearance.language_label"), self.language_combo)
-
-        self._language_restart_note = QLabel(t("settings.appearance.language_restart_note"))
-        self._language_restart_note.setStyleSheet("color: #aaa; font-size: 11px;")
-        self._language_restart_note.hide()
-        form.addRow("", self._language_restart_note)
-        self.language_combo.currentIndexChanged.connect(self._on_language_changed)
 
         self.tray_position_combo = QComboBox()
         self.tray_position_combo.addItems([
@@ -948,8 +976,11 @@ class SettingsWidget(QWidget):
             anim.setEasingCurve(QEasingCurve.Type.InCubic)
             anim.setStartValue(1.0)
             anim.setEndValue(0.0)
-            anim.finished.connect(self._refresh_button_shortcuts)
-            self._delete_anim = anim  # prevent GC
+            self._delete_anims.append(anim)
+            def _on_done(a=anim):
+                self._delete_anims.remove(a)
+                self._refresh_button_shortcuts()
+            anim.finished.connect(_on_done)
             anim.start()
         else:
             self._refresh_button_shortcuts()
@@ -1320,7 +1351,10 @@ class SettingsWidget(QWidget):
 
     @pyqtSlot(bool, str)
     def on_test_complete(self, success: bool, message: str):
-        self._set_conn_status("ok" if success else "error", message)
+        try:
+            self._set_conn_status("ok" if success else "error", message)
+        except RuntimeError:
+            pass  # slot fired after widget was destroyed (save-then-close race)
 
     _VERSION_STYLE = 'style="color: #aaa; font-size: 11px; text-decoration: none;"'
     _HASH_STYLE = 'style="color: #FFC90E; font-size: 11px; text-decoration: none;"'
