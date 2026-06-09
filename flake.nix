@@ -11,13 +11,13 @@
       forAllSystems = f:
         nixpkgs.lib.genAttrs systems
           (system: f (import nixpkgs { inherit system; }));
-      buildCommit = "53d9b2fab954";
+      buildCommit = "6ad8bda28c30";
       buildDirty = false;
     in
     {
       packages = forAllSystems (pkgs:
         let
-          version = "1.5.3";
+          version = "1.5.4";
 
           pythonEnv = pkgs.python3.withPackages (ps: with ps; [
             pyqt6
@@ -26,6 +26,7 @@
             pillow
             pynput
             requests
+            psutil
             keyring
             cryptography
             secretstorage
@@ -42,7 +43,7 @@
               owner = "lasselian";
               repo = "prism-desktop";
               rev = version;
-              hash = "sha256-2xKMSXte8mAMme0CxUw8dhUwc86ig0JBhvp3LoDtVA4=";
+              hash = "sha256-SSiaU8hvJrc4nol6oHyuu2OKsKkK72LNrolFh/JTfP4=";
             };
 
             nativeBuildInputs = [
