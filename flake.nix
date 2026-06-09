@@ -26,6 +26,7 @@
             pillow
             pynput
             requests
+            psutil
             keyring
             cryptography
             secretstorage
