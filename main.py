@@ -1235,8 +1235,12 @@ class PrismDesktopApp(QObject):
     @pyqtSlot(str)
     def _on_auto_update_error(self, error):
         print(f"Auto-update error: {error}")
-        from ui.notifications import notify_update_error
-        notify_update_error(self.dashboard)
+        if error.startswith("Download failed:"):
+            from ui.notifications import notify_download_error
+            notify_download_error(self.dashboard, error[len("Download failed:"):].strip())
+        else:
+            from ui.notifications import notify_update_error
+            notify_update_error(self.dashboard, error)
 
 
 def _read_language_from_config() -> str:

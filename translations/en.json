@@ -176,6 +176,7 @@
   "notifications.update_success": "Updated to Prism Desktop {version}",
   "notifications.update_sanity_failed": "Update may have failed — {version} still available",
   "notifications.update_error": "Auto-update failed",
+  "notifications.download_manually": "Download manually",
   "notifications.missing_credentials": "Missing URL or token — fill in both fields first.",
   "notifications.geoclue2_missing": "GeoClue2 not found. Install: {install_cmd}",
   "notifications.language_restart": "Language changed — please restart Prism Desktop to apply.",

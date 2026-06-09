@@ -73,9 +73,24 @@ def notify_update_sanity_failed(dashboard, version: str):
     dashboard.show_toast(t("notifications.update_sanity_failed", version=version))
 
 
-def notify_update_error(dashboard):
+_GH_RELEASES_URL = "https://github.com/lasselian/prism-desktop/releases/latest"
+
+
+def notify_update_error(dashboard, detail: str = ""):
     """Toast shown when the auto-update process fails."""
-    dashboard.show_toast(t("notifications.update_error"))
+    msg = t("notifications.update_error")
+    if detail:
+        msg += f": {detail}"
+    dashboard.show_toast(msg, duration_ms=8000)
+
+
+def notify_download_error(dashboard, detail: str = ""):
+    """Toast shown when the update download fails; includes a link to the releases page."""
+    msg = t("notifications.update_error")
+    if detail:
+        msg += f": {detail}"
+    msg += f'&nbsp;&nbsp;<a href="{_GH_RELEASES_URL}" style="color: #88aaff;">{t("notifications.download_manually")}</a>'
+    dashboard.show_toast(msg, duration_ms=12000)
 
 
 # ── Connection / settings ─────────────────────────────────────────────────────

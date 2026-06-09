@@ -175,6 +175,7 @@
   "notifications.update_success": "עודכן ל-Prism Desktop {version}",
   "notifications.update_sanity_failed": "ייתכן שהעדכון נכשל — הגרסה {version} עדיין זמינה",
   "notifications.update_error": "העדכון האוטומטי נכשל",
+  "notifications.download_manually": "הורדה ידנית",
   "notifications.missing_credentials": "חסרים כתובת URL או אסימון — יש למלא תחילה את שני השדות.",
   "notifications.geoclue2_missing": "GeoClue2 לא נמצא. התקנה: {install_cmd}",
   "notifications.language_restart": "השפה שונתה — יש להפעיל מחדש את Prism Desktop כדי להחיל את השינוי.",

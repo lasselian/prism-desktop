@@ -154,6 +154,7 @@ class NotificationBanner(QWidget):
         self.label.setStyleSheet(f"color: {text_color}; background: transparent;")
         self.label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.label.setWordWrap(True)
+        self.label.setOpenExternalLinks(True)
         layout.addWidget(self.label, 1)
 
         if glass_is_light:
