@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QFrame, QColorDialog, QApplication, QButtonGroup, QSizePolicy
 )
 from ui.widgets.toggle_switch import ToggleSwitch
-from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QUrl, QTimer, QThread, QSize, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QUrl, QTimer, QThread, QSize, QPropertyAnimation, QEasingCurve, QObject, QEvent
 from PyQt6.QtGui import QFont, QColor, QDesktopServices, QIcon, QPixmap, QPainter
 from PyQt6.QtWidgets import QGraphicsOpacityEffect
 from core.utils import SYSTEM_FONT
@@ -151,6 +151,23 @@ class _ShortcutRow(QWidget):
                 color: #e05252;
             }}
         """)
+
+
+class _IconHoverFilter(QObject):
+    """Swaps a button's icon between normal and hover variants on Enter/Leave."""
+    def __init__(self, btn: QPushButton, normal: QIcon, hover: QIcon):
+        super().__init__(btn)
+        self._btn = btn
+        self._normal = normal
+        self._hover = hover
+
+    def eventFilter(self, obj, event):
+        if obj is self._btn:
+            if event.type() == QEvent.Type.Enter:
+                self._btn.setIcon(self._hover)
+            elif event.type() == QEvent.Type.Leave:
+                self._btn.setIcon(self._normal)
+        return False
 
 
 class SettingsWidget(QWidget):
@@ -446,13 +463,13 @@ class SettingsWidget(QWidget):
                 text-align: left;
             }}
             QPushButton#bmcBtn:hover {{
-                background-color: {"#B87800" if is_light else "#FFDD00"};
-                border-color: {"#B87800" if is_light else "#FFDD00"};
+                background-color: {"#B87800" if is_light else "#CC8800"};
+                border-color: {"#B87800" if is_light else "#CC8800"};
                 color: white;
             }}
             QPushButton#bmcBtn:pressed {{
-                background-color: {"#9A6400" if is_light else "#F5C800"};
-                border-color: {"#9A6400" if is_light else "#F5C800"};
+                background-color: {"#9A6400" if is_light else "#AA7000"};
+                border-color: {"#9A6400" if is_light else "#AA7000"};
                 color: white;
             }}
         """)
@@ -878,6 +895,15 @@ class SettingsWidget(QWidget):
         p.drawText(bug_pix.rect(), Qt.AlignmentFlag.AlignCenter, Icons.ALERT_CIRCLE_OUTLINE)
         p.end()
 
+        bug_pix_hover = QPixmap(18, 18)
+        bug_pix_hover.fill(Qt.GlobalColor.transparent)
+        p = QPainter(bug_pix_hover)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setFont(get_mdi_font(15))
+        p.setPen(QColor("white"))
+        p.drawText(bug_pix_hover.rect(), Qt.AlignmentFlag.AlignCenter, Icons.ALERT_CIRCLE_OUTLINE)
+        p.end()
+
         self.bug_btn = QPushButton(f"  {t('settings.support.bug_btn')}")
         self.bug_btn.setObjectName("bugBtn")
         self.bug_btn.setIcon(QIcon(bug_pix))
@@ -885,6 +911,9 @@ class SettingsWidget(QWidget):
         self.bug_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.bug_btn.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl("https://github.com/lasselian/prism-desktop/issues"))
+        )
+        self.bug_btn.installEventFilter(
+            _IconHoverFilter(self.bug_btn, QIcon(bug_pix), QIcon(bug_pix_hover))
         )
         links_vbox.addWidget(self.bug_btn)
 
@@ -897,6 +926,15 @@ class SettingsWidget(QWidget):
         p.drawText(coffee_pix.rect(), Qt.AlignmentFlag.AlignCenter, Icons.COFFEE)
         p.end()
 
+        coffee_pix_hover = QPixmap(18, 18)
+        coffee_pix_hover.fill(Qt.GlobalColor.transparent)
+        p = QPainter(coffee_pix_hover)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setFont(get_mdi_font(15))
+        p.setPen(QColor("white"))
+        p.drawText(coffee_pix_hover.rect(), Qt.AlignmentFlag.AlignCenter, Icons.COFFEE)
+        p.end()
+
         self.bmc_btn = QPushButton(f"  {t('settings.support.bmc_btn')}")
         self.bmc_btn.setObjectName("bmcBtn")
         self.bmc_btn.setIcon(QIcon(coffee_pix))
@@ -904,6 +942,9 @@ class SettingsWidget(QWidget):
         self.bmc_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.bmc_btn.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl("https://buymeacoffee.com/lasselian"))
+        )
+        self.bmc_btn.installEventFilter(
+            _IconHoverFilter(self.bmc_btn, QIcon(coffee_pix), QIcon(coffee_pix_hover))
         )
         links_vbox.addWidget(self.bmc_btn)
 
