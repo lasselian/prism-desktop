@@ -11,7 +11,7 @@
       forAllSystems = f:
         nixpkgs.lib.genAttrs systems
           (system: f (import nixpkgs { inherit system; }));
-      buildCommit = "53d9b2fab954";
+      buildCommit = "6ad8bda28c30";
       buildDirty = false;
     in
     {
