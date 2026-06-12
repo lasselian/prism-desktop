@@ -1430,6 +1430,9 @@ class SettingsWidget(QWidget):
             )
 
     def _on_version_label_clicked(self, href: str):
+        if href == "open_releases":
+            QDesktopServices.openUrl(QUrl("https://github.com/lasselian/prism-desktop/releases"))
+            return
         if href == "expand":
             self._set_version_label_expanded()
         elif href == "collapse":
@@ -1494,8 +1497,17 @@ class SettingsWidget(QWidget):
 
     @pyqtSlot(str)
     def _on_auto_update_error(self, error):
-        self.update_label.setText(t("settings.support.update_failed"))
-        self.update_label.setStyleSheet("color: #e53935; font-size: 11px;")
+        link_style = "color: #e53935; font-size: 11px;"
+        releases_url = "https://github.com/lasselian/prism-desktop/releases"
+        label_html = (
+            f'<span style="{link_style}">'
+            f'{t("settings.support.update_failed")} — '
+            f'<a href="open_releases" style="color: #e57373;">'
+            f'{t("settings.support.visit_releases")}</a>'
+            f'</span>'
+        )
+        self.update_label.setText(label_html)
+        self.update_label.setStyleSheet("")
         self.update_label.setToolTip(error)
         self.update_btn.setEnabled(True)
         self.update_btn.setText(t("settings.support.install_btn"))

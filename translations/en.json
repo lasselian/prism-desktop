@@ -60,6 +60,7 @@
   "settings.support.updating": "Downloading update...",
   "settings.support.restarting": "Restarting...",
   "settings.support.update_failed": "Update failed",
+  "settings.support.visit_releases": "visit releases page",
   "settings.support.check_failed": "Check failed",
   "settings.support.copied": "copied to clipboard",
   "settings.support.bmc_label": "Support:",
