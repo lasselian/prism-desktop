@@ -25,9 +25,14 @@ class UpdateCheckerThread(QThread):
     def _parse_version(self, ver: str) -> tuple:
         """Convert version string to comparable tuple, e.g. '1.5' == '1.5.0'."""
         try:
-            return tuple(int(x) for x in ver.split('.'))
+            parts = [int(x) for x in ver.split('.')]
         except ValueError:
             return (0,)
+        # Strip trailing zeros so '1.5' and '1.5.0' compare equal — otherwise a
+        # release tagged 'v1.5.0' would look newer than a local '1.5' forever.
+        while parts and parts[-1] == 0:
+            parts.pop()
+        return tuple(parts)
 
     def run(self):
         try:

@@ -85,19 +85,20 @@ class HAWebSocket(QObject):
             self._ws = await self._session.ws_connect(ws_url)
             self._running = True
             
-            # Wait for auth_required
-            msg = await self._ws.receive_json()
+            # Wait for auth_required (bounded — a proxy can accept the socket
+            # while HA itself never answers, which would hang the reconnect loop)
+            msg = await asyncio.wait_for(self._ws.receive_json(), timeout=10)
             if msg.get('type') != 'auth_required':
                 raise Exception("Unexpected message type")
-            
+
             # Send auth
             await self._send({
                 "type": "auth",
                 "access_token": current_token
             })
-            
+
             # Wait for auth_ok
-            msg = await self._ws.receive_json()
+            msg = await asyncio.wait_for(self._ws.receive_json(), timeout=10)
             if msg.get('type') != 'auth_ok':
                 raise Exception(f"Authentication failed: {msg.get('message', 'Unknown error')}")
             
@@ -137,8 +138,9 @@ class HAWebSocket(QObject):
             self._running = False
             raise
         except Exception as e:
-            self.logger.error(f"WebSocket connection error: {e}")
-            self.error.emit(str(e))
+            detail = str(e) or type(e).__name__  # TimeoutError stringifies to ""
+            self.logger.error(f"WebSocket connection error: {detail}")
+            self.error.emit(detail)
         finally:
             await self._cleanup()
     

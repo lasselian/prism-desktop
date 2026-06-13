@@ -55,16 +55,8 @@ class HAClient:
             return False, "URL and token are required"
         
         try:
-            # Create a temporary session or use the shared one? Use shared.
-            # But wait, if we are testing a NEW config, we shouldn't use the old keyed session.
-            # But usually test_connection is called with current self.url/token.
-            
-            # Use a one-off session for testing to avoid polluting the main pool if auth fails?
-            # Or just use the standard flow.
-            # Let's use a one-off for safety to ensure it tests exactly what's configured
-            # regardless of pooled state, although keep-alive is nice.
-            # Actually, standard flow is fine.
-            
+            # One-off session so the test always uses the currently configured
+            # URL/token rather than a pooled session built from old headers.
             async with aiohttp.ClientSession(headers=self.headers) as session:
                 async with session.get(f"{self.url}/api/", timeout=5) as response:
                     if response.status == 200:

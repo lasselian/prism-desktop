@@ -36,8 +36,19 @@ logging.basicConfig(
     ]
 )
 
+logger = logging.getLogger(__name__)
+
 TOGGLE_ARG = "--toggle"
 WELCOME_ARG = "--welcome"
+
+# Entity-reference keys a 3D-printer button can carry; used everywhere we
+# subscribe to or fetch states for printer buttons.
+PRINTER_ENTITY_KEYS = [
+    'printer_state_entity', 'printer_progress_entity', 'printer_camera_entity',
+    'printer_nozzle_entity', 'printer_bed_entity', 'printer_nozzle_target_entity',
+    'printer_bed_target_entity', 'printer_pause_entity', 'printer_stop_entity',
+    'entity_id',
+]
 
 if __name__ == '__main__' and TOGGLE_ARG in sys.argv[1:]:
     if send_local_command("toggle"):
@@ -191,7 +202,7 @@ class PrismDesktopApp(QObject):
         border_effect = appearance.get("border_effect", "None")
 
         dash = self.dashboard
-        dash._ignore_focus_loss = True
+        dash.set_ignore_focus_loss(True)
         # Dismiss the banner if the user opens settings
         dash.btn_settings.clicked.connect(self._on_welcome_done)
 
@@ -215,7 +226,7 @@ class PrismDesktopApp(QObject):
         self.config["welcome_shown"] = True
         self.save_config()
         if self.dashboard:
-            self.dashboard._ignore_focus_loss = False
+            self.dashboard.set_ignore_focus_loss(False)
             try:
                 self.dashboard.btn_settings.clicked.disconnect(self._on_welcome_done)
             except RuntimeError:
@@ -365,7 +376,7 @@ class PrismDesktopApp(QObject):
         # Subscribe to configured entities
         for btn in self.config.get('buttons', []):
             if btn.get('type') == '3d_printer':
-                for key in ['printer_state_entity', 'printer_progress_entity', 'printer_camera_entity', 'printer_nozzle_entity', 'printer_bed_entity', 'printer_nozzle_target_entity', 'printer_bed_target_entity', 'printer_pause_entity', 'printer_stop_entity', 'entity_id']:
+                for key in PRINTER_ENTITY_KEYS:
                     eid = btn.get(key)
                     if eid:
                         self._ha_websocket.subscribe_entity(eid)
@@ -390,30 +401,35 @@ class PrismDesktopApp(QObject):
     
     def stop_websocket(self, on_finished=None):
         """Stop the WebSocket connection."""
-        # Clean signals
-        if self._ha_websocket:
+        # Detach immediately so start_websocket() can be called right away;
+        # the old client is finalized once its task has actually unwound.
+        ws = self._ha_websocket
+        task = self._ws_task
+        self._ha_websocket = None
+        self._ws_task = None
+
+        if ws:
             try:
-                self._ha_websocket.state_changed.disconnect()
-                self._ha_websocket.notification_received.disconnect()
-                self._ha_websocket.connected.disconnect()
-                self._ha_websocket.disconnected.disconnect()
-                self._ha_websocket.error.disconnect()
-            except: pass
-            
-        def delete_ws_obj():
-            if self._ha_websocket:
-                self._ha_websocket.deleteLater()
-                self._ha_websocket = None
+                ws.state_changed.disconnect()
+                ws.notification_received.disconnect()
+                ws.connected.disconnect()
+                ws.disconnected.disconnect()
+                ws.error.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            ws.request_stop()
+
+        def finalize(_task=None):
+            if ws:
+                ws.deleteLater()
             if on_finished:
                 on_finished()
-        
-        if self._ha_websocket:
-            self._ha_websocket.request_stop()
-        if self._ws_task:
-            self._ws_task.cancel()
-            self._ws_task = None
-            
-        delete_ws_obj()
+
+        if task and not task.done():
+            task.add_done_callback(finalize)
+            task.cancel()
+        else:
+            finalize()
 
 
 
@@ -470,7 +486,7 @@ class PrismDesktopApp(QObject):
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"Camera loop error: {e}")
+                logger.error(f"Camera loop error: {e}")
                 await asyncio.sleep(10)
 
     @staticmethod
@@ -547,7 +563,7 @@ class PrismDesktopApp(QObject):
         _create_task_safe(self._process_settings_change(new_config))
 
     async def _process_settings_change(self, new_config):
-        print("Settings saved, reinitializing...")
+        logger.info("Settings saved, reinitializing...")
 
         new_ha_config = new_config.get('home_assistant', {})
         new_url = new_ha_config.get('url', '').rstrip('/')
@@ -584,7 +600,7 @@ class PrismDesktopApp(QObject):
             notify_glass_ui_warning(self.dashboard)
 
         if ha_changed:
-            print("HA config changed, restarting connections...")
+            logger.info("HA config changed, restarting connections...")
             # Clear mobile_app registration so we re-register with the new HA instance
             self.config.setdefault("mobile_app", {}).pop("webhook_id", None)
             self._stop_location_loop()
@@ -621,39 +637,32 @@ class PrismDesktopApp(QObject):
         _create_task_safe(self._async_open_editor(slot))
         
     async def _async_open_editor(self, slot: int):
-        print(f"Fetching entities for slot {slot}...")
+        logger.info(f"Fetching entities for slot {slot}...")
         # Since we are async now, we can await directly!
         entities = await self.ha_client.get_entities()
         if entities:
             self._available_entities = entities
             self._open_button_editor(slot)
         else:
-            print("Failed to fetch entities")
+            logger.warning("Failed to fetch entities")
             
     def _current_page(self) -> int:
         """Return the active dashboard page index."""
-        return getattr(self.dashboard, '_current_page', 0)
+        return self.dashboard.current_page if self.dashboard else 0
 
     def _open_button_editor(self, slot: int):
         if not self.dashboard: return
         if not self.dashboard.isVisible(): self.dashboard.show()
 
-        # When opened from settings, _on_settings_open_editor stashes the button's
-        # actual page/row/col so we don't recalculate from the live _cols (which may
-        # have changed since the button was placed).
-        stashed_row = getattr(self.dashboard, '_settings_editor_row', None)
-        stashed_col = getattr(self.dashboard, '_settings_editor_col', None)
-        page = getattr(self.dashboard, '_settings_editor_page', None)
-        if stashed_row is not None:
-            row, col = stashed_row, stashed_col
-            del self.dashboard._settings_editor_row
-            del self.dashboard._settings_editor_col
+        # When opened from settings, the dashboard stashes the button's actual
+        # page/row/col so we don't recalculate from the live column count (which
+        # may have changed since the button was placed).
+        stashed = self.dashboard.take_settings_editor_target()
+        if stashed is not None:
+            page, row, col = stashed
         else:
-            row = slot // self.dashboard._cols
-            col = slot % self.dashboard._cols
-        if page is not None:
-            del self.dashboard._settings_editor_page
-        else:
+            row = slot // self.dashboard.cols
+            col = slot % self.dashboard.cols
             page = self._current_page()
 
         buttons = self.config.get('buttons', [])
@@ -669,8 +678,8 @@ class PrismDesktopApp(QObject):
         buttons = self.config.get('buttons', [])
 
         # Convert runtime slot to (row, col), scoped to current page
-        row = slot // self.dashboard._cols
-        col = slot % self.dashboard._cols
+        row = slot // self.dashboard.cols
+        col = slot % self.dashboard.cols
         page = self._current_page()
 
         # Remove old config at this (row, col, page)
@@ -692,7 +701,7 @@ class PrismDesktopApp(QObject):
 
         # Update subscriptions
         if new_config.get('type') == '3d_printer' and self._ha_websocket:
-            for key in ['printer_state_entity', 'printer_progress_entity', 'printer_camera_entity', 'printer_nozzle_entity', 'printer_bed_entity', 'printer_nozzle_target_entity', 'printer_bed_target_entity', 'printer_pause_entity', 'printer_stop_entity', 'entity_id']:
+            for key in PRINTER_ENTITY_KEYS:
                 eid = new_config.get(key)
                 if eid:
                     self._ha_websocket.subscribe_entity(eid)
@@ -709,8 +718,8 @@ class PrismDesktopApp(QObject):
         buttons = self.config.get('buttons', [])
 
         # Find source by (row, col, page)
-        row = slot // self.dashboard._cols
-        col = slot % self.dashboard._cols
+        row = slot // self.dashboard.cols
+        col = slot % self.dashboard.cols
         page = self._current_page()
         source_config = next(
             (b for b in buttons if b.get('row') == row and b.get('col') == col and b.get('page', 0) == page),
@@ -724,7 +733,7 @@ class PrismDesktopApp(QObject):
 
         target_row, target_col = self.dashboard.find_first_empty_slot_on_page(page, span_x, span_y)
         if target_row < 0:
-            print("No space to duplicate")
+            logger.info("No space to duplicate")
             return
 
         new_config = source_config.copy()
@@ -740,7 +749,7 @@ class PrismDesktopApp(QObject):
         
         if self._ha_websocket:
             if new_config.get('type') == '3d_printer':
-                for key in ['printer_state_entity', 'printer_progress_entity', 'printer_camera_entity', 'printer_nozzle_entity', 'printer_bed_entity', 'printer_nozzle_target_entity', 'printer_bed_target_entity', 'printer_pause_entity', 'printer_stop_entity', 'entity_id']:
+                for key in PRINTER_ENTITY_KEYS:
                     eid = new_config.get(key)
                     if eid:
                         self._ha_websocket.subscribe_entity(eid)
@@ -753,7 +762,7 @@ class PrismDesktopApp(QObject):
         # Dashboard handles visual reindexing (drag/drop) 
         # But we must persist the change to config
         buttons = self.config.get('buttons', [])
-        cols = self.dashboard._cols
+        cols = self.dashboard.cols
         
         # Convert runtime slots to (row, col)
         src_row, src_col = source // cols, source % cols
@@ -777,7 +786,7 @@ class PrismDesktopApp(QObject):
             sy = source_btn.get('span_y', 1)
             
             valid_tgt_col = max(0, min(tgt_col, cols - sx))
-            valid_tgt_row = max(0, min(tgt_row, self.dashboard._rows - sy))
+            valid_tgt_row = max(0, min(tgt_row, self.dashboard.rows - sy))
             
             source_btn['row'] = valid_tgt_row
             source_btn['col'] = valid_tgt_col
@@ -799,14 +808,14 @@ class PrismDesktopApp(QObject):
                          self.dashboard.update_media_art(eid, pixmap)
             
             # Re-apply known states to newly built buttons without an HTTP round-trip
-            for eid, state in self.dashboard._entity_states.items():
+            for eid, state in self.dashboard.entity_states.items():
                 self.on_state_changed(eid, state)
 
     @pyqtSlot(int)
     def on_clear_button_requested(self, slot):
         buttons = self.config.get('buttons', [])
-        row = slot // self.dashboard._cols
-        col = slot % self.dashboard._cols
+        row = slot // self.dashboard.cols
+        col = slot % self.dashboard.cols
         page = self._current_page()
         self.config['buttons'] = [b for b in buttons if not (b.get('row') == row and b.get('col') == col and b.get('page', 0) == page)]
         self.save_config()
@@ -816,8 +825,8 @@ class PrismDesktopApp(QObject):
     @pyqtSlot(int, int)
     def on_move_to_page_requested(self, slot: int, target_page: int):
         buttons = self.config.get('buttons', [])
-        row = slot // self.dashboard._cols
-        col = slot % self.dashboard._cols
+        row = slot // self.dashboard.cols
+        col = slot % self.dashboard.cols
         current_page = self._current_page()
 
         source = next(
@@ -911,7 +920,7 @@ class PrismDesktopApp(QObject):
     def on_media_command(self, slot, command):
         # Find entity by (row, col)
         buttons = self.config.get('buttons', [])
-        cols = self.dashboard._cols if self.dashboard else 4
+        cols = self.dashboard.cols if self.dashboard else 4
         row = slot // cols
         col = slot % cols
         page = self._current_page()
@@ -968,7 +977,7 @@ class PrismDesktopApp(QObject):
     
     @pyqtSlot()
     def on_ws_connected(self):
-        print("WS Connected")
+        logger.info("WS Connected")
         _create_task_safe(self._ensure_temperature_unit_default())
         self.fetch_initial_states()
         # Register as a Mobile App so HA exposes notify.mobile_app_prism_desktop
@@ -1015,7 +1024,7 @@ class PrismDesktopApp(QObject):
             self._ha_websocket.set_webhook_id(webhook_id)
             if not was_already_subscribed:
                 # Force a reconnect so the connect() flow re-runs with the webhook_id set
-                print("[MobileApp] New registration — reconnecting WS for push channel subscription")
+                logger.info("[MobileApp] New registration — reconnecting WS for push channel subscription")
                 self.stop_websocket()
                 self.start_websocket()
 
@@ -1105,12 +1114,12 @@ class PrismDesktopApp(QObject):
 
     @pyqtSlot()
     def on_ws_disconnected(self):
-        print("WS Disconnected")
+        logger.info("WS Disconnected")
         _create_task_safe(self._push_sensor_state(False))
 
     @pyqtSlot(str)
     def on_ws_error(self, error):
-        print(f"WS Error: {error}")
+        logger.warning(f"WS Error: {error}")
 
     def fetch_initial_states(self):
         _create_task_safe(self._async_fetch_initial_states())
@@ -1119,7 +1128,7 @@ class PrismDesktopApp(QObject):
         entity_ids = []
         for b in self.config.get('buttons', []):
             if b.get('type') == '3d_printer':
-                for key in ['printer_state_entity', 'printer_progress_entity', 'printer_camera_entity', 'printer_nozzle_entity', 'printer_bed_entity', 'printer_nozzle_target_entity', 'printer_bed_target_entity', 'printer_pause_entity', 'printer_stop_entity', 'entity_id']:
+                for key in PRINTER_ENTITY_KEYS:
                     if b.get(key):
                         entity_ids.append(b.get(key))
             else:
@@ -1170,9 +1179,9 @@ class PrismDesktopApp(QObject):
 
     @pyqtSlot()
     def _on_mdi_mapping_loaded(self):
-        if self.dashboard and self.dashboard._all_button_configs:
+        if self.dashboard and self.dashboard.all_button_configs:
             self.dashboard.set_buttons(
-                self.dashboard._all_button_configs,
+                self.dashboard.all_button_configs,
                 self.dashboard.config.get('appearance', {}),
                 update_height=False,
             )
@@ -1182,14 +1191,22 @@ class PrismDesktopApp(QObject):
         from services.auto_updater import consume_update_flag
         self._just_updated_from = consume_update_flag()
         if self._just_updated_from:
-            print(f"Post-update sanity check (was {self._just_updated_from})…")
+            logger.info(f"Post-update sanity check (was {self._just_updated_from})…")
         else:
-            print("Checking for updates…")
+            logger.info("Checking for updates…")
 
         self._update_thread = UpdateCheckerThread(APP_VERSION)
         self._update_thread.update_available.connect(self.on_update_available)
         self._update_thread.up_to_date.connect(self._on_update_check_up_to_date)
+        self._update_thread.error_occurred.connect(self._on_update_check_error)
         self._update_thread.start()
+
+    @pyqtSlot(str)
+    def _on_update_check_error(self, error: str):
+        logger.warning(f"Update check failed: {error}")
+        # The post-update sanity check can't conclude without a network result;
+        # don't leave it armed for a later unrelated check.
+        self._just_updated_from = None
 
     @pyqtSlot()
     def _on_update_check_up_to_date(self):
@@ -1207,7 +1224,7 @@ class PrismDesktopApp(QObject):
             self._just_updated_from = None
             return
 
-        print(f"Update available: {new_version}")
+        logger.info(f"Update available: {new_version}")
         from ui.notifications import notify_update_available
         notify_update_available(
             self.dashboard,
@@ -1234,7 +1251,7 @@ class PrismDesktopApp(QObject):
 
     @pyqtSlot(str)
     def _on_auto_update_error(self, error):
-        print(f"Auto-update error: {error}")
+        logger.error(f"Auto-update error: {error}")
         if error.startswith("Download failed:"):
             from ui.notifications import notify_download_error
             notify_download_error(self.dashboard, error[len("Download failed:"):].strip())

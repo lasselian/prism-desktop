@@ -11,6 +11,7 @@ The module probes the keyring once on first use and caches the result.
 import os
 import sys
 import hashlib
+import logging
 import platform
 from pathlib import Path
 
@@ -21,6 +22,8 @@ from cryptography.hazmat.primitives import hashes
 import base64
 
 from core.utils import get_config_path
+
+logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "PrismDesktop"
 KEY_TOKEN = "ha_token"
@@ -50,7 +53,7 @@ def _probe_keyring() -> bool:
 
     try:
         backend = keyring.get_keyring()
-        print(f"[TokenStorage] Keyring backend: {type(backend).__name__}")
+        logger.info(f"[TokenStorage] Keyring backend: {type(backend).__name__}")
 
         keyring.set_password(SERVICE_NAME, probe_key, probe_val)
         result = keyring.get_password(SERVICE_NAME, probe_key)
@@ -62,13 +65,13 @@ def _probe_keyring() -> bool:
             except Exception:
                 pass  # delete not supported on all backends
             _keyring_available = True
-            print("[TokenStorage] Keyring probe successful — using OS keyring.")
+            logger.info("[TokenStorage] Keyring probe successful — using OS keyring.")
         else:
             _keyring_available = False
-            print("[TokenStorage] Keyring probe failed (read-back mismatch) — using encrypted file.")
+            logger.warning("[TokenStorage] Keyring probe failed (read-back mismatch) — using encrypted file.")
     except Exception as e:
         _keyring_available = False
-        print(f"[TokenStorage] Keyring probe failed ({e}) — using encrypted file.")
+        logger.warning(f"[TokenStorage] Keyring probe failed ({e}) — using encrypted file.")
 
     return _keyring_available
 
@@ -164,7 +167,7 @@ def _enc_store(token: str) -> None:
     key = _derive_key(salt)
     f = Fernet(key)
     enc_path.write_bytes(f.encrypt(token.encode("utf-8")))
-    print("[TokenStorage] Token stored in encrypted file.")
+    logger.info("[TokenStorage] Token stored in encrypted file.")
 
 
 def _enc_load() -> str:
@@ -182,7 +185,7 @@ def _enc_load() -> str:
         f = Fernet(key)
         return f.decrypt(enc_path.read_bytes()).decode("utf-8")
     except (InvalidToken, Exception) as e:
-        print(f"[TokenStorage] Failed to decrypt token file: {e}")
+        logger.error(f"[TokenStorage] Failed to decrypt token file: {e}")
         return ""
 
 
@@ -214,7 +217,7 @@ def store_token(token: str) -> None:
             _enc_delete()
             return
         except Exception as e:
-            print(f"[TokenStorage] Keyring write failed ({e}), falling back to encrypted file.")
+            logger.warning(f"[TokenStorage] Keyring write failed ({e}), falling back to encrypted file.")
 
     _enc_store(token)
 
@@ -227,7 +230,7 @@ def load_token() -> str:
             if token:
                 return token
         except Exception as e:
-            print(f"[TokenStorage] Keyring read failed: {e}")
+            logger.warning(f"[TokenStorage] Keyring read failed: {e}")
 
     return _enc_load()
 

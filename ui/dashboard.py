@@ -4,6 +4,7 @@ The main popup menu with 4x2 grid of buttons/widgets.
 """
 
 import asyncio
+import logging
 import sys
 import time
 import platform
@@ -51,6 +52,8 @@ from ui.visuals.dashboard_effects import (
     draw_liquid_mercury_border, capture_glass_background
 )
 
+logger = logging.getLogger(__name__)
+
 QWIDGETSIZE_MAX = 16777215
 
 
@@ -96,6 +99,7 @@ class Dashboard(QWidget):
         self._active_banner: NotificationBanner | None = None
         self._page_count: int = 1
         self._entity_states: dict = {} # Map entity_id -> full state dict
+        self._settings_editor_target: tuple | None = None  # (page, row, col) stashed for the editor
         
         # Entrance Animation
         self._anim_progress = 0.0
@@ -667,7 +671,7 @@ class Dashboard(QWidget):
         # Update Config & Persist (Rows)
         if 'appearance' not in self.config: self.config['appearance'] = {}
         self.config['appearance']['rows'] = self._rows
-        print(f"DASHBOARD: Saving Rows={self._rows}")
+        logger.info(f"Saving rows={self._rows}")
         self.save_config_requested.emit()
 
         # Chain to width resize check
@@ -845,7 +849,7 @@ class Dashboard(QWidget):
         # Update Config & Persist (Cols)
         if 'appearance' not in self.config: self.config['appearance'] = {}
         self.config['appearance']['cols'] = self._cols
-        print(f"DASHBOARD: Saving Cols={self._cols}")
+        logger.info(f"Saving cols={self._cols}")
         self.save_config_requested.emit()
         
         # Store grid height
@@ -1767,15 +1771,50 @@ class Dashboard(QWidget):
         self.settings_saved.emit(config)
         self.hide_settings()
             
+    # ── Public accessors for the app controller ─────────────────────────────
+
+    @property
+    def rows(self) -> int:
+        return self._rows
+
+    @property
+    def cols(self) -> int:
+        return self._cols
+
+    @property
+    def current_page(self) -> int:
+        return self._current_page
+
+    @property
+    def entity_states(self) -> dict:
+        """Last known entity states (entity_id -> full state dict)."""
+        return self._entity_states
+
+    @property
+    def all_button_configs(self) -> list[dict]:
+        """Button configs across all pages, as last passed to set_buttons()."""
+        return self._all_button_configs
+
+    def set_ignore_focus_loss(self, value: bool):
+        """Suppress (or restore) hide-on-focus-loss, e.g. while a banner needs attention."""
+        self._ignore_focus_loss = value
+
+    def take_settings_editor_target(self) -> tuple | None:
+        """Return and clear the (page, row, col) stashed by the settings shortcut list."""
+        target = self._settings_editor_target
+        self._settings_editor_target = None
+        return target
+
     def _on_settings_open_editor(self, btn_cfg: dict):
         """Open the button editor for a specific button (triggered from settings shortcut list)."""
         # Stash the button's page/row/col so _open_button_editor uses the stored
         # position rather than recalculating from the live _cols (which may differ
         # from the column count when the button was originally placed).
-        self._settings_editor_page = btn_cfg.get('page', 0)
-        self._settings_editor_row = btn_cfg.get('row', 0)
-        self._settings_editor_col = btn_cfg.get('col', 0)
-        slot = self._settings_editor_row * self._cols + self._settings_editor_col
+        page = btn_cfg.get('page', 0)
+        row = btn_cfg.get('row', 0)
+        col = btn_cfg.get('col', 0)
+        self._settings_editor_target = (page, row, col)
+        slot = row * self._cols + col
         self.edit_button_requested.emit(slot)
 
     def _on_settings_delete_shortcut(self, btn_cfg: dict):
