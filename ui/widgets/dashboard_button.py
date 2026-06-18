@@ -18,6 +18,7 @@ from core.localization_manager import t
 from core.temperature_utils import format_temperature, is_temperature_entity
 from ui.widgets.dashboard_button_painter import DashboardButtonPainter
 from ui.widgets.dashboard_button_styles import DashboardButtonStyleManager
+import html
 import math
 import re
 import sys
@@ -774,10 +775,12 @@ class DashboardButton(QFrame):
             mdi_family = get_mdi_font().family()
             emoji_html = f"<span style='font-family: \"{mdi_family}\"; font-size: 40px;'>{emoji}</span>" if is_linux else f"{emoji}"
 
+            # Escape HA-derived values before interpolating into RichText (emoji
+            # is from a fixed internal mapping, so it's safe as-is).
             text = (
-                f"<div style='font-size: 22px; font-weight: 300; margin-bottom: 4px;'>{emoji_html} {temp_str}</div>"
-                f"<div style='font-size: 11px; color: #aaaaaa; font-weight: 600;'>{t('dashboard_button.weather.humidity', value=humidity)}</div>"
-                f"<div style='font-size: 11px; color: #aaaaaa; font-weight: 600;'>{t('dashboard_button.weather.wind', value=wind_display)}</div>"
+                f"<div style='font-size: 22px; font-weight: 300; margin-bottom: 4px;'>{emoji_html} {html.escape(str(temp_str))}</div>"
+                f"<div style='font-size: 11px; color: #aaaaaa; font-weight: 600;'>{t('dashboard_button.weather.humidity', value=html.escape(str(humidity)))}</div>"
+                f"<div style='font-size: 11px; color: #aaaaaa; font-weight: 600;'>{t('dashboard_button.weather.wind', value=html.escape(str(wind_display)))}</div>"
             )
             self.value_label.setTextFormat(Qt.TextFormat.RichText)
             self.value_label.setText(text)
@@ -787,7 +790,7 @@ class DashboardButton(QFrame):
             if is_linux:
                 mdi_family = get_mdi_font().family()
                 emoji_html = f"<div style='font-family: \"{mdi_family}\"; font-size: 40px; margin-bottom: 5px;'>{emoji}</div>"
-                self.value_label.setText(f"{emoji_html}{temp_str}")
+                self.value_label.setText(f"{emoji_html}{html.escape(str(temp_str))}")
             else:
                 self.value_label.setText(f"{emoji}\n{temp_str}")
             self.value_label.setFont(QFont(SYSTEM_FONT, 24))
@@ -796,7 +799,7 @@ class DashboardButton(QFrame):
             if is_linux:
                 mdi_family = get_mdi_font().family()
                 emoji_html = f"<span style='font-family: \"{mdi_family}\"; font-size: 32px;'>{emoji}</span>"
-                self.value_label.setText(f"{emoji_html} {temp_str}")
+                self.value_label.setText(f"{emoji_html} {html.escape(str(temp_str))}")
             else:
                 self.value_label.setText(f"{emoji} {temp_str}")
             self.value_label.setFont(QFont(SYSTEM_FONT, 28))
