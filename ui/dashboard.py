@@ -41,6 +41,7 @@ from ui.constants import (
     ANIM_DURATION_ENTRANCE, ANIM_DURATION_HEIGHT, ANIM_DURATION_WIDTH, ANIM_DURATION_BORDER,
     ROOT_MARGIN, RESIZE_MARGIN, calculate_width,
     PAGE_INDICATOR_WIDTH,
+    GLASS_MIN_INTERVAL_MS, GLASS_MAX_INTERVAL_MS, GLASS_WORK_BUDGET,
 )
 from ui.widgets.notification_banner import NotificationBanner
 from ui.managers.overlay_manager import OverlayManager
@@ -175,8 +176,12 @@ class Dashboard(QWidget):
         self._animation_timer.timeout.connect(self._on_animation_frame)
 
         self._glass_refresh_timer = QTimer(self)
-        self._glass_refresh_timer.setInterval(33) # ~30 FPS
+        self._glass_refresh_timer.setInterval(GLASS_MIN_INTERVAL_MS) # ~30 FPS cap
         self._glass_refresh_timer.timeout.connect(self._refresh_glass_background)
+        # Self-limiting frame rate: rolling estimate of how long one capture takes.
+        # If captures get expensive (slow machine / huge screen), the interval grows
+        # so the capture never hogs more than GLASS_WORK_BUDGET of the frame budget.
+        self._glass_cost_ema = None
         
         # SettingsWidget (created lazily to avoid circular import at module load)
         self.settings_widget = None
@@ -1577,8 +1582,31 @@ class Dashboard(QWidget):
 
     def _refresh_glass_background(self):
         if self._glass_ui and self.isVisible():
+            t0 = time.perf_counter()
             self._glass_bg_pixmap, self._glass_capture_pos = capture_glass_background(self)
+            cost_ms = (time.perf_counter() - t0) * 1000.0
             self.update()
+            self._adapt_glass_interval(cost_ms)
+
+    def _adapt_glass_interval(self, cost_ms: float):
+        """Throttle the glass capture frame rate based on how long captures take.
+
+        capture_glass_background() runs synchronously on the UI thread, so its
+        wall-clock duration is exactly the cost it imposes on the frame. We keep
+        an exponential moving average of that cost and set the timer interval so
+        the capture stays under GLASS_WORK_BUDGET of each frame, clamped between
+        the ~30 FPS cap and a low-frame-rate floor for struggling machines.
+        """
+        if self._glass_cost_ema is None:
+            self._glass_cost_ema = cost_ms
+        else:
+            self._glass_cost_ema += 0.3 * (cost_ms - self._glass_cost_ema)
+
+        desired = self._glass_cost_ema / GLASS_WORK_BUDGET
+        new_interval = int(max(GLASS_MIN_INTERVAL_MS,
+                               min(GLASS_MAX_INTERVAL_MS, desired)))
+        if new_interval != self._glass_refresh_timer.interval():
+            self._glass_refresh_timer.setInterval(new_interval)
 
     def _on_anim_finished(self):
         """Handle animation completion (hide if closing, start glass timer if opening)."""
@@ -1593,6 +1621,9 @@ class Dashboard(QWidget):
             self.activateWindow()
             self.setFocus()
             if self._glass_ui and not self._glass_refresh_timer.isActive():
+                # Start optimistic at the FPS cap; adapt down only if captures prove slow
+                self._glass_cost_ema = None
+                self._glass_refresh_timer.setInterval(GLASS_MIN_INTERVAL_MS)
                 self._glass_refresh_timer.start()
 
     def focusOutEvent(self, event):

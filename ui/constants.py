@@ -26,6 +26,11 @@ ANIM_DURATION_HEIGHT = 400
 ANIM_DURATION_WIDTH = 400
 ANIM_DURATION_BORDER = 1500
 
+# Glass UI live capture (self-limiting frame rate)
+GLASS_MIN_INTERVAL_MS = 33   # Fastest refresh: ~30 FPS cap
+GLASS_MAX_INTERVAL_MS = 200  # Slowest refresh floor: ~5 FPS on struggling machines
+GLASS_WORK_BUDGET = 0.5      # Capture may use at most this fraction of a frame interval
+
 # Root layout margins (each side)
 ROOT_MARGIN = 10
 RESIZE_MARGIN = 20 # Width of invisible resize handles (increased for better grip)
