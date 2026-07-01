@@ -312,7 +312,11 @@ class DashboardButton(QFrame):
             self._morph_eff = ButtonMorphEffect(self)
             self._morph_eff.setEnabled(False)
             self.setGraphicsEffect(self._morph_eff)
-        self._morph_eff._opacity = max(0.0, min(1.0, opacity))
+        # Go through the property setter (not the raw field) so the effect
+        # schedules a repaint on every opacity change — otherwise mid-fade
+        # frames only render where something else invalidates the region,
+        # making the fade look stepped/janky.
+        self._morph_eff.set_opacity_prop(max(0.0, min(1.0, opacity)))
         self._morph_eff._refresh_enabled()
             
     def set_opacity(self, opacity: float):

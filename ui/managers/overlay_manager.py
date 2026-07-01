@@ -430,18 +430,16 @@ class OverlayManager(QObject):
             self.dimmer_timer.start()
 
     def _add_covered_siblings(self, overlay, source_btn, target_rect):
-        """Append any buttons covered by target_rect to the overlay's sibling list and fade them."""
+        """Append any buttons covered by target_rect to the overlay's sibling list and fade them.
+
+        Coverage is decided purely by actual rect intersection (_fade_opacity_for_coverage),
+        so this catches buttons in *any* direction — the overlay's target_rect can be shifted
+        up or left to fit the grid, covering buttons above/beside the source button's row.
+        """
         state = self._overlay_state[overlay]
-        cols = getattr(self.parent_widget, '_cols', 4)
-        src_row = source_btn.slot // cols
-        rows_covered = max(
-            getattr(source_btn, 'span_y', 1),
-            (target_rect.height() + BUTTON_SPACING) // (BUTTON_HEIGHT + BUTTON_SPACING)
-        )
         for btn in self.buttons:
             if not btn.isVisible() or btn == source_btn: continue
             if btn in state['siblings']: continue
-            if not self._btn_in_row_range(btn, src_row, rows_covered): continue
             btn_pos = btn.mapTo(self.parent_widget, QPoint(0, 0))
             btn_rect = QRect(btn_pos, btn.size())
             opacity = self._fade_opacity_for_coverage(target_rect, btn_rect)
@@ -458,12 +456,6 @@ class OverlayManager(QObject):
             state['source'].set_opacity(1.0)
         state['siblings'] = []
         state['source'] = None
-
-    def _btn_in_row_range(self, btn, src_row: int, row_count: int) -> bool:
-        cols = getattr(self.parent_widget, '_cols', 4)
-        btn_row = btn.slot // cols
-        btn_row_end = btn_row + getattr(btn, 'span_y', 1)
-        return btn_row < src_row + row_count and btn_row_end > src_row
 
     @staticmethod
     def _fade_opacity_for_coverage(overlay_rect: QRect, btn_rect: QRect) -> float:
