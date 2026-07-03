@@ -14,6 +14,8 @@
   "settings.ha.send_to_ha_label": "An Home Assistant senden",
   "settings.ha.location_toggle": "Standort",
   "settings.ha.location_tooltip": "Meldet den Standort dieses Geräts regelmäßig über die Mobile-App-Integration",
+  "settings.ha.send_logged_in_toggle": "Angemeldet",
+  "settings.ha.send_logged_in_tooltip": "Meldet über die Mobile-App-Integration, ob dieses Gerät angemeldet ist",
   "settings.ha.send_cpu_toggle": "CPU-Auslastung",
   "settings.ha.send_cpu_tooltip": "Meldet die CPU-Auslastung dieses Geräts regelmäßig über die Mobile-App-Integration",
   "settings.ha.send_ram_toggle": "RAM-Auslastung",

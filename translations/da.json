@@ -14,6 +14,8 @@
   "settings.ha.send_to_ha_label": "Send til Home Assistant",
   "settings.ha.location_toggle": "Placering",
   "settings.ha.location_tooltip": "Rapporterer denne enheds placering periodisk via Mobilapp-integrationen",
+  "settings.ha.send_logged_in_toggle": "Logget ind",
+  "settings.ha.send_logged_in_tooltip": "Rapporterer om denne enhed er logget ind via Mobilapp-integrationen",
   "settings.ha.send_cpu_toggle": "CPU-forbrug",
   "settings.ha.send_cpu_tooltip": "Rapporterer periodisk denne enheds CPU-forbrug via Mobilapp-integrationen",
   "settings.ha.send_ram_toggle": "RAM-forbrug",

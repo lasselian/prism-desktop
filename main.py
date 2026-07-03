@@ -82,7 +82,7 @@ from ui.tray_manager import TrayManager
 from services.notifications import NotificationManager
 from services.input_manager import InputManager, ButtonShortcutManager
 from services.local_ipc import LocalCommandServer
-from services.mobile_app import register_mobile_app, send_location_update, register_sensors, update_sensor_states, build_sensor_state_payload, get_system_metrics, SENSORS as MOBILE_APP_SENSORS
+from services.mobile_app import register_mobile_app, send_location_update, register_sensors, update_sensor_states, build_sensor_state_payload, get_system_metrics
 from services.location_manager import get_location
 from ui.icons import load_mdi_font, icon_signals
 from services.update_checker import UpdateCheckerThread
@@ -128,6 +128,7 @@ class PrismDesktopApp(QObject):
         # WebSocket
         self._ha_websocket: Optional[HAWebSocket] = None
         self._ws_task: Optional[asyncio.Task] = None
+        self._ws_connected = False
 
         # Location reporting (Windows only)
         self._location_task: Optional[asyncio.Task] = None
@@ -407,6 +408,7 @@ class PrismDesktopApp(QObject):
             self._ha_websocket.set_webhook_id(saved_webhook_id)
         
         # Keep WS isolated in thread for now
+        self._ws_connected = False
         self._ws_task = asyncio.create_task(self._ha_websocket.run_reconnect_loop())
     
     def stop_websocket(self, on_finished=None):
@@ -417,6 +419,7 @@ class PrismDesktopApp(QObject):
         task = self._ws_task
         self._ha_websocket = None
         self._ws_task = None
+        self._ws_connected = False
 
         if ws:
             try:
@@ -553,12 +556,15 @@ class PrismDesktopApp(QObject):
         QApplication.instance().quit()
 
     def _push_sensor_state_sync(self, value: bool):
-        """Synchronous sensor state push for use at shutdown (event loop may be closing)."""
-        webhook_id = self.config.get('mobile_app', {}).get('webhook_id', '')
+        """Synchronous logged_in sensor push for use at shutdown (event loop may be closing)."""
+        mobile_cfg = self.config.get('mobile_app', {})
+        if not mobile_cfg.get('send_logged_in', True):
+            return
+        webhook_id = mobile_cfg.get('webhook_id', '')
         ha_url = self.config.get('home_assistant', {}).get('url', '')
         if not (webhook_id and ha_url):
             return
-        states = {s["unique_id"]: ("logged-in" if value else "logged-out") for s in MOBILE_APP_SENSORS}
+        states = {"logged_in": "logged-in" if value else "logged-out"}
         url = ha_url.rstrip('/') + f'/api/webhook/{webhook_id}'
         payload = {"type": "update_sensor_states", "data": build_sensor_state_payload(states)}
         try:
@@ -622,6 +628,14 @@ class PrismDesktopApp(QObject):
             self.start_websocket()
             self.fetch_initial_states()
         else:
+            # HA config unchanged, but if the WebSocket isn't live, treat Save as
+            # "reconnect" — a stuck or dead connection otherwise has no user-facing
+            # recovery short of changing the token or restarting the app (issue #57).
+            if new_url and new_token and not self._ws_connected:
+                logger.info("HA config unchanged but WebSocket is not connected, forcing reconnect...")
+                self.stop_websocket()
+                self.start_websocket()
+
             self.theme_manager.set_theme(self.config.get('appearance', {}).get('theme', 'system'))
             # Sync location loop with new setting
             location_enabled = self.config.get('mobile_app', {}).get('location_enabled', False)
@@ -635,6 +649,9 @@ class PrismDesktopApp(QObject):
                 self._start_metrics_loop()
             else:
                 self._stop_metrics_loop()
+            # Refresh logged_in sensor in case the toggle was just re-enabled
+            # (no-op when disabled — _push_sensor_state checks the setting)
+            await self._push_sensor_state(True)
 
     @pyqtSlot(dict)
     def _on_embedded_settings_saved(self, new_config: dict):
@@ -988,6 +1005,7 @@ class PrismDesktopApp(QObject):
     @pyqtSlot()
     def on_ws_connected(self):
         logger.info("WS Connected")
+        self._ws_connected = True
         _create_task_safe(self._ensure_temperature_unit_default())
         self.fetch_initial_states()
         # Register as a Mobile App so HA exposes notify.mobile_app_prism_desktop
@@ -1042,7 +1060,8 @@ class PrismDesktopApp(QObject):
         if webhook_id:
             ha_url = ha_config.get('url', '')
             await register_sensors(ha_url, webhook_id)
-            await update_sensor_states(ha_url, webhook_id, {"logged_in": "logged-in"})
+            if self.config.get('mobile_app', {}).get('send_logged_in', True):
+                await update_sensor_states(ha_url, webhook_id, {"logged_in": "logged-in"})
 
         # Start location loop if enabled
         if self.config.get('mobile_app', {}).get('location_enabled', False):
@@ -1053,7 +1072,10 @@ class PrismDesktopApp(QObject):
 
     async def _push_sensor_state(self, value: bool):
         """Push the logged_in sensor state to HA. Best-effort — errors are swallowed."""
-        webhook_id = self.config.get('mobile_app', {}).get('webhook_id', '')
+        mobile_cfg = self.config.get('mobile_app', {})
+        if not mobile_cfg.get('send_logged_in', True):
+            return
+        webhook_id = mobile_cfg.get('webhook_id', '')
         ha_url = self.config.get('home_assistant', {}).get('url', '')
         if webhook_id and ha_url:
             await update_sensor_states(ha_url, webhook_id, {"logged_in": "logged-in" if value else "logged-out"})
@@ -1125,6 +1147,7 @@ class PrismDesktopApp(QObject):
     @pyqtSlot()
     def on_ws_disconnected(self):
         logger.info("WS Disconnected")
+        self._ws_connected = False
         _create_task_safe(self._push_sensor_state(False))
 
     @pyqtSlot(str)

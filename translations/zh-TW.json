@@ -14,6 +14,8 @@
   "settings.ha.send_to_ha_label": "傳送至 Home Assistant",
   "settings.ha.location_toggle": "位置",
   "settings.ha.location_tooltip": "透過行動應用整合定期回報此裝置的位置",
+  "settings.ha.send_logged_in_toggle": "登入狀態",
+  "settings.ha.send_logged_in_tooltip": "透過行動應用整合回報此裝置的登入狀態",
   "settings.ha.send_cpu_toggle": "CPU 使用率",
   "settings.ha.send_cpu_tooltip": "透過行動應用整合定期回報此裝置的 CPU 使用率",
   "settings.ha.send_ram_toggle": "RAM 使用率",

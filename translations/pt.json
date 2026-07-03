@@ -14,6 +14,8 @@
   "settings.ha.send_to_ha_label": "Enviar para o Home Assistant",
   "settings.ha.location_toggle": "Localização",
   "settings.ha.location_tooltip": "Reporta periodicamente a localização deste dispositivo através da integração da App Móvel",
+  "settings.ha.send_logged_in_toggle": "Sessão iniciada",
+  "settings.ha.send_logged_in_tooltip": "Reporta se este dispositivo tem sessão iniciada através da integração da App Móvel",
   "settings.ha.send_cpu_toggle": "Uso de CPU",
   "settings.ha.send_cpu_tooltip": "Reporta periodicamente o uso de CPU deste dispositivo através da integração da App Móvel",
   "settings.ha.send_ram_toggle": "Uso de RAM",

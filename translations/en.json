@@ -14,6 +14,8 @@
   "settings.ha.send_to_ha_label": "Send to Home Assistant",
   "settings.ha.location_toggle": "Location",
   "settings.ha.location_tooltip": "Periodically reports this device’s location via the Mobile App integration",
+  "settings.ha.send_logged_in_toggle": "Logged in",
+  "settings.ha.send_logged_in_tooltip": "Reports whether this device is logged in via the Mobile App integration",
   "settings.ha.send_cpu_toggle": "CPU usage",
   "settings.ha.send_cpu_tooltip": "Periodically reports this device’s CPU usage via the Mobile App integration",
   "settings.ha.send_ram_toggle": "RAM usage",

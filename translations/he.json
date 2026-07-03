@@ -14,6 +14,8 @@
   "settings.ha.send_to_ha_label": "שלח ל-Home Assistant",
   "settings.ha.location_toggle": "שליחת מיקום ל-Home Assistant",
   "settings.ha.location_tooltip": "מדווח מעת לעת על מיקום המכשיר באמצעות אינטגרציית האפליקציה הניידת (Mobile App)",
+  "settings.ha.send_logged_in_toggle": "מחובר",
+  "settings.ha.send_logged_in_tooltip": "מדווח אם המכשיר מחובר באמצעות אינטגרציית האפליקציה הניידת",
   "settings.ha.send_cpu_toggle": "שליחת ניצול מעבד (CPU) ל-Home Assistant",
   "settings.ha.send_cpu_tooltip": "מדווח מעת לעת על ניצול המעבד (CPU) של המכשיר באמצעות אינטגרציית האפליקציה הניידת",
   "settings.ha.send_ram_toggle": "שליחת ניצול זיכרון (RAM) ל-Home Assistant",

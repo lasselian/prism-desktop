@@ -646,6 +646,10 @@ class SettingsWidget(QWidget):
             self.location_check.setToolTip(t("settings.ha.location_tooltip"))
             toggle_form.addRow("", self.location_check)
 
+        self.send_logged_in_check = ToggleSwitch(t("settings.ha.send_logged_in_toggle"))
+        self.send_logged_in_check.setToolTip(t("settings.ha.send_logged_in_tooltip"))
+        toggle_form.addRow("", self.send_logged_in_check)
+
         self.send_cpu_check = ToggleSwitch(t("settings.ha.send_cpu_toggle"))
         self.send_cpu_check.setToolTip(t("settings.ha.send_cpu_tooltip"))
         toggle_form.addRow("", self.send_cpu_check)
@@ -1148,6 +1152,7 @@ class SettingsWidget(QWidget):
             )
 
         mobile_cfg = self.config.get('mobile_app', {})
+        self.send_logged_in_check.setChecked(mobile_cfg.get('send_logged_in', True))
         self.send_cpu_check.setChecked(mobile_cfg.get('send_cpu', False))
         self.send_ram_check.setChecked(mobile_cfg.get('send_ram', False))
 
@@ -1194,6 +1199,7 @@ class SettingsWidget(QWidget):
             if sys.platform == 'linux' and new_location_enabled:
                 self._check_geoclue2_and_setup()
 
+        self.config.setdefault('mobile_app', {})['send_logged_in'] = self.send_logged_in_check.isChecked()
         self.config.setdefault('mobile_app', {})['send_cpu'] = self.send_cpu_check.isChecked()
         self.config.setdefault('mobile_app', {})['send_ram'] = self.send_ram_check.isChecked()
 

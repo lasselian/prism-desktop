@@ -14,6 +14,8 @@
   "settings.ha.send_to_ha_label": "发送到 Home Assistant",
   "settings.ha.location_toggle": "位置",
   "settings.ha.location_tooltip": "通过移动应用集成定期上报此设备的位置",
+  "settings.ha.send_logged_in_toggle": "登录状态",
+  "settings.ha.send_logged_in_tooltip": "通过移动应用集成上报此设备的登录状态",
   "settings.ha.send_cpu_toggle": "CPU 使用率",
   "settings.ha.send_cpu_tooltip": "通过移动应用集成定期上报此设备的 CPU 使用率",
   "settings.ha.send_ram_toggle": "RAM 使用率",

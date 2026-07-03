@@ -14,6 +14,8 @@
   "settings.ha.send_to_ha_label": "Invia a Home Assistant",
   "settings.ha.location_toggle": "Posizione",
   "settings.ha.location_tooltip": "Segnala periodicamente la posizione di questo dispositivo tramite l'integrazione dell'App Mobile",
+  "settings.ha.send_logged_in_toggle": "Accesso effettuato",
+  "settings.ha.send_logged_in_tooltip": "Segnala se questo dispositivo ha effettuato l'accesso tramite l'integrazione dell'App Mobile",
   "settings.ha.send_cpu_toggle": "Utilizzo CPU",
   "settings.ha.send_cpu_tooltip": "Segnala periodicamente l'utilizzo CPU di questo dispositivo tramite l'integrazione dell'App Mobile",
   "settings.ha.send_ram_toggle": "Utilizzo RAM",
