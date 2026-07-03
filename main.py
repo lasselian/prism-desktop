@@ -27,13 +27,23 @@ from services.local_ipc import send_local_command
 if os.environ.get('XDG_SESSION_TYPE') == 'wayland':
     os.environ['QT_QPA_PLATFORM'] = 'xcb'
 
-# Configure Logging
+# Configure Logging — stdout plus a rotating file next to config.json, so
+# packaged builds (no console) still produce a log users can attach to issues.
+_log_handlers = [logging.StreamHandler(sys.stdout)]
+try:
+    from logging.handlers import RotatingFileHandler
+    from core.utils import get_config_path
+    _log_handlers.append(RotatingFileHandler(
+        get_config_path().parent / "prism.log",
+        maxBytes=512 * 1024, backupCount=2, encoding="utf-8",
+    ))
+except OSError:
+    pass  # config dir not writable — stdout only
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=_log_handlers,
 )
 
 logger = logging.getLogger(__name__)

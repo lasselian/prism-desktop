@@ -1,9 +1,10 @@
 """
 Secure Token Storage
 
-Priority chain:
-  1. OS keyring (GNOME Keyring, macOS Keychain, Windows Credential Locker)
-  2. Encrypted file fallback (Fernet + machine-derived key)
+Storage: OS keyring (GNOME Keyring, macOS Keychain, Windows Credential Locker)
+with an encrypted-file fallback (Fernet + machine-derived key). A successful
+keyring store deletes the fallback file, so on load the file — when present —
+is always the freshest copy and is checked first.
 
 The module probes the keyring once on first use and caches the result.
 """
@@ -218,12 +219,29 @@ def store_token(token: str) -> None:
             return
         except Exception as e:
             logger.warning(f"[TokenStorage] Keyring write failed ({e}), falling back to encrypted file.")
+            # Best effort: clear the old keyring entry so it can never shadow
+            # the fresher token we're about to write to the encrypted file.
+            try:
+                keyring.delete_password(SERVICE_NAME, KEY_TOKEN)
+            except Exception:
+                pass
 
     _enc_store(token)
 
 
 def load_token() -> str:
-    """Load the HA token. Tries keyring first, then encrypted file."""
+    """
+    Load the HA token.
+
+    The encrypted file is checked first: a successful keyring store always
+    deletes it, so if it exists the most recent store fell back to the file
+    and any keyring entry is stale (e.g. written in an earlier session when
+    the keyring still worked).
+    """
+    token = _enc_load()
+    if token:
+        return token
+
     if _probe_keyring():
         try:
             token = keyring.get_password(SERVICE_NAME, KEY_TOKEN)
@@ -232,7 +250,7 @@ def load_token() -> str:
         except Exception as e:
             logger.warning(f"[TokenStorage] Keyring read failed: {e}")
 
-    return _enc_load()
+    return ""
 
 
 def delete_token() -> None:

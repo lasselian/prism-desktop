@@ -65,11 +65,17 @@ class HAClient:
                         return False, "Invalid access token"
                     else:
                         return False, f"HTTP {response.status}"
+        except asyncio.TimeoutError:
+            self.logger.error("Connection test timed out")
+            return False, "Connection timed out"
         except aiohttp.ClientError as e:
-            self.logger.error(f"Connection test error: {e}")
-            return False, f"Connection error: {e}"
+            detail = str(e) or type(e).__name__
+            self.logger.error(f"Connection test error: {detail}")
+            return False, f"Connection error: {detail}"
         except Exception as e:
-             return False, f"Error: {e}"
+            detail = str(e) or type(e).__name__
+            self.logger.error(f"Connection test error: {detail}")
+            return False, f"Error: {detail}"
     
     async def get_entities(self) -> list[dict]:
         """Fetch all entities."""
