@@ -201,9 +201,14 @@ class NotificationManager(QObject):
                 if not self._windows_registered:
                     self._register_windows_app()
             if actions:
+                # 'foreground' activation requires a registered COM toast
+                # activator (full packaged-app identity), which this app
+                # doesn't have — Windows silently drops such buttons for
+                # unpackaged apps. 'protocol' is what win11toast's own
+                # examples use and needs no registration.
                 kwargs['buttons'] = [
                     {
-                        'activationType': 'foreground',
+                        'activationType': 'protocol',
                         'arguments': f'{WIN_TOKEN_PREFIX}{i}',
                         'content': a['title'],
                     }
