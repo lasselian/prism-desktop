@@ -116,7 +116,7 @@ class PrismDesktopApp(QObject):
         # Components
         self.theme_manager = ThemeManager()
         self.ha_client = HAClient()
-        self.notification_manager = NotificationManager(ha_client=self.ha_client)
+        self.notification_manager = NotificationManager(ha_client=self.ha_client, config=self.config)
         self.input_manager = InputManager()
         self.button_shortcut_manager = ButtonShortcutManager()
         self.local_command_server = LocalCommandServer(self)

@@ -207,6 +207,58 @@ async def send_location_update(ha_url: str, webhook_id: str, location: dict) -> 
         return False
 
 
+def build_notification_action_event_data(
+    action: str,
+    action_data: Optional[dict],
+    device_id: str,
+    device_name: str,
+) -> dict:
+    """Build event_data for a mobile_app_notification_action event.
+
+    Merges the notification's shared action_data (if any) with the clicked
+    action id and device identity; reserved keys win over action_data collisions.
+    """
+    event_data = dict(action_data) if isinstance(action_data, dict) else {}
+    event_data.update({
+        "action": action,
+        "device_id": device_id,
+        "device_name": device_name,
+    })
+    return event_data
+
+
+async def fire_notification_action_event(ha_url: str, webhook_id: str, event_data: dict) -> bool:
+    """
+    POST a fire_event action to the HA mobile app webhook so HA fires a
+    mobile_app_notification_action event — same contract as the companion apps,
+    so existing actionable-notification automations work unchanged.
+    Returns True on success (HTTP 200/201).
+    """
+    url = ha_url.rstrip("/") + f"/api/webhook/{webhook_id}"
+    payload = {
+        "type": "fire_event",
+        "data": {
+            "event_type": "mobile_app_notification_action",
+            "event_data": event_data,
+        },
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=10) as response:
+                if response.status in (200, 201):
+                    logger.info(f"[MobileApp] Notification action '{event_data.get('action')}' sent")
+                    return True
+                else:
+                    logger.warning(f"[MobileApp] Notification action returned HTTP {response.status}")
+                    return False
+    except asyncio.TimeoutError:
+        logger.warning("[MobileApp] Notification action event timed out")
+        return False
+    except Exception as e:
+        logger.warning(f"[MobileApp] Notification action event error: {e}")
+        return False
+
+
 async def register_sensors(ha_url: str, webhook_id: str) -> None:
     """
     Register all sensors in SENSORS with the HA mobile app webhook.

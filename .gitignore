@@ -27,3 +27,4 @@ env/
 
 # Runtime
 prism.pid
+prism.log*
