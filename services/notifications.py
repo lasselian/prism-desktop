@@ -29,9 +29,9 @@ logger = logging.getLogger(__name__)
 
 # HA companion apps render at most 3 notification actions; match that contract.
 MAX_ACTIONS = 3
-# Token prefix used in Windows toast button arguments to identify our buttons
-# (body clicks / foreign arguments parse to None and are ignored).
-WIN_TOKEN_PREFIX = "prism_action:"
+# Must be a valid URI scheme (no '_' — RFC 3986) or Windows silently drops
+# the button's arguments on click instead of returning them.
+WIN_TOKEN_PREFIX = "http:prism-action-"
 
 
 def sanitize_actions(raw) -> list:
@@ -111,13 +111,11 @@ class NotificationManager(QObject):
         super().__init__()
         self.tray_icon = tray_icon
         self.ha_client = ha_client
-        # Live shared config dict (main.py's self.config) — read at click time
-        # so a webhook_id registered after startup is picked up.
+        # Live shared config dict — read at click time, not just at construction.
         self.config = config if config is not None else {}
         self._windows_registered = False
         self._win_register_lock = threading.Lock()
         self._dbus_notifier = None
-        # Captured on the main thread; toast worker threads marshal back here.
         try:
             self._loop = asyncio.get_event_loop()
         except RuntimeError:
@@ -169,15 +167,14 @@ class NotificationManager(QObject):
             self._windows_registered = True
             logger.info("[Notify] Registered Prism Desktop with Windows notification system")
         except Exception as e:
-            logger.warning(f"[Notify] Windows app registration failed: {e}")
+            # Don't retry — toasts work fine without this.
+            self._windows_registered = True
+            logger.warning(f"[Notify] Windows app registration skipped: {e}")
 
     def _show_windows(self, title: str, message: str, image_path: Optional[str] = None,
                       actions: Optional[list] = None, action_data: Optional[dict] = None):
-        """Windows: native toast via win11toast, on a worker thread.
-
-        win11toast's toast() blocks until the toast is dismissed or activated,
-        so every toast gets its own daemon thread to keep the UI loop free.
-        """
+        """Windows: native toast via win11toast. toast() blocks, so it
+        runs on its own daemon thread to keep the UI loop free."""
         kwargs = {
             'app_id': self.APP_ID,
         }
@@ -201,11 +198,8 @@ class NotificationManager(QObject):
                 if not self._windows_registered:
                     self._register_windows_app()
             if actions:
-                # 'foreground' activation requires a registered COM toast
-                # activator (full packaged-app identity), which this app
-                # doesn't have — Windows silently drops such buttons for
-                # unpackaged apps. 'protocol' is what win11toast's own
-                # examples use and needs no registration.
+                # 'foreground' needs a registered COM activator we don't have
+                # and gets dropped; 'protocol' doesn't need one.
                 kwargs['buttons'] = [
                     {
                         'activationType': 'protocol',
