@@ -2,7 +2,6 @@
 Worker Threads for Prism Desktop
 """
 
-import logging
 import asyncio
 from PyQt6.QtCore import QThread, pyqtSignal
 from core.ha_client import HAClient

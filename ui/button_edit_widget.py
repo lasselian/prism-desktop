@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QSizePolicy, QCompleter, QMenu
 )
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QColor, QFont, QPainter, QLinearGradient, QPen
+from PyQt6.QtGui import QColor, QPainter, QLinearGradient, QPen
 from ui.widgets.toggle_switch import ToggleSwitch
 from core.localization_manager import t
 from ui.styles import Typography, Dimensions

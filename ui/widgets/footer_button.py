@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QPushButton
-from PyQt6.QtCore import Qt, QRectF
+from PyQt6.QtCore import QRectF
 from PyQt6.QtGui import QPainter
 from ui.widgets.dashboard_button_painter import DashboardButtonPainter
 

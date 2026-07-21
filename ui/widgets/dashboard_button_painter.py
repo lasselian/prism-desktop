@@ -5,7 +5,6 @@ from PyQt6.QtGui import (
     QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QBrush,
     QLinearGradient, QConicalGradient, QRadialGradient
 )
-from PyQt6.QtWidgets import QApplication
 from ui.icons import get_icon, get_mdi_font, Icons
 from core.utils import SYSTEM_FONT
 from core.localization_manager import t
@@ -707,8 +706,7 @@ class DashboardButtonPainter:
         rect = button.rect()
         is_huge = button.span_x >= 2 and button.span_y >= 2  # 2x2+
         is_wide = button.span_x >= 2
-        is_tall = button.span_y >= 2 and button.span_x < 2  # 1x2+
-        
+
         # State Data
         state = button._state.lower()  # printing, paused, operational, etc.
         printer_state = state.capitalize()
@@ -716,11 +714,9 @@ class DashboardButtonPainter:
         # Theme / Colors
         if button.theme_manager:
             colors = button.theme_manager.get_colors()
-            base_color = QColor(colors.get('base', '#2d2d2d'))
             text_color = QColor(colors.get('text', '#e0e0e0'))
             dim_text_color = text_color.darker(150)
         else:
-            base_color = QColor('#2d2d2d')
             text_color = QColor('#e0e0e0')
             dim_text_color = QColor('#aaaaaa')
             
@@ -744,12 +740,7 @@ class DashboardButtonPainter:
         cfg = button.config
         
         if hasattr(dashboard, '_entity_states'):
-            # Camera
-            cam_ent = cfg.get('printer_camera_entity')
             # Camera image is handled by the standard `_last_camera_pixmap` on button if configured via `set_camera_image`
-            # Wait, dashboard updates the button's `_last_camera_pixmap` if it matches.
-            # We already routed `apply_camera_cache` in dashboard to hit `3d_printer`. 
-            # So the button already holds `_last_camera_pixmap`.
             if hasattr(button, '_cached_display_pixmap') and button._cached_display_pixmap and not button._cached_display_pixmap.isNull():
                  camera_pixmap = button._cached_display_pixmap
             elif hasattr(button, '_last_camera_pixmap') and button._last_camera_pixmap:

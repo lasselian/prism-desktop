@@ -95,13 +95,6 @@ def notify_download_error(dashboard, detail: str = ""):
 
 # ── Connection / settings ─────────────────────────────────────────────────────
 
-def notify_missing_credentials(dashboard):
-    """Shown when Test Connection is pressed with empty URL or token."""
-    dashboard.show_toast(
-        _with_icon(Icons.LAN_DISCONNECT, t("notifications.missing_credentials"))
-    )
-
-
 def notify_connection_test_result(dashboard, success: bool, message: str):
     """Shown after a connection test completes. Error message comes from HA — not translated."""
     icon = Icons.LAN_CONNECT if success else Icons.LAN_DISCONNECT

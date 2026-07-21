@@ -4,7 +4,7 @@ Contains border drawing and background capture logic.
 """
 
 from PyQt6.QtGui import (
-    QColor, QPainter, QPen, QBrush, QConicalGradient, QPainterPath
+    QColor, QPainter, QPen, QBrush, QConicalGradient
 )
 from PyQt6.QtCore import Qt, QRectF, QPoint
 from PyQt6.QtWidgets import QApplication

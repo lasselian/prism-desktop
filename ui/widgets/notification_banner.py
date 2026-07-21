@@ -157,37 +157,6 @@ class NotificationBanner(QWidget):
         self.label.setOpenExternalLinks(True)
         layout.addWidget(self.label, 1)
 
-        if glass_is_light:
-            btn_style = (
-                "QPushButton {"
-                "  background: rgba(0,0,0,0.08);"
-                "  border: none;"
-                "  border-radius: 4px;"
-                "  color: #555;"
-                "  padding: 2px 10px;"
-                f"  font-family: '{SYSTEM_FONT}';"
-                "  font-size: 10px;"
-                "}"
-                "QPushButton:hover {"
-                "  background: rgba(0,0,0,0.15);"
-                "}"
-            )
-        else:
-            btn_style = (
-                "QPushButton {"
-                "  background: rgba(255,255,255,0.12);"
-                "  border: none;"
-                "  border-radius: 4px;"
-                "  color: #ccc;"
-                "  padding: 2px 10px;"
-                f"  font-family: '{SYSTEM_FONT}';"
-                "  font-size: 10px;"
-                "}"
-                "QPushButton:hover {"
-                "  background: rgba(255,255,255,0.2);"
-                "}"
-            )
-
         if banner_type == "confirm":
             btn_h = int((BANNER_HEIGHT - 8) * 0.75)
             use_gradient = button_style == "Gradient"
@@ -255,8 +224,8 @@ class NotificationBanner(QWidget):
         else:
             btn_h = int((BANNER_HEIGHT - 8) * 0.75)
             close_style = (
-                f"QPushButton {{ background: rgb(175,55,55); border: none; border-radius: 4px; }}"
-                f"QPushButton:hover {{ background: rgb(205,65,65); }}"
+                "QPushButton { background: rgb(175,55,55); border: none; border-radius: 4px; }"
+                "QPushButton:hover { background: rgb(205,65,65); }"
             )
             self.btn_close = _CountdownButton("", is_light=glass_is_light, corner_radius=4, x_icon=True)
             self.btn_close.setFixedSize(btn_h, btn_h)

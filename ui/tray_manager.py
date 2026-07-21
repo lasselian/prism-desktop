@@ -169,11 +169,6 @@ class TrayManager:
         if self._menu:
             self._menu.setStyleSheet(self._menu_stylesheet())
 
-    def set_tooltip(self, text: str):
-        """Update the tray icon tooltip."""
-        if self._tray:
-            self._tray.setToolTip(text)
-
     def geometry(self) -> QRect:
         """Return the tray icon geometry when available."""
         if self._tray:

@@ -11,7 +11,6 @@ The module probes the keyring once on first use and caches the result.
 
 import os
 import sys
-import hashlib
 import logging
 import platform
 from pathlib import Path
@@ -251,14 +250,3 @@ def load_token() -> str:
             logger.warning(f"[TokenStorage] Keyring read failed: {e}")
 
     return ""
-
-
-def delete_token() -> None:
-    """Remove the HA token from all storage locations."""
-    if _probe_keyring():
-        try:
-            keyring.delete_password(SERVICE_NAME, KEY_TOKEN)
-        except Exception:
-            pass
-
-    _enc_delete()

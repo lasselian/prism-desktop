@@ -8,7 +8,7 @@ import time
 import json
 import aiohttp
 from typing import Optional
-from PyQt6.QtCore import QObject, pyqtSignal, QThread
+from PyQt6.QtCore import QObject, pyqtSignal
 import threading
 import logging
 

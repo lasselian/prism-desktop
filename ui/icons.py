@@ -3,7 +3,6 @@ MDI Icons Helper Module
 Material Design Icons via icon font.
 """
 
-from pathlib import Path
 import json
 import re
 import urllib.request

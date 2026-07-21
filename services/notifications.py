@@ -121,10 +121,6 @@ class NotificationManager(QObject):
         except RuntimeError:
             self._loop = None
 
-    def set_ha_client(self, client):
-        """Update the HA client reference."""
-        self.ha_client = client
-
     # ---- Platform dispatch ----
 
     def _show_notification(self, title: str, message: str, image_path: Optional[str] = None,

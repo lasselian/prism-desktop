@@ -3,14 +3,13 @@ from PyQt6.QtCore import (
     Qt, pyqtSignal, QPropertyAnimation, QEasingCurve, pyqtProperty, QRect, QPoint, QPointF, QRectF, QTimer
 )
 from PyQt6.QtGui import (
-    QColor, QFont, QFontMetrics, QPainter, QBrush, QPen, QLinearGradient, QConicalGradient, QPainterPath, QPixmap
+    QColor, QFont, QFontMetrics, QPainter, QBrush, QPen, QLinearGradient, QConicalGradient, QPainterPath
 )
 from ui.icons import get_icon, get_mdi_font, Icons
 from core.utils import SYSTEM_FONT
 from core.temperature_utils import format_temperature
 from core.localization_manager import t
 from ui.widgets.dashboard_button_painter import DashboardButtonPainter
-from ui.utils.glass_effect import draw_frosted_pill
 
 # ── Shared Overlay Animation Constants ──────────────────────────────
 MORPH_OPEN_DURATION   = 400                          # ms – expand from button
@@ -1269,7 +1268,6 @@ class PrinterOverlay(BaseOverlay):
 
         show_text = btn_w >= 80
         font_text = QFont(SYSTEM_FONT, 10, QFont.Weight.Bold)
-        fm        = QFontMetrics(font_text)
         icon_w    = 20   # MDI glyph width at 15pt
         icon_gap  = 6
         radius    = 8
@@ -1704,7 +1702,6 @@ class RobotOverlay(BaseOverlay):
         btn_y         = padding + 24 + 4 + (rect.height() - padding * 2 - 24 - 4 - total_group_h) / 2
         pill_y        = btn_y + btn_h + pill_gap
         pill_rect     = QRectF(padding, pill_y, avail_w, pill_h)
-        pill_radius   = pill_h / 2
 
         is_active = self._state in self.ACTIVE_STATES
         sp_rect   = QRectF(padding, btn_y, btn_w, btn_h)

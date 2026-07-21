@@ -46,23 +46,6 @@ def calculate_width(cols: int) -> int:
     return inner + GRID_MARGIN_LEFT + GRID_MARGIN_RIGHT + (ROOT_MARGIN * 2)
 
 
-def calculate_footer_two_btn_width(cols: int) -> int:
-    """Calculate footer button width when no page indicator is shown (two buttons only)."""
-    grid_inner = cols * BUTTON_WIDTH + (cols - 1) * BUTTON_SPACING
-    return (grid_inner - BUTTON_SPACING) // 2
-
-
-def calculate_footer_side_btn_width(cols: int) -> int:
-    """Calculate footer side button width when a page indicator sits in the middle.
-
-    Three items: [btn_left] [indicator] [btn_settings], each separated by BUTTON_SPACING.
-    """
-    grid_inner = cols * BUTTON_WIDTH + (cols - 1) * BUTTON_SPACING
-    return (grid_inner - PAGE_INDICATOR_WIDTH - 2 * BUTTON_SPACING) // 2
-
-
 # Notification Banner
 BANNER_HEIGHT = 46
 BANNER_VERTICAL_MARGIN = 12
-
-WINDOW_WIDTH = calculate_width(DEFAULT_COLS)

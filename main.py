@@ -12,8 +12,6 @@ import signal
 from pathlib import Path
 from typing import Optional
 import logging
-import copy
-import platform
 import requests
 
 from core.utils import configure_ssl
@@ -86,8 +84,6 @@ from services.mobile_app import register_mobile_app, send_location_update, regis
 from services.location_manager import get_location
 from ui.icons import load_mdi_font, icon_signals
 from services.update_checker import UpdateCheckerThread
-from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtCore import QUrl
 from core.temperature_utils import normalize_temperature_unit
 from core.build_info import APP_VERSION, get_display_version
 from core.localization_manager import init_localization, is_rtl
@@ -560,15 +556,6 @@ class PrismDesktopApp(QObject):
                 # Apply cached images immediately before showing to prevent black flash
                 self.dashboard.apply_camera_cache(self._camera_cache)
             self.dashboard.toggle(self._tray_geometry())
-    
-    @pyqtSlot()
-    def _show_settings(self):
-        if self.dashboard:
-            if not self.dashboard.isVisible():
-                self._show_dashboard_near_tray()
-                QTimer.singleShot(0, self.dashboard.show_settings)
-                return
-            self.dashboard.show_settings()
     
     @pyqtSlot()
     def _quit(self):

@@ -3,9 +3,10 @@ from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QWidget
 
 from ui.widgets.overlays import DimmerOverlay, ClimateOverlay, PrinterOverlay, WeatherOverlay, CameraOverlay, MowerOverlay, VacuumOverlay, AlarmOverlay
-from ui.widgets.dashboard_button import DashboardButton
 from ui.constants import BUTTON_HEIGHT, BUTTON_SPACING, BUTTON_WIDTH
 from core.temperature_utils import convert_temperature, convert_temperature_delta, normalize_temperature_unit, preference_to_unit
+
+TWO_ROW_MIN_HEIGHT = (BUTTON_HEIGHT * 2) + BUTTON_SPACING
 
 class OverlayManager(QObject):
     """
@@ -116,23 +117,6 @@ class OverlayManager(QObject):
             self.close_all_overlays()
         return False
 
-    def close_all_overlays(self):
-        """Instantly hide any active overlay. Called before navigating away from grid."""
-        if self.dimmer_overlay.isVisible():
-            self.dimmer_overlay.hide()
-            self.on_dimmer_finished()
-        if self.climate_overlay.isVisible():
-            self.climate_overlay.hide()
-            self.on_climate_finished()
-        if self.printer_overlay.isVisible():
-            self.printer_overlay.hide()
-            self.on_printer_finished()
-        if self.weather_overlay.isVisible():
-            self.weather_overlay.hide()
-            self.on_weather_finished()
-        if self.alarm_overlay.isVisible():
-            self.alarm_overlay.hide()
-            self.on_alarm_finished()
     def any_overlay_open(self) -> bool:
         """Return True if any overlay is currently visible."""
         return (self.dimmer_overlay.isVisible() or
@@ -690,7 +674,7 @@ class OverlayManager(QObject):
         target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='climate')
         
         # Enforce Minimum Height (2 Rows) for Climate Overlay
-        min_height = (BUTTON_HEIGHT * 2) + BUTTON_SPACING
+        min_height = TWO_ROW_MIN_HEIGHT
         if target_rect.height() < min_height:
             target_rect.setHeight(min_height)
             
@@ -856,8 +840,7 @@ class OverlayManager(QObject):
         target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='printer')
         
         # We want the printer overlay to be as big as possible (at least 2x4 usually)
-        from ui.constants import BUTTON_HEIGHT, BUTTON_SPACING, BUTTON_WIDTH
-        min_height = (BUTTON_HEIGHT * 2) + BUTTON_SPACING
+        min_height = TWO_ROW_MIN_HEIGHT
         if target_rect.height() < min_height:
             target_rect.setHeight(min_height)
             
@@ -942,7 +925,7 @@ class OverlayManager(QObject):
         target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='mower')
 
         # Enforce 2-row minimum height
-        min_height = (BUTTON_HEIGHT * 2) + BUTTON_SPACING
+        min_height = TWO_ROW_MIN_HEIGHT
         if target_rect.height() < min_height:
             target_rect.setHeight(min_height)
 
@@ -1015,7 +998,7 @@ class OverlayManager(QObject):
         target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='vacuum')
 
         # Enforce 2-row minimum height
-        min_height = (BUTTON_HEIGHT * 2) + BUTTON_SPACING
+        min_height = TWO_ROW_MIN_HEIGHT
         if target_rect.height() < min_height:
             target_rect.setHeight(min_height)
 
@@ -1220,7 +1203,7 @@ class OverlayManager(QObject):
         target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='weather')
         
         # Enforce Minimum Height (2 Rows) for Weather Overlay
-        min_height = (BUTTON_HEIGHT * 2) + BUTTON_SPACING
+        min_height = TWO_ROW_MIN_HEIGHT
         if target_rect.height() < min_height:
             target_rect.setHeight(min_height)
             

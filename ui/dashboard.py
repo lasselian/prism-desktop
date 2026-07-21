@@ -3,27 +3,23 @@ Dashboard Widget for Prism Desktop
 The main popup menu with 4x2 grid of buttons/widgets.
 """
 
-import asyncio
 import logging
 import sys
 import time
-import platform
 import ctypes
 from PyQt6.QtWidgets import (
-    QWidget, QGridLayout, QPushButton, QLabel,
-    QVBoxLayout, QHBoxLayout, QFrame, QApplication, QGraphicsDropShadowEffect, QMenu,
-    QGraphicsOpacityEffect, QScrollArea, QSizePolicy
+    QWidget, QGridLayout,
+    QVBoxLayout, QHBoxLayout, QFrame, QApplication, QGraphicsDropShadowEffect,
+    QScrollArea, QSizePolicy
 )
 from PyQt6.QtCore import (
-    Qt, QPoint, QPointF, pyqtSignal, QPropertyAnimation, QEasingCurve, 
-    QMimeData, QByteArray, QDataStream, QIODevice, pyqtProperty, QRectF, QTimer, QRect,
+    Qt, QPoint, pyqtSignal, QPropertyAnimation, QEasingCurve,
+    QDataStream, QIODevice, pyqtProperty, QRectF, QTimer, QRect,
     pyqtSlot, QUrl, QSize
-
 )
 from PyQt6.QtGui import (
-    QColor, QFont, QDrag, QPixmap, QPainter, QCursor,
-    QPen, QBrush, QLinearGradient, QConicalGradient, QDesktopServices,
-    QIcon, QPainterPath
+    QColor, QPixmap, QPainter,
+    QIcon, QPainterPath, QDesktopServices
 )
 from ui.icons import get_icon, get_mdi_font
 
@@ -34,18 +30,17 @@ from ui.widgets.dashboard_button import DashboardButton, MIME_TYPE
 from ui.widgets.footer_button import FooterButton
 from ui.widgets.page_indicator_button import PageIndicatorButton
 from ui.constants import (
-    WINDOW_WIDTH, DEFAULT_COLS,
-    BUTTON_HEIGHT, BUTTON_WIDTH, BUTTON_SPACING, 
+    DEFAULT_COLS,
+    BUTTON_HEIGHT, BUTTON_SPACING,
     GRID_MARGIN_LEFT, GRID_MARGIN_RIGHT, GRID_MARGIN_TOP, GRID_MARGIN_BOTTOM,
     FOOTER_HEIGHT, FOOTER_MARGIN_BOTTOM,
     ANIM_DURATION_ENTRANCE, ANIM_DURATION_HEIGHT, ANIM_DURATION_WIDTH, ANIM_DURATION_BORDER,
     ROOT_MARGIN, RESIZE_MARGIN, calculate_width,
-    PAGE_INDICATOR_WIDTH,
     GLASS_MIN_INTERVAL_MS, GLASS_MAX_INTERVAL_MS, GLASS_WORK_BUDGET,
 )
 from ui.widgets.notification_banner import NotificationBanner
 from ui.managers.overlay_manager import OverlayManager
-from ui.managers.grid_manager import GridManager, VirtualButton
+from ui.managers.grid_manager import GridManager
 from ui.settings_widget import SettingsWidget
 from ui.button_edit_widget import ButtonEditWidget
 from ui.visuals.dashboard_effects import (
@@ -190,7 +185,6 @@ class Dashboard(QWidget):
             theme_manager.theme_changed.connect(self.on_theme_changed)
 
         # Window Height Animation
-        self._anim_height = 0
         self.height_anim = QPropertyAnimation(self, b"anim_height")
         self.height_anim.setDuration(ANIM_DURATION_HEIGHT)
         self.height_anim.setEasingCurve(QEasingCurve.Type.OutBack) # Slight bounce
@@ -200,7 +194,6 @@ class Dashboard(QWidget):
         self.height_anim.finished.connect(self._on_height_anim_finished)
         
         # Window Width Animation
-        self._anim_width = 0
         self.width_anim = QPropertyAnimation(self, b"anim_width")
         self.width_anim.setDuration(ANIM_DURATION_WIDTH)
         self.width_anim.setEasingCurve(QEasingCurve.Type.OutBack)
@@ -452,7 +445,6 @@ class Dashboard(QWidget):
                 safe_target_y = full_rect.bottom() - self.height() - 60
                 target_y = min(target_y, safe_target_y)
 
-        self._tray_position = self._get_tray_position()
         self._target_pos = QPoint(target_x, target_y)
 
         if move_now and self.isVisible():
@@ -1711,10 +1703,6 @@ class Dashboard(QWidget):
     
     def _init_settings_widget(self, config: dict, input_manager=None):
         """Initialize the SettingsWidget (call from main.py after Dashboard creation)."""
-        # Store for re-initialization after set_rows() rebuilds UI
-        self._settings_config = config
-        self._settings_input_manager = input_manager
-        
         # IMPORT Settings Widget
         self.settings_widget = SettingsWidget(config, self.theme_manager, input_manager, self.version, self, dashboard=self)
         self.settings_widget.back_requested.connect(self.hide_settings)
@@ -1741,7 +1729,6 @@ class Dashboard(QWidget):
         self.stack_widget.setCurrentWidget(self.grid_scroll)
         
         # Clear cached height so it re-calculates with new settings widget
-        self._cached_settings_height = None
         self._settings_locked_height = None
 
         # Init Button Editor (Embedded)

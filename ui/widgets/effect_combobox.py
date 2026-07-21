@@ -4,8 +4,8 @@ A QComboBox that supports animated border effects (Rainbow, Aurora Borealis).
 """
 
 from PyQt6.QtWidgets import QComboBox
-from PyQt6.QtCore import pyqtProperty, QPropertyAnimation, QEasingCurve, QRectF, Qt, QTimer
-from PyQt6.QtGui import QPainter, QPen, QBrush, QConicalGradient, QColor
+from PyQt6.QtCore import pyqtProperty, QPropertyAnimation, QEasingCurve, QRectF, QTimer
+from PyQt6.QtGui import QPainter
 from ui.widgets.dashboard_button_painter import DashboardButtonPainter
 
 class EffectComboBox(QComboBox):

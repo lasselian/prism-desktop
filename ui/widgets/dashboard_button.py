@@ -1,16 +1,14 @@
 from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QLabel, QApplication, QGraphicsDropShadowEffect, QMenu,
-    QGraphicsOpacityEffect, QGraphicsEffect
+    QGraphicsEffect
 )
 from PyQt6.QtCore import (
-    Qt, QPoint, QPointF, pyqtSignal, QPropertyAnimation, QEasingCurve, 
-    QMimeData, QByteArray, QDataStream, QIODevice, pyqtProperty, QRectF, QTimer, QRect,
-    pyqtSlot, QUrl, QSize
+    Qt, QPoint, pyqtSignal, QPropertyAnimation, QEasingCurve,
+    QMimeData, QByteArray, QDataStream, QIODevice, pyqtProperty, QRectF, QTimer, QRect
 )
 from PyQt6.QtGui import (
     QColor, QFont, QDrag, QPixmap, QPainter, QCursor,
-    QPen, QBrush, QLinearGradient, QConicalGradient, QDesktopServices,
-    QIcon, QPainterPath
+    QPainterPath
 )
 from ui.icons import get_icon, get_mdi_font, Icons, get_icon_for_type
 from core.utils import SYSTEM_FONT
@@ -19,7 +17,6 @@ from core.temperature_utils import format_temperature, is_temperature_entity
 from ui.widgets.dashboard_button_painter import DashboardButtonPainter
 from ui.widgets.dashboard_button_styles import DashboardButtonStyleManager
 import html
-import math
 import re
 import sys
 
@@ -1171,13 +1168,6 @@ class DashboardButton(QFrame):
         self._album_art = pixmap
         self.update()  # Trigger repaint
 
-    def set_camera_image(self, pixmap):
-        """Set the camera image pixmap."""
-        self._last_camera_pixmap = pixmap
-        # If we are currently in camera mode, force update
-        if self.config.get('type') == 'camera':
-             self.update()
-
     def reset_state(self):
         """Reset internal state to default."""
         self._state = "off"
@@ -1944,35 +1934,6 @@ class DashboardButton(QFrame):
                  self.clicked.emit(self.config)
         self._drag_start_pos = None
         super().mouseReleaseEvent(event)
-
-    def _step_input_number(self, direction: int):
-        """Step the input number up (1) or down (-1) and trigger API call."""
-        state_obj = self._value if isinstance(self._value, dict) else {}
-        attrs = state_obj.get('attributes', {})
-        try:
-            current_val = float(state_obj.get('state', 0.0))
-            step = float(attrs.get('step', 1.0))
-            min_val = float(attrs.get('min', 0.0))
-            max_val = float(attrs.get('max', 100.0))
-            
-            new_val = current_val + (direction * step)
-            new_val = max(min_val, min(max_val, new_val))
-            
-            if abs(new_val - current_val) > 0.0001:
-                # Update local state
-                new_state_obj = dict(state_obj)
-                new_state_obj['state'] = str(new_val)
-                self._value = new_state_obj
-                self.update_content()
-                
-                # Trigger blink
-                self.input_blink_anim.stop()
-                self.input_blink_anim.start()
-                
-                # Emit API call
-                self.clicked.emit({**self.config, 'action': 'set_input_number', 'value': new_val})
-        except (ValueError, TypeError):
-            pass
 
     def _step_input_number(self, direction: int):
         """Step the input number up (1) or down (-1) and trigger API call."""

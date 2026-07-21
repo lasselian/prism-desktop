@@ -12,13 +12,12 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QComboBox, QFormLayout,
-    QFrame, QColorDialog, QApplication, QButtonGroup, QSizePolicy
+    QFrame, QApplication, QButtonGroup, QSizePolicy
 )
 from ui.widgets.toggle_switch import ToggleSwitch
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QUrl, QTimer, QThread, QSize, QPropertyAnimation, QEasingCurve, QObject, QEvent
-from PyQt6.QtGui import QFont, QColor, QDesktopServices, QIcon, QPixmap, QPainter
+from PyQt6.QtGui import QColor, QDesktopServices, QIcon, QPixmap, QPainter
 from PyQt6.QtWidgets import QGraphicsOpacityEffect
-from core.utils import SYSTEM_FONT
 from core.localization_manager import t, current_language, supported_languages, init_localization
 
 from core.build_info import APP_VERSION, get_display_version
@@ -242,7 +241,6 @@ class SettingsWidget(QWidget):
             input_bg = "rgba(0, 0, 0, 0.06)"
             input_border = "rgba(0, 0, 0, 0.25)"
             input_focus_bg = "rgba(0, 0, 0, 0.08)"
-            section_header_color = "#555555"
             pill_bg = "rgba(255, 255, 255, 0.85)"
             pill_border = "rgba(0, 0, 0, 0.12)"
             pill_hover_bg = "rgba(0, 0, 0, 0.07)"
@@ -253,7 +251,6 @@ class SettingsWidget(QWidget):
             input_bg = "rgba(255, 255, 255, 0.08)"
             input_border = "rgba(255, 255, 255, 0.1)"
             input_focus_bg = "rgba(255, 255, 255, 0.12)"
-            section_header_color = "#8e8e93"
             pill_bg = "rgba(30, 30, 30, 0.6)"
             pill_border = "rgba(255, 255, 255, 0.05)"
             pill_hover_bg = "rgba(255, 255, 255, 0.09)"
@@ -1504,7 +1501,6 @@ class SettingsWidget(QWidget):
     @pyqtSlot(str)
     def _on_auto_update_error(self, error):
         link_style = "color: #e53935; font-size: 11px;"
-        releases_url = "https://github.com/lasselian/prism-desktop/releases"
         label_html = (
             f'<span style="{link_style}">'
             f'{t("settings.support.update_failed")} — '
