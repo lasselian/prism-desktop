@@ -93,6 +93,32 @@ class DashboardButtonStyleManager:
                 QLabel {{ color: {colors['border']}; background: transparent; opacity: 0.5; }}
             """)
             return
+        if button.config and button.config.get('type') == 'lock' and button._state == 'jammed':
+            # Jammed lock: unmissable alert red, independent of the button's configured color
+            alert_color = '#EA4335'
+            if is_gradient:
+                bg_style = DashboardButtonStyleManager._get_gradient(alert_color, 115)
+            else:
+                bg_style = f"background-color: {alert_color};"
+
+            button.setStyleSheet(f"""
+                DashboardButton {{
+                    {bg_style}
+                    border-radius: {Dimensions.RADIUS_XLARGE};
+                }}
+                QLabel#valueLabel {{
+                    color: rgba(255, 255, 255, 0.9);
+                    background: transparent;
+                    font-weight: {Typography.WEIGHT_REGULAR};
+                    font-size: {Typography.SIZE_BUTTON_ICON_LARGE};
+                }}
+                QLabel#nameLabel {{
+                    color: rgba(255, 255, 255, 0.95);
+                    background: transparent;
+                    font-family: "{font_label}"; font-size: {font_size_label}; font-weight: {font_weight_label}; text-transform: uppercase;
+                }}
+            """)
+            return
         if (button._state == "on" or button._state == "open" or button._state == "locked" or
             button._state == "mowing" or button._state == "returning" or button._state == "cleaning" or
             (button.config and button.config.get('type') == 'script') or

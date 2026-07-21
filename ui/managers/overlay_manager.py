@@ -2,9 +2,9 @@ from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QRect, QPoint, QEvent
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QWidget
 
-from ui.widgets.overlays import DimmerOverlay, ClimateOverlay, PrinterOverlay, WeatherOverlay, CameraOverlay, MowerOverlay, VacuumOverlay
+from ui.widgets.overlays import DimmerOverlay, ClimateOverlay, PrinterOverlay, WeatherOverlay, CameraOverlay, MowerOverlay, VacuumOverlay, AlarmOverlay
 from ui.widgets.dashboard_button import DashboardButton
-from ui.constants import BUTTON_HEIGHT, BUTTON_SPACING
+from ui.constants import BUTTON_HEIGHT, BUTTON_SPACING, BUTTON_WIDTH
 from core.temperature_utils import convert_temperature, convert_temperature_delta, normalize_temperature_unit, preference_to_unit
 
 class OverlayManager(QObject):
@@ -61,12 +61,19 @@ class OverlayManager(QObject):
         self.vacuum_overlay.finished.connect(self.on_vacuum_finished)
         self.vacuum_overlay.morph_changed.connect(self.on_morph_changed)
 
+        self.alarm_overlay = AlarmOverlay(parent)
+        self.alarm_overlay.action_requested.connect(self.on_alarm_action)
+        self.alarm_overlay.finished.connect(self.on_alarm_finished)
+        self.alarm_overlay.morph_changed.connect(self.on_morph_changed)
+        self.alarm_overlay.keypad_toggled.connect(self.on_alarm_keypad_toggled)
+
         # Per-overlay state: siblings faded by the overlay, and the source button it morphed from
         self._overlay_state = {
             overlay: {'siblings': [], 'source': None}
             for overlay in (
                 self.dimmer_overlay, self.climate_overlay, self.printer_overlay,
-                self.weather_overlay, self.camera_overlay, self.mower_overlay, self.vacuum_overlay
+                self.weather_overlay, self.camera_overlay, self.mower_overlay, self.vacuum_overlay,
+                self.alarm_overlay,
             )
         }
 
@@ -86,6 +93,7 @@ class OverlayManager(QObject):
         self._active_camera_entity = None
         self._active_mower_entity = None
         self._active_vacuum_entity = None
+        self._active_alarm_entity = None
 
         # Throttling Timers
         self.dimmer_timer = QTimer(self)
@@ -122,6 +130,9 @@ class OverlayManager(QObject):
         if self.weather_overlay.isVisible():
             self.weather_overlay.hide()
             self.on_weather_finished()
+        if self.alarm_overlay.isVisible():
+            self.alarm_overlay.hide()
+            self.on_alarm_finished()
     def any_overlay_open(self) -> bool:
         """Return True if any overlay is currently visible."""
         return (self.dimmer_overlay.isVisible() or
@@ -130,7 +141,8 @@ class OverlayManager(QObject):
                 self.weather_overlay.isVisible() or
                 self.camera_overlay.isVisible() or
                 self.mower_overlay.isVisible() or
-                self.vacuum_overlay.isVisible())
+                self.vacuum_overlay.isVisible() or
+                self.alarm_overlay.isVisible())
 
     def close_all_overlays_animated(self):
         """Trigger close_morph on all visible overlays instead of instant hide."""
@@ -148,6 +160,8 @@ class OverlayManager(QObject):
             self.mower_overlay.close_morph()
         if self.vacuum_overlay.isVisible() and not getattr(self.vacuum_overlay, '_is_closing', False):
             self.vacuum_overlay.close_morph()
+        if self.alarm_overlay.isVisible() and not getattr(self.alarm_overlay, '_is_closing', False):
+            self.alarm_overlay.close_morph()
 
     def _queue_or_start_overlay(self, method, slot, *args):
         """
@@ -199,6 +213,12 @@ class OverlayManager(QObject):
         if self.mower_overlay.isVisible():
             self.mower_overlay.hide()
             self.on_mower_finished()
+        if self.vacuum_overlay.isVisible():
+            self.vacuum_overlay.hide()
+            self.on_vacuum_finished()
+        if self.alarm_overlay.isVisible():
+            self.alarm_overlay.hide()
+            self.on_alarm_finished()
 
     def update_buttons(self, buttons: list):
         """Update reference to buttons."""
@@ -241,6 +261,10 @@ class OverlayManager(QObject):
         # Notify active vacuum overlay
         if self.vacuum_overlay.isVisible() and self._active_vacuum_entity == entity_id:
             self.vacuum_overlay.update_state(state)
+
+        # Notify active alarm overlay
+        if self.alarm_overlay.isVisible() and self._active_alarm_entity == entity_id:
+            self.alarm_overlay.update_state(state)
 
     def update_camera_image(self, entity_id: str, pixmap):
         """Update active overlays with new camera image."""
@@ -316,6 +340,8 @@ class OverlayManager(QObject):
         self.printer_overlay.set_border_effect(effect)
         self.weather_overlay.set_border_effect(effect)
         self.mower_overlay.set_border_effect(effect)
+        self.vacuum_overlay.set_border_effect(effect)
+        self.alarm_overlay.set_border_effect(effect)
 
     def set_temperature_unit_preference(self, preference: str):
         self._temperature_unit_preference = preference
@@ -495,7 +521,7 @@ class OverlayManager(QObject):
             'dimmer': self.dimmer_overlay, 'climate': self.climate_overlay,
             'printer': self.printer_overlay, 'weather': self.weather_overlay,
             'camera': self.camera_overlay, 'mower': self.mower_overlay,
-            'vacuum': self.vacuum_overlay,
+            'vacuum': self.vacuum_overlay, 'alarm': self.alarm_overlay,
         }
         _overlay = _overlay_map.get(overlay_type, self.dimmer_overlay)
         _state = self._overlay_state[_overlay]
@@ -1025,6 +1051,140 @@ class OverlayManager(QObject):
     def on_vacuum_finished(self):
         self._active_vacuum_entity = None
         self._restore_overlay_state(self.vacuum_overlay)
+        self.parent_widget.activateWindow()
+        self._check_pending_actions()
+
+    # ==========================
+    # Alarm Control Panel Logic
+    # ==========================
+
+    # alarm_control_panel supported_features bit -> arm action
+    ALARM_FEATURE_BITS = {
+        1:  'arm_home',
+        2:  'arm_away',
+        4:  'arm_night',
+        16: 'arm_custom_bypass',
+        32: 'arm_vacation',
+    }
+
+    def start_alarm(self, slot: int, global_rect: QRect, config: dict):
+        if self._queue_or_start_overlay(self.start_alarm, slot, global_rect, config):
+            return
+
+        if not config: return
+        entity_id = config.get('entity_id')
+        if not entity_id: return
+
+        self._active_alarm_entity = entity_id
+        source_btn = next((b for b in self.buttons if b.slot == slot), None)
+
+        # Colors
+        if self.theme_manager:
+            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
+        else:
+            base_color = QColor("#2d2d2d")
+        button_color = config.get('color')
+        accent_color = QColor(button_color) if button_color else QColor("#4285F4")
+        if self.theme_manager and not button_color:
+            cols = self.theme_manager.get_colors()
+            accent_color = QColor(cols.get('accent', '#4285F4'))
+
+        start_rect = self.parent_widget.mapFromGlobal(global_rect.topLeft())
+        start_rect = QRect(start_rect, global_rect.size())
+
+        target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='alarm')
+
+        current_state = self._entity_states.get(entity_id, {})
+        attrs = current_state.get('attributes', {})
+
+        supported = int(attrs.get('supported_features', 0) or 0)
+        modes = [action for bit, action in self.ALARM_FEATURE_BITS.items() if supported & bit]
+        self.alarm_overlay.configure_modes(modes)
+
+        code_required = attrs.get('code_format') is not None
+        code_arm_required = attrs.get('code_arm_required', True)
+        self.alarm_overlay.configure_code(
+            code_for_arm=code_required and code_arm_required,
+            code_for_disarm=code_required,
+        )
+
+        # Open compact like every other overlay — grows on demand if a keypad is needed
+        # (see on_alarm_keypad_toggled), so the common "just tap Home/Away" case stays small.
+        target_rect = self._size_alarm_rect(source_btn, target_rect, rows=2)
+
+        self.alarm_overlay.set_border_effect(self._border_effect)
+        self.alarm_overlay.start_morph(
+            start_rect, target_rect, config.get('label', 'Alarm'),
+            color=accent_color, base_color=base_color, current_state=current_state
+        )
+
+    # Alarm never needs a full grid-row width — a handful of pill buttons or a 3-column
+    # keypad both fit comfortably in 3 columns, so cap it instead of stretching edge to edge.
+    ALARM_MAX_WIDTH = (3 * BUTTON_WIDTH) + (2 * BUTTON_SPACING)
+
+    def _size_alarm_rect(self, source_btn, target_rect: QRect, rows: int) -> QRect:
+        """Cap target_rect to a sane width and grow it to fit `rows` of button height,
+        shifting on-screen and (re)computing sibling fade against the final rect."""
+        state = self._overlay_state[self.alarm_overlay]
+        for btn in state['siblings']:
+            btn.set_opacity(1.0)
+        state['siblings'] = []
+        if source_btn:
+            source_btn.set_opacity(0.0)
+
+        if target_rect.width() > self.ALARM_MAX_WIDTH:
+            row_center = target_rect.x() + target_rect.width() / 2
+            if source_btn:
+                src_pos = source_btn.mapTo(self.parent_widget, QPoint(0, 0))
+                src_center = src_pos.x() + source_btn.width() / 2
+            else:
+                src_center = row_center
+            new_x = target_rect.right() - self.ALARM_MAX_WIDTH + 1 if src_center > row_center else target_rect.x()
+            target_rect = QRect(int(new_x), target_rect.y(), int(self.ALARM_MAX_WIDTH), target_rect.height())
+
+        min_height = (BUTTON_HEIGHT * rows) + (BUTTON_SPACING * (rows - 1))
+        if target_rect.height() < min_height:
+            target_rect.setHeight(min_height)
+
+            safe_bottom = self.parent_widget.height() - 40
+            if target_rect.bottom() > safe_bottom:
+                if source_btn:
+                    src_pos = source_btn.mapTo(self.parent_widget, QPoint(0, 0))
+                    src_bottom = src_pos.y() + source_btn.height()
+                    target_rect.moveBottom(src_bottom)
+                else:
+                    diff = target_rect.bottom() - safe_bottom
+                    target_rect.moveTop(target_rect.top() - diff)
+
+        self._add_covered_siblings(self.alarm_overlay, source_btn, target_rect)
+        return target_rect
+
+    def on_alarm_keypad_toggled(self, show_keypad: bool):
+        """Alarm panel needs to grow (keypad appearing) or shrink back (keypad dismissed)."""
+        if not self.alarm_overlay.isVisible():
+            return
+        state = self._overlay_state[self.alarm_overlay]
+        source_btn = state['source']
+        slot = source_btn.slot if source_btn else None
+
+        target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='alarm')
+        target_rect = self._size_alarm_rect(source_btn, target_rect, rows=3 if show_keypad else 2)
+
+        self.alarm_overlay.resize_to(target_rect)
+
+    def on_alarm_action(self, action: str, code: str):
+        if not self._active_alarm_entity:
+            return
+        service_data = {'code': code} if code else {}
+        self.service_request.emit({
+            "service": f"alarm_control_panel.alarm_{action}",
+            "entity_id": self._active_alarm_entity,
+            "service_data": service_data,
+        })
+
+    def on_alarm_finished(self):
+        self._active_alarm_entity = None
+        self._restore_overlay_state(self.alarm_overlay)
         self.parent_widget.activateWindow()
         self._check_pending_actions()
 

@@ -162,6 +162,22 @@ class DashboardButtonPainter:
                 painter.drawArc(arc_rect, 180 * 16, -int(180 * 16 * frac))
 
     @staticmethod
+    def _paint_lock_hold_ring(button):
+        """Amber ring traced around the border while a lock's unlock-hold is in progress."""
+        painter = QPainter(button)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        DashboardButtonPainter.draw_perimeter_progress(
+            painter,
+            QRectF(button.rect()),
+            fraction=button._lock_hold_progress,
+            fill_color=QColor('#F2A600'),
+            track_color=QColor(255, 255, 255, 30),
+            thickness=3,
+            offset=6,
+        )
+        painter.end()
+
+    @staticmethod
     def paint(button, event):
         """Main paint method."""
         # Media Player (Apple-like)
@@ -180,6 +196,10 @@ class DashboardButtonPainter:
         if (button.config.get('type') == 'widget'
                 and button.config.get('display_style') in ('gauge', 'bar', 'perimeter')):
             DashboardButtonPainter._paint_widget_sensor(button)
+
+        # Lock hold-to-unlock progress ring
+        if button.config.get('type') == 'lock' and getattr(button, '_lock_hold_progress', 0.0) > 0.0:
+            DashboardButtonPainter._paint_lock_hold_ring(button)
 
         # Draw Camera Image (if applicable)
         # Draw Camera Image (if applicable)

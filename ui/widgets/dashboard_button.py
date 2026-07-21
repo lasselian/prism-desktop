@@ -146,6 +146,7 @@ class DashboardButton(QFrame):
     volume_requested = pyqtSignal(int, QRect) # slot, geometry (for volume overlay)
     mower_requested = pyqtSignal(int, QRect) # slot, geometry (for mower overlay)
     vacuum_requested = pyqtSignal(int, QRect) # slot, geometry (for vacuum overlay)
+    alarm_requested = pyqtSignal(int, QRect) # slot, geometry (for alarm control panel overlay)
     volume_scroll = pyqtSignal(str, float) # entity_id, new_volume (for scroll wheel)
     media_command_requested = pyqtSignal(dict)
     resize_requested = pyqtSignal(int, int, int) # slot, span_x, span_y
@@ -262,7 +263,18 @@ class DashboardButton(QFrame):
         self._long_press_timer.setInterval(300) # 300ms hold
         self._long_press_timer.timeout.connect(self._on_long_press)
         self._ignore_release = False
-        
+
+        # Lock hold-to-unlock: unlocking requires a deliberate hold, locking stays instant.
+        self._lock_holding = False
+        self._lock_hold_progress = 0.0
+        self.lock_hold_anim = QPropertyAnimation(self, b"lock_hold_progress")
+        self.lock_hold_anim.setDuration(550)
+        self.lock_hold_anim.setEasingCurve(QEasingCurve.Type.Linear)
+        self._lock_hold_timer = QTimer(self)
+        self._lock_hold_timer.setSingleShot(True)
+        self._lock_hold_timer.setInterval(550)
+        self._lock_hold_timer.timeout.connect(self._on_lock_hold_complete)
+
         self._border_effect = 'Rainbow'
 
         # Animated background state (prismatic light field)
@@ -376,6 +388,15 @@ class DashboardButton(QFrame):
         self.update()
 
     perimeter_fraction = pyqtProperty(float, get_perimeter_fraction, set_perimeter_fraction)
+
+    def get_lock_hold_progress(self):
+        return self._lock_hold_progress
+
+    def set_lock_hold_progress(self, val):
+        self._lock_hold_progress = val
+        self.update()
+
+    lock_hold_progress = pyqtProperty(float, get_lock_hold_progress, set_lock_hold_progress)
 
     def get_gauge_fraction(self):
         return self._gauge_fraction
@@ -633,6 +654,8 @@ class DashboardButton(QFrame):
             self._update_lawn_mower_view()
         elif btn_type == 'vacuum':
             self._update_vacuum_view()
+        elif btn_type == 'alarm_control_panel':
+            self._update_alarm_view()
         elif btn_type == 'input_number':
             self._update_input_number_view()
         elif btn_type == 'sun':
@@ -1048,6 +1071,21 @@ class DashboardButton(QFrame):
         self.value_label.show()
         self.name_label.show()
 
+    def _update_alarm_view(self):
+        """Alarm control panel — shield icon reflecting arm state, same layout as lock/curtain."""
+        label = self.config.get('label', '')
+        self.value_label.setFont(get_mdi_font(26))
+
+        icon_name = self.config.get('icon') or self._ha_icon
+        icon_char = get_icon(icon_name) if icon_name else None
+        icon = icon_char if icon_char else get_icon_for_type('alarm_control_panel', self._state or 'disarmed')
+
+        self.value_label.setText(icon)
+        self.name_label.setText(label)
+        self.setProperty("type", "alarm_control_panel")
+        self.value_label.show()
+        self.name_label.show()
+
     def _update_sun_view(self):
         """Sun entity: all rendering is done by the painter."""
         self._state = 'on'  # always active so QSS renders at full opacity
@@ -1238,6 +1276,8 @@ class DashboardButton(QFrame):
             self.set_state(state.get('state', 'unknown'))
         elif btn_type == 'vacuum':
             self.set_state(state.get('state', 'unknown'))
+        elif btn_type == 'alarm_control_panel':
+            self.set_state(state.get('state', 'disarmed'))
         elif btn_type == 'sun':
             self.sun_state = state.get('state', 'unknown')
             attrs = state.get('attributes', {})
@@ -1470,9 +1510,43 @@ class DashboardButton(QFrame):
         elif btn_type == 'vacuum':
             self._ignore_release = True
             self.vacuum_requested.emit(self.slot, rect)
+        elif btn_type == 'alarm_control_panel':
+            self._ignore_release = True
+            self.alarm_requested.emit(self.slot, rect)
         elif btn_type == 'input_number':
             # Long press on input_number -> Enable value scrub mode
             self._input_scrub_mode = True
+
+    def _lock_resolve_action(self):
+        """What a tap on this lock button would do right now: 'lock', 'unlock', or None."""
+        if not self.config or self.config.get('type') != 'lock':
+            return None
+        return 'unlock' if self._state == 'locked' else 'lock'
+
+    def _cancel_lock_hold(self):
+        """Release happened before the unlock hold completed — snap the ring back, do nothing."""
+        self._lock_holding = False
+        self._lock_hold_timer.stop()
+        self.lock_hold_anim.stop()
+        self.lock_hold_anim.setStartValue(self._lock_hold_progress)
+        self.lock_hold_anim.setDuration(180)
+        self.lock_hold_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+        self.lock_hold_anim.setEndValue(0.0)
+        self.lock_hold_anim.start()
+
+    def _on_lock_hold_complete(self):
+        """Held long enough — commit the unlock."""
+        if not self._lock_holding or not self.config:
+            return
+        self._lock_holding = False
+        self.lock_hold_anim.stop()
+        self.lock_hold_anim.setDuration(180)
+        self.lock_hold_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+        self.lock_hold_anim.setStartValue(self._lock_hold_progress)
+        self.lock_hold_anim.setEndValue(0.0)
+        self.lock_hold_anim.start()
+        self.trigger_feedback()
+        self.clicked.emit({**self.config, 'action': 'unlock'})
 
     def mousePressEvent(self, event):
         """Track click start."""
@@ -1535,9 +1609,21 @@ class DashboardButton(QFrame):
                             
                     except (ValueError, TypeError):
                         pass
-                
-                self._long_press_timer.start()
-                
+
+                if self.config and self._lock_resolve_action() == 'unlock':
+                    # Unlocking needs a deliberate hold — locking (the safe direction) stays instant.
+                    self._ignore_release = True
+                    self._lock_holding = True
+                    self.lock_hold_anim.stop()
+                    self.lock_hold_anim.setStartValue(self._lock_hold_progress)
+                    self.lock_hold_anim.setDuration(550)
+                    self.lock_hold_anim.setEasingCurve(QEasingCurve.Type.Linear)
+                    self.lock_hold_anim.setEndValue(1.0)
+                    self.lock_hold_anim.start()
+                    self._lock_hold_timer.start()
+                else:
+                    self._long_press_timer.start()
+
                 if self.config:
                     self.bounce_anim.stop()
                     self.bounce_anim.setDuration(40)
@@ -1654,7 +1740,9 @@ class DashboardButton(QFrame):
             
         # Drag started -> Cancel long press
         self._long_press_timer.stop()
-        
+        if self._lock_holding:
+            self._cancel_lock_hold()
+
         if hasattr(self, 'bounce_anim') and self._bounce_offset > 0:
             self.bounce_anim.stop()
             self.set_bounce_offset(0.0) # immediate snap back for drag
@@ -1731,6 +1819,9 @@ class DashboardButton(QFrame):
             self._ignore_release = False
             self._drag_start_pos = None
             self._input_changing = False
+            if self._lock_holding:
+                # Released before the unlock hold completed — cancel, don't unlock.
+                self._cancel_lock_hold()
             return
 
         # Handle input_number release
@@ -1841,6 +1932,10 @@ class DashboardButton(QFrame):
                  global_pos = self.mapToGlobal(QPoint(0,0))
                  rect = QRect(global_pos, self.size())
                  self.vacuum_requested.emit(self.slot, rect)
+             elif self.config and self.config.get('type') == 'alarm_control_panel':
+                 global_pos = self.mapToGlobal(QPoint(0,0))
+                 rect = QRect(global_pos, self.size())
+                 self.alarm_requested.emit(self.slot, rect)
              elif self.config and self.config.get('type') == 'lock':
                  # Toggle lock state
                  action = 'unlock' if self._state == 'locked' else 'lock'
@@ -2067,5 +2162,9 @@ class DashboardButton(QFrame):
              global_pos = self.mapToGlobal(QPoint(0,0))
              rect = QRect(global_pos, self.size())
              self.vacuum_requested.emit(self.slot, rect)
+        elif self.config.get('type') == 'alarm_control_panel':
+             global_pos = self.mapToGlobal(QPoint(0,0))
+             rect = QRect(global_pos, self.size())
+             self.alarm_requested.emit(self.slot, rect)
         else:
              self.clicked.emit(self.config)

@@ -305,10 +305,30 @@ def get_icon_for_type(entity_type: str, state: str = "off") -> str:
         return Icons.FAN if state == "on" else Icons.FAN
 
     elif entity_type == "lock":
+        if state == "jammed":
+            return get_icon("lock-alert")
         return Icons.LOCK if state == "locked" else Icons.LOCK_OPEN
+
+    elif entity_type == "alarm_control_panel":
+        return get_icon(_ALARM_ICON_MAP.get(state, "shield-off-outline"))
 
     elif entity_type == "sun":
         return Icons.WEATHER_SUNNY  # MDI fallback; painter handles actual rendering
 
     # Default/empty
     return Icons.PLUS_CIRCLE
+
+
+# Alarm control panel: HA state -> mdi icon name (looked up via get_icon)
+_ALARM_ICON_MAP = {
+    "disarmed":            "shield-off-outline",
+    "armed_home":          "shield-home",
+    "armed_away":          "shield-lock",
+    "armed_night":         "shield-moon",
+    "armed_vacation":      "shield-airplane",
+    "armed_custom_bypass": "shield-half-full",
+    "arming":              "shield-alert-outline",
+    "pending":             "shield-alert-outline",
+    "disarming":           "shield-off-outline",
+    "triggered":           "shield-alert",
+}

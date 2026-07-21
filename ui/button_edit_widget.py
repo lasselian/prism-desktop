@@ -70,6 +70,7 @@ class ButtonEditWidget(QWidget):
     
     # Internal type identifiers (display labels are looked up via t() at runtime)
     TYPE_DEFINITIONS = [
+        ("Alarm Control Panel", "alarm_control_panel"),
         ("Automation", "automation"),
         ("Camera", "camera"),
         ("Climate", "climate"),
@@ -93,6 +94,7 @@ class ButtonEditWidget(QWidget):
     @staticmethod
     def _get_type_definitions():
         return [
+            (t("button_editor.type.alarm_control_panel"), "alarm_control_panel"),
             (t("button_editor.type.automation"), "automation"),
             (t("button_editor.type.camera"), "camera"),
             (t("button_editor.type.climate"), "climate"),
@@ -744,6 +746,7 @@ class ButtonEditWidget(QWidget):
         current_type = self.TYPE_DEFINITIONS[type_idx][1] if 0 <= type_idx < len(self.TYPE_DEFINITIONS) else None
         
         domain_map = {
+            'alarm_control_panel': {'alarm_control_panel'},
             'automation': {'automation'},
             'switch': {'light', 'switch', 'input_boolean', 'input_button'},
             'widget': {'sensor', 'binary_sensor', 'number'},

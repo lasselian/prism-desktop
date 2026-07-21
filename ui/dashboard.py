@@ -708,6 +708,7 @@ class Dashboard(QWidget):
         button.printer_requested.connect(self._on_printer_requested)
         button.mower_requested.connect(self._on_mower_requested)
         button.vacuum_requested.connect(self._on_vacuum_requested)
+        button.alarm_requested.connect(self._on_alarm_requested)
         button.volume_requested.connect(self._on_volume_requested)
         button.volume_scroll.connect(self.volume_scroll_requested.emit)
         button.media_command_requested.connect(self.media_command_requested.emit)
@@ -1406,6 +1407,10 @@ class Dashboard(QWidget):
 
     def _on_vacuum_requested(self, slot: int, rect: QRect):
         self.overlay_manager.start_vacuum(slot, rect)
+
+    def _on_alarm_requested(self, slot: int, rect: QRect):
+        config = self._get_button_config(slot)
+        self.overlay_manager.start_alarm(slot, rect, config)
 
     def _on_camera_requested(self, slot: int, rect: QRect, config: dict):
         self.overlay_manager.start_camera(slot, rect, config)
