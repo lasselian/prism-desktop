@@ -181,7 +181,7 @@ class HAClient:
         try:
             # entity_picture is a relative URL like /api/media_player_proxy/...
             url = f"{self.url}{image_path}" if image_path.startswith('/') else image_path
-            
+
             session = await self._get_session()
             async with session.get(url, timeout=10) as response:
                 if response.status == 200:
@@ -190,3 +190,12 @@ class HAClient:
         except Exception as e:
             self.logger.error(f"Error fetching media image: {e}")
             return None
+
+    async def get_entity_image(self, entity_id: str, state: Optional[dict] = None) -> Optional[bytes]:
+        """Fetch a snapshot for an `image.*` domain entity via its entity_picture attribute."""
+        if state is None:
+            state = await self.get_state(entity_id)
+        pic_path = (state or {}).get('attributes', {}).get('entity_picture')
+        if not pic_path:
+            return None
+        return await self.get_media_image(pic_path)

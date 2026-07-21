@@ -152,6 +152,8 @@ class PrismDesktopApp(QObject):
         self._media_art_cache = {}
         # Camera image cache (entity_id -> (timestamp, QPixmap))
         self._camera_cache = {}
+        # image.* entity_picture path cache (change detection)
+        self._image_pic_paths = {}
         
         # Initialize
         self.init_theme()
@@ -465,12 +467,13 @@ class PrismDesktopApp(QObject):
             try:
                 if self.dashboard and self.dashboard.isVisible():
                     # Identify visible camera buttons and 3D printers
+                    # (image.* entities are refreshed via on_state_changed instead of polling)
                     camera_buttons = []
                     for btn in self.dashboard.buttons:
                         if btn.isVisible():
                             if btn.config.get('type') == 'camera':
                                 entity_id = btn.config.get('entity_id')
-                                if entity_id:
+                                if entity_id and entity_id.startswith('camera.'):
                                     camera_buttons.append((btn, entity_id))
                             elif btn.config.get('type') == '3d_printer':
                                 cam_entity_id = btn.config.get('printer_camera_entity')
@@ -483,8 +486,9 @@ class PrismDesktopApp(QObject):
                                     om._active_printer_config and
                                     om._active_printer_config.get('printer_camera_entity') == cam_entity_id
                                 )
-                                
-                                if cam_entity_id and (is_active_overlay or (btn.span_x >= 2 and btn.span_y >= 2)):
+
+                                if (cam_entity_id and cam_entity_id.startswith('camera.')
+                                        and (is_active_overlay or (btn.span_x >= 2 and btn.span_y >= 2))):
                                     camera_buttons.append((btn, cam_entity_id))
                     
                     # Create tasks for concurrent fetching
@@ -527,6 +531,27 @@ class PrismDesktopApp(QObject):
                  # Update UI
                  if self.dashboard:
                      self.dashboard.update_camera_image(entity_id, pixmap)
+
+    async def _fetch_image_entity(self, entity_id: str, state: dict):
+        """Fetch and update an image.* domain entity's snapshot via entity_picture."""
+        pic_path = state.get('attributes', {}).get('entity_picture')
+        if not pic_path:
+            return
+
+        if self._image_pic_paths.get(entity_id) == pic_path and entity_id in self._camera_cache:
+            _, pixmap = self._camera_cache[entity_id]
+            if self.dashboard:
+                self.dashboard.update_camera_image(entity_id, pixmap)
+            return
+
+        data = await self.ha_client.get_entity_image(entity_id, state)
+        if data:
+            pixmap = QPixmap()
+            if pixmap.loadFromData(data):
+                self._image_pic_paths[entity_id] = pic_path
+                self._put_cache(self._camera_cache, entity_id, (time.time(), pixmap))
+                if self.dashboard:
+                    self.dashboard.update_camera_image(entity_id, pixmap)
 
     @pyqtSlot()
     def _toggle_dashboard(self):
@@ -984,19 +1009,19 @@ class PrismDesktopApp(QObject):
         if self.dashboard:
             self.dashboard.update_entity_state(entity_id, new_state)
             
-            # Check for camera image
             if entity_id.startswith('camera.'):
                 _create_task_safe(self._fetch_camera_image(entity_id))
-            
-            # Check for album art
-            pic_path = new_state.get('attributes', {}).get('entity_picture')
-            if pic_path:
-                _create_task_safe(self._fetch_album_art(entity_id, new_state))
-            elif new_state.get('attributes', {}).get('media_content_type'):
-                # Is media player but no picture -> Clear it
-                # We only clear if it's actually a media player (has content type or state)
-                # to avoid clearing on random sensor updates if we reuse this logic
-                self.dashboard.update_media_art(entity_id, None)
+            elif entity_id.startswith('image.'):
+                _create_task_safe(self._fetch_image_entity(entity_id, new_state))
+            else:
+                pic_path = new_state.get('attributes', {}).get('entity_picture')
+                if pic_path:
+                    _create_task_safe(self._fetch_album_art(entity_id, new_state))
+                elif new_state.get('attributes', {}).get('media_content_type'):
+                    # Is media player but no picture -> Clear it
+                    # We only clear if it's actually a media player (has content type or state)
+                    # to avoid clearing on random sensor updates if we reuse this logic
+                    self.dashboard.update_media_art(entity_id, None)
                 
     @pyqtSlot(dict)
     def on_notification(self, payload: dict):

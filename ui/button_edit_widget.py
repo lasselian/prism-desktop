@@ -757,7 +757,7 @@ class ButtonEditWidget(QWidget):
             'media_player': {'media_player'},
             'script': {'script'},
             'scene': {'scene'},
-            'camera': {'camera'},
+            'camera': {'camera', 'image'},
             'weather': {'weather'},
             'lock': {'lock'},
             'lawn_mower': {'lawn_mower'},

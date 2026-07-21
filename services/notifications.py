@@ -370,6 +370,8 @@ class NotificationManager(QObject):
         try:
             if image_source.startswith('camera.'):
                 image_bytes = await self.ha_client.get_camera_image(image_source)
+            elif image_source.startswith('image.'):
+                image_bytes = await self.ha_client.get_entity_image(image_source)
             elif image_source.startswith('/api/') or image_source.startswith('http'):
                 image_bytes = await self.ha_client.get_media_image(image_source)
             else:
