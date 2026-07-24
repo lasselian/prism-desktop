@@ -4,6 +4,7 @@ the latest GitHub release asset and apply it in-place.
 """
 
 import hashlib
+import logging
 import os
 import platform
 import shutil
@@ -17,6 +18,8 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 from core.build_info import REPO_ROOT, APP_VERSION
+
+logger = logging.getLogger(__name__)
 
 _REPO = "lasselian/prism-desktop"
 _API_LATEST = f"https://api.github.com/repos/{_REPO}/releases/latest"
@@ -217,11 +220,11 @@ class AutoUpdateThread(QThread):
             raise OSError(f"Unsupported platform for in-place update: {sys.platform}")
 
     def _apply_windows(self, installer_path: Path) -> None:
-        """Launch the Inno Setup installer silently; it replaces the installation."""
-        subprocess.Popen(
-            [str(installer_path), "/VERYSILENT", "/NORESTART", "/NOCANCEL"],
-            creationflags=subprocess.CREATE_NO_WINDOW,
-        )
+        """Launch the Inno Setup installer silently; its [Run] section (without
+        skipifsilent) relaunches the app once files are replaced — see setup.iss."""
+        args = [str(installer_path), "/VERYSILENT", "/NORESTART", "/NOCANCEL"]
+        proc = subprocess.Popen(args, creationflags=subprocess.CREATE_NO_WINDOW)
+        logger.info(f"Installer launched (pid={proc.pid}): {' '.join(args)}")
 
     def _apply_linux(self, appimage_path: Path) -> None:
         """
@@ -289,8 +292,10 @@ def restart_app() -> None:
             # sys.executable points into the /tmp squashfs mount, not the file.
             appimage = os.environ.get("APPIMAGE") or sys.executable
             subprocess.Popen([appimage])
-        # On Windows the Inno Setup installer spawns the new version itself;
-        # just quit so the installer can replace our files cleanly.
+        else:
+            # Windows: the installer (spawned in _apply_windows) relaunches the
+            # app itself once it's done; don't race it by launching here too.
+            logger.info("Quitting so the Windows installer can relaunch the app")
     else:
         subprocess.Popen([sys.executable] + sys.argv)
     QApplication.quit()
