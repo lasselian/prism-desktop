@@ -75,6 +75,8 @@ class ToggleSwitch(QAbstractButton):
     def paintEvent(self, _event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if not self.isEnabled():
+            p.setOpacity(0.4)
 
         t = self._pos
         W, H, PAD = self.W, self.H, self.PAD

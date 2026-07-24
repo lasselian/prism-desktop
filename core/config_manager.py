@@ -79,6 +79,14 @@ class ConfigManager:
                 "pin_window": False,
             },
             "shortcut": {"type": "keyboard", "value": "<ctrl>+<alt>+h"},
+            "assist_shortcut": {},
+            "assist": {
+                "enabled": False,
+                "show_in_footer": True,
+                "mic_device_id": "",
+                "speaker_device_id": "",
+                "auto_listen": False,
+            },
             "buttons": [],
             "welcome_shown": False,
         }

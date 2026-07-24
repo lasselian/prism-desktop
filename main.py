@@ -47,6 +47,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TOGGLE_ARG = "--toggle"
+ASSIST_ARG = "--assist"
 WELCOME_ARG = "--welcome"
 
 # Entity-reference keys a 3D-printer button can carry; used everywhere we
@@ -64,6 +65,12 @@ if __name__ == '__main__' and TOGGLE_ARG in sys.argv[1:]:
     print("No running Prism Desktop instance found for --toggle")
     sys.exit(1)
 
+if __name__ == '__main__' and ASSIST_ARG in sys.argv[1:]:
+    if send_local_command("assist"):
+        sys.exit(0)
+    print("No running Prism Desktop instance found for --assist")
+    sys.exit(1)
+
 import qasync
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QObject, pyqtSlot, QTimer, QRect, Qt
@@ -79,6 +86,7 @@ from ui.dashboard import Dashboard
 from ui.tray_manager import TrayManager
 from services.notifications import NotificationManager
 from services.input_manager import InputManager, ButtonShortcutManager
+from services.assist_controller import AssistController
 from services.local_ipc import LocalCommandServer
 from services.mobile_app import register_mobile_app, send_location_update, register_sensors, update_sensor_states, build_sensor_state_payload, get_system_metrics
 from services.location_manager import get_location
@@ -86,7 +94,7 @@ from ui.icons import load_mdi_font, icon_signals
 from services.update_checker import UpdateCheckerThread
 from core.temperature_utils import normalize_temperature_unit
 from core.build_info import APP_VERSION, get_display_version
-from core.localization_manager import init_localization, is_rtl
+from core.localization_manager import init_localization, is_rtl, t
 
 DISPLAY_VERSION = get_display_version()
 
@@ -114,8 +122,14 @@ class PrismDesktopApp(QObject):
         self.ha_client = HAClient()
         self.notification_manager = NotificationManager(ha_client=self.ha_client, config=self.config)
         self.input_manager = InputManager()
+        self.assist_input_manager = InputManager()
         self.button_shortcut_manager = ButtonShortcutManager()
         self.local_command_server = LocalCommandServer(self)
+        self.assist_controller = AssistController(
+            get_websocket=lambda: self._ha_websocket, ha_client=self.ha_client,
+            get_config=lambda: self.config,
+        )
+        self._assist_opened_dashboard = False  # dashboard was hidden before _open_assist showed it
         
         # UI Components
         self.dashboard: Optional[Dashboard] = None
@@ -274,9 +288,16 @@ class PrismDesktopApp(QObject):
         self.input_manager.update_shortcut(shortcut_config)
         self.input_manager.triggered.connect(self._toggle_dashboard)
 
-        # Pause button shortcuts while the user is recording a new one
+        assist_enabled = self.config.get('assist', {}).get('enabled', False)
+        assist_shortcut_config = self.config.get('assist_shortcut', {}) if assist_enabled else {}
+        self.assist_input_manager.update_shortcut(assist_shortcut_config)
+        self.assist_input_manager.triggered.connect(self._open_assist)
+
+        # Pause button shortcuts while either shortcut is being (re)recorded
         self.input_manager.recording_started.connect(lambda: self.button_shortcut_manager.set_paused(True))
         self.input_manager.recording_stopped.connect(lambda: self.button_shortcut_manager.set_paused(False))
+        self.assist_input_manager.recording_started.connect(lambda: self.button_shortcut_manager.set_paused(True))
+        self.assist_input_manager.recording_stopped.connect(lambda: self.button_shortcut_manager.set_paused(False))
 
         self.button_shortcut_manager.shortcut_triggered.connect(self._on_button_shortcut_triggered)
         self._update_button_shortcuts()
@@ -304,6 +325,8 @@ class PrismDesktopApp(QObject):
         """Handle a local CLI command sent to the running instance."""
         if command == "toggle":
             self._toggle_dashboard()
+        elif command == "assist":
+            self._open_assist()
     
     def save_config(self):
         """Save configuration to file via ConfigManager."""
@@ -356,10 +379,13 @@ class PrismDesktopApp(QObject):
         self.dashboard.weather_forecast_requested.connect(self.on_weather_forecast_requested)
         self.dashboard.move_to_page_requested.connect(self.on_move_to_page_requested)
 
-        self.dashboard._init_settings_widget(self.config, self.input_manager)
+        self.dashboard._init_settings_widget(self.config, self.input_manager, self.assist_input_manager)
         sw = self.dashboard.settings_widget
         sw.shortcut_deleted.connect(self._update_button_shortcuts)
         sw.shortcut_deleted.connect(self.save_config)
+
+        self._init_assist()
+        self._apply_assist_visibility()
 
         self.tray_manager = TrayManager(
             on_left_click=self._toggle_dashboard,
@@ -367,9 +393,90 @@ class PrismDesktopApp(QObject):
             theme=self.theme_manager.get_effective_theme()
         )
         self.tray_manager.start()
-        
+
         self.theme_manager.theme_changed.connect(self.tray_manager.set_theme)
-    
+
+    def _init_assist(self):
+        """Wire the Assist popup (footer button + hotkey) to AssistController."""
+        overlay = self.dashboard.assist_overlay
+        overlay.text_submitted.connect(self.assist_controller.submit_text)
+        overlay.voice_start_requested.connect(self.assist_controller.start_voice)
+        overlay.voice_stop_requested.connect(self.assist_controller.stop_voice)
+        overlay.finished.connect(self._on_assist_overlay_closed)
+
+        self.assist_controller.listening_started.connect(self._on_assist_listening_started)
+        self.assist_controller.listening_stopped.connect(self._on_assist_listening_stopped)
+        self.assist_controller.heard.connect(self._on_assist_heard)
+        self.assist_controller.thinking.connect(self._on_assist_thinking)
+        self.assist_controller.reply_ready.connect(self._on_assist_reply)
+        self.assist_controller.error.connect(self._on_assist_error)
+
+    def _apply_assist_visibility(self):
+        """Sync the dashboard with the current assist.enabled/show_in_footer config."""
+        if not self.dashboard:
+            return
+        assist_cfg = self.config.get('assist', {})
+        enabled = assist_cfg.get('enabled', False)
+        self.dashboard.set_assist_enabled(enabled)
+        self.dashboard.set_assist_visible_in_footer(enabled and assist_cfg.get('show_in_footer', True))
+
+    @pyqtSlot()
+    def _open_assist(self):
+        """Global-hotkey/--assist entry point. Toggles closed if Assist is
+        already open; otherwise shows just the Assist popup — no dashboard
+        grid entrance animation — bringing the dashboard up quietly if it
+        was hidden."""
+        if not self.dashboard:
+            return
+        if not self.config.get('assist', {}).get('enabled', False):
+            return
+        if self.dashboard.assist_overlay.isVisible():
+            self.dashboard.assist_overlay.request_close()
+            return
+        if not self.dashboard.isVisible():
+            self.dashboard.apply_camera_cache(self._camera_cache)
+            self.dashboard.show_for_assist(self._tray_geometry())
+            self._assist_opened_dashboard = True
+            self.dashboard.open_assist_overlay(instant=True)
+        else:
+            self.dashboard.open_assist_overlay()
+
+        if self.config.get('assist', {}).get('auto_listen', False):
+            self.assist_controller.start_voice()
+
+    def _on_assist_listening_started(self):
+        if self.dashboard:
+            self.dashboard.assist_overlay.set_listening(True)
+            self.dashboard.assist_overlay.set_status(t("assist.status.listening"))
+
+    def _on_assist_listening_stopped(self):
+        if self.dashboard:
+            self.dashboard.assist_overlay.set_listening(False)
+
+    def _on_assist_heard(self, text: str):
+        if self.dashboard:
+            self.dashboard.assist_overlay.set_status("")
+            self.dashboard.assist_overlay.add_user_message(text)
+
+    def _on_assist_thinking(self):
+        if self.dashboard:
+            self.dashboard.assist_overlay.set_status(t("assist.status.thinking"))
+
+    def _on_assist_reply(self, text: str):
+        if self.dashboard:
+            self.dashboard.assist_overlay.add_assistant_message(text)
+
+    def _on_assist_error(self, message: str):
+        if self.dashboard:
+            self.dashboard.assist_overlay.add_error_message(message)
+
+    def _on_assist_overlay_closed(self):
+        self.assist_controller.cancel()
+        self.assist_controller.reset_conversation()
+        if self._assist_opened_dashboard and self.dashboard:
+            self.dashboard.hide_instant()
+        self._assist_opened_dashboard = False
+
     def start_websocket(self):
         """Start a new WebSocket connection."""
         ha_config = self.config.get('home_assistant', {})
@@ -555,6 +662,7 @@ class PrismDesktopApp(QObject):
             if not self.dashboard.isVisible():
                 # Apply cached images immediately before showing to prevent black flash
                 self.dashboard.apply_camera_cache(self._camera_cache)
+            self._assist_opened_dashboard = False
             self.dashboard.toggle(self._tray_geometry())
     
     @pyqtSlot()
@@ -621,6 +729,12 @@ class PrismDesktopApp(QObject):
         
         if self.input_manager:
             self.input_manager.update_shortcut(self.config.get('shortcut', {}))
+        assist_enabled = self.config.get('assist', {}).get('enabled', False)
+        if self.assist_input_manager:
+            self.assist_input_manager.update_shortcut(
+                self.config.get('assist_shortcut', {}) if assist_enabled else {}
+            )
+        self._apply_assist_visibility()
         self._update_button_shortcuts()
 
         if glass_ui_enabled and self.dashboard:

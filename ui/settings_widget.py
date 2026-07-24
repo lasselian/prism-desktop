@@ -183,12 +183,13 @@ class SettingsWidget(QWidget):
     request_delete_shortcut = pyqtSignal(dict)
     shortcut_deleted = pyqtSignal()
 
-    def __init__(self, config: dict, theme_manager=None, input_manager=None, current_version="0.0.0", parent=None, dashboard=None):
+    def __init__(self, config: dict, theme_manager=None, input_manager=None, current_version="0.0.0", parent=None, dashboard=None, assist_input_manager=None):
         super().__init__(parent)
         self.config = config
         self.current_version = current_version
         self.theme_manager = theme_manager
         self.input_manager = input_manager
+        self.assist_input_manager = assist_input_manager
         self.dashboard = dashboard
 
         self._test_thread: Optional[ConnectionTestThread] = None
@@ -216,9 +217,12 @@ class SettingsWidget(QWidget):
         if self.url_input.text().strip() and self.token_input.text().strip():
             QTimer.singleShot(600, self._trigger_auto_test)
         self._update_shortcut_controls()
+        self._update_assist_shortcut_controls()
 
         if self.input_manager:
             self.input_manager.recorded.connect(self.on_shortcut_recorded)
+        if self.assist_input_manager:
+            self.assist_input_manager.recorded.connect(self.on_assist_shortcut_recorded)
 
     def _update_stylesheet(self):
         """Build and apply theme-dependent stylesheet."""
@@ -291,6 +295,14 @@ class SettingsWidget(QWidget):
                 background-color: rgba(0, 0, 0, 0.18);
                 border: 1px solid rgba(255, 255, 255, 0.06);
                 color: rgba(255, 255, 255, 0.55);
+            }}
+            QComboBox:disabled {{
+                background-color: rgba(0, 0, 0, 0.18);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                color: rgba(255, 255, 255, 0.4);
+            }}
+            QLabel:disabled {{
+                color: rgba(255, 255, 255, 0.35);
             }}
             QComboBox QAbstractItemView {{
                 background-color: {colors['base']};
@@ -533,6 +545,7 @@ class SettingsWidget(QWidget):
             t("settings.section.home_assistant").title(),
             t("settings.section.appearance").title(),
             t("settings.section.shortcut").title(),
+            t("settings.section.assist").title(),
             t("settings.section.support").title(),
         ]
 
@@ -563,6 +576,7 @@ class SettingsWidget(QWidget):
             self._build_ha_panel,
             self._build_appearance_panel,
             self._build_shortcut_panel,
+            self._build_assist_panel,
             self._build_support_panel,
         ]
         for i, builder in enumerate(panel_builders):
@@ -834,6 +848,64 @@ class SettingsWidget(QWidget):
         form.addRow(t("settings.shortcut.label"), shortcut_container)
         vbox.addWidget(shortcut_frame)
 
+        # Assist shortcut pill
+        assist_shortcut_frame, assist_form = self._make_pill_panel()
+
+        assist_shortcut_container = QWidget()
+        assist_shortcut_container_layout = QVBoxLayout(assist_shortcut_container)
+        assist_shortcut_container_layout.setContentsMargins(0, 0, 0, 0)
+        assist_shortcut_container_layout.setSpacing(2)
+
+        assist_shortcut_row = QHBoxLayout()
+        assist_shortcut_row.setContentsMargins(0, 0, 0, 0)
+        self.assist_shortcut_display = QLineEdit()
+        self.assist_shortcut_display.setReadOnly(True)
+        self.assist_shortcut_display.setPlaceholderText(t("settings.assist_shortcut.placeholder"))
+
+        self.assist_record_btn = QPushButton()
+        self.assist_record_btn.setObjectName("recordBtn")
+        self.assist_record_btn.setCheckable(True)
+        self.assist_record_btn.setFixedSize(40, 32)
+        self.assist_record_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.assist_record_btn.clicked.connect(self.toggle_assist_recording)
+
+        assist_btn_layout = QHBoxLayout(self.assist_record_btn)
+        assist_btn_layout.setContentsMargins(0, 0, 0, 0)
+        assist_btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.assist_record_icon = QWidget()
+        self.assist_record_icon.setObjectName("recordIcon")
+        self.assist_record_icon.setFixedSize(12, 12)
+        self.assist_record_icon.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        assist_btn_layout.addWidget(self.assist_record_icon)
+
+        assist_shortcut_row.addWidget(self.assist_shortcut_display)
+        assist_shortcut_row.addSpacing(8)
+        assist_shortcut_row.addWidget(self.assist_record_btn)
+        assist_shortcut_container_layout.addLayout(assist_shortcut_row)
+
+        self.assist_shortcut_aux = QWidget()
+        assist_shortcut_aux_layout = QVBoxLayout(self.assist_shortcut_aux)
+        assist_shortcut_aux_layout.setContentsMargins(0, 0, 0, 0)
+        assist_shortcut_aux_layout.setSpacing(1)
+
+        self.assist_shortcut_hint = QLabel("")
+        self.assist_shortcut_hint.setWordWrap(True)
+        self.assist_shortcut_hint.setStyleSheet("color: #aaa; font-size: 11px;")
+        self.assist_shortcut_hint.hide()
+        assist_shortcut_aux_layout.addWidget(self.assist_shortcut_hint)
+
+        self.assist_kde_shortcuts_btn = QPushButton(t("settings.shortcut.kde_btn"))
+        self.assist_kde_shortcuts_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.assist_kde_shortcuts_btn.clicked.connect(self.open_kde_shortcuts)
+        self.assist_kde_shortcuts_btn.hide()
+        assist_shortcut_aux_layout.addWidget(self.assist_kde_shortcuts_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        self.assist_shortcut_aux.hide()
+        assist_shortcut_container_layout.addWidget(self.assist_shortcut_aux)
+
+        assist_form.addRow(t("settings.assist_shortcut.label"), assist_shortcut_container)
+        vbox.addWidget(assist_shortcut_frame)
+
         # Button shortcuts pill
         btn_sc_frame, _ = self._make_pill_panel()
         btn_sc_vbox = btn_sc_frame.layout()
@@ -851,6 +923,93 @@ class SettingsWidget(QWidget):
         vbox.addWidget(btn_sc_frame)
 
         return container
+
+    def _build_assist_panel(self) -> QWidget:
+        container = QWidget()
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(8)
+
+        # Master toggle lives in its own pill so it's never dimmed by _update_assist_controls_enabled.
+        enable_frame, enable_form = self._make_pill_panel()
+        self.assist_enabled_check = ToggleSwitch(t("settings.assist.enable_toggle"))
+        self.assist_enabled_check.setToolTip(t("settings.assist.enable_tooltip"))
+        self.assist_enabled_check.toggled.connect(self._update_assist_controls_enabled)
+        enable_form.addRow("", self.assist_enabled_check)
+        vbox.addWidget(enable_frame)
+
+        toggle_frame, toggle_form = self._make_pill_panel()
+        self.assist_show_footer_check = ToggleSwitch(t("settings.assist.show_footer_toggle"))
+        self.assist_show_footer_check.setToolTip(t("settings.assist.show_footer_tooltip"))
+        toggle_form.addRow("", self.assist_show_footer_check)
+
+        self.assist_auto_listen_check = ToggleSwitch(t("settings.assist.auto_listen_toggle"))
+        self.assist_auto_listen_check.setToolTip(t("settings.assist.auto_listen_tooltip"))
+        toggle_form.addRow("", self.assist_auto_listen_check)
+
+        vbox.addWidget(toggle_frame)
+
+        frame, form = self._make_pill_panel()
+
+        self.assist_mic_combo = QComboBox()
+        self.assist_speaker_combo = QComboBox()
+        # Cap size hint so a long device name can't widen the whole settings panel.
+        for combo in (self.assist_mic_combo, self.assist_speaker_combo):
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(15)
+
+        form.addRow(t("settings.assist.mic_label"), self.assist_mic_combo)
+        form.addRow(t("settings.assist.speaker_label"), self.assist_speaker_combo)
+        self._assist_mic_label = form.labelForField(self.assist_mic_combo)
+        self._assist_speaker_label = form.labelForField(self.assist_speaker_combo)
+
+        self._refresh_assist_devices()
+        self._update_assist_controls_enabled(self.assist_enabled_check.isChecked())
+
+        vbox.addWidget(frame)
+        vbox.addStretch(1)
+        return container
+
+    def _update_assist_controls_enabled(self, enabled: bool):
+        """Gray out every Assist setting except the master toggle itself when it's off.
+        (ToggleSwitch handles its own dimming in paintEvent; QGraphicsOpacityEffect was
+        tried here first but corrupted this panel's layout on the dynamic-height settings
+        view, so plain setEnabled() — which Qt already renders dimmed for QComboBox/QLabel
+        — is used instead.)"""
+        for widget in (
+            self.assist_show_footer_check,
+            self.assist_auto_listen_check,
+            self.assist_mic_combo,
+            self.assist_speaker_combo,
+            self._assist_mic_label,
+            self._assist_speaker_label,
+        ):
+            if widget is not None:
+                widget.setEnabled(enabled)
+
+    def _refresh_assist_devices(self):
+        """(Re)populate the mic/speaker combos from the currently available audio devices."""
+        from PyQt6.QtMultimedia import QMediaDevices
+
+        for combo, devices in (
+            (self.assist_mic_combo, QMediaDevices.audioInputs()),
+            (self.assist_speaker_combo, QMediaDevices.audioOutputs()),
+        ):
+            current = combo.currentData() if combo.count() else None
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItem(t("settings.assist.default_device"), "")
+            for device in devices:
+                device_id = bytes(device.id()).decode('utf-8', errors='surrogateescape')
+                combo.addItem(device.description(), device_id)
+            if current is not None:
+                self._select_combo_data(combo, current)
+            combo.blockSignals(False)
+
+    @staticmethod
+    def _select_combo_data(combo: QComboBox, value: str):
+        idx = combo.findData(value)
+        combo.setCurrentIndex(idx if idx >= 0 else 0)
 
     def _build_support_panel(self) -> QWidget:
         container = QWidget()
@@ -1159,6 +1318,19 @@ class SettingsWidget(QWidget):
         self.shortcut_display.setText(sc.get('value', ''))
         self._update_shortcut_controls()
 
+        assist_sc = self.config.get('assist_shortcut', {})
+        self.assist_shortcut_display.setText(assist_sc.get('value', ''))
+        self._update_assist_shortcut_controls()
+
+        assist_cfg = self.config.get('assist', {})
+        self.assist_enabled_check.setChecked(assist_cfg.get('enabled', False))
+        self.assist_show_footer_check.setChecked(assist_cfg.get('show_in_footer', True))
+        self.assist_auto_listen_check.setChecked(assist_cfg.get('auto_listen', False))
+        self._refresh_assist_devices()
+        self._select_combo_data(self.assist_mic_combo, assist_cfg.get('mic_device_id', ''))
+        self._select_combo_data(self.assist_speaker_combo, assist_cfg.get('speaker_device_id', ''))
+        self._update_assist_controls_enabled(self.assist_enabled_check.isChecked())
+
     def save_settings(self):
         """Save and emit config."""
         self._cleanup_threads()
@@ -1200,7 +1372,15 @@ class SettingsWidget(QWidget):
         self.config.setdefault('mobile_app', {})['send_cpu'] = self.send_cpu_check.isChecked()
         self.config.setdefault('mobile_app', {})['send_ram'] = self.send_ram_check.isChecked()
 
+        self.config.setdefault('assist', {})
+        self.config['assist']['enabled'] = self.assist_enabled_check.isChecked()
+        self.config['assist']['show_in_footer'] = self.assist_show_footer_check.isChecked()
+        self.config['assist']['auto_listen'] = self.assist_auto_listen_check.isChecked()
+        self.config['assist']['mic_device_id'] = self.assist_mic_combo.currentData() or ""
+        self.config['assist']['speaker_device_id'] = self.assist_speaker_combo.currentData() or ""
+
         if 'shortcut' not in self.config: self.config['shortcut'] = {}
+        if 'assist_shortcut' not in self.config: self.config['assist_shortcut'] = {}
 
         self.settings_saved.emit(self.config)
 
@@ -1292,6 +1472,85 @@ class SettingsWidget(QWidget):
         self.config['shortcut'] = shortcut
 
         self.input_manager.update_shortcut(shortcut)
+
+    def toggle_assist_recording(self, checked):
+        if self._should_delegate_shortcuts_to_kde():
+            self.assist_record_btn.setChecked(False)
+            return
+
+        if self._is_unsupported_wayland_shortcut_env():
+            self.assist_record_btn.setChecked(False)
+            return
+
+        if not self.assist_input_manager:
+            self.assist_record_btn.setChecked(False)
+            return
+
+        if checked:
+            self.assist_record_icon.setStyleSheet("background-color: white; border-radius: 2px;")
+            self.assist_shortcut_display.setText(t("settings.shortcut.recording"))
+            self.assist_input_manager.start_recording()
+        else:
+            self.assist_record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+            self.assist_input_manager.restore_shortcut()
+            sc = self.config.get('assist_shortcut', {})
+            if self.assist_shortcut_display.text() == t("settings.shortcut.recording"):
+                self.assist_shortcut_display.setText(sc.get('value', ''))
+
+    @pyqtSlot(dict)
+    def on_assist_shortcut_recorded(self, shortcut):
+        if not self.assist_record_btn.isChecked():
+            return
+
+        self.assist_record_btn.setChecked(False)
+        self.assist_record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+        self.assist_shortcut_display.setText(shortcut.get('value', ''))
+        self.config['assist_shortcut'] = shortcut
+
+        self.assist_input_manager.update_shortcut(shortcut)
+
+    def _update_assist_shortcut_controls(self):
+        """Adjust Assist-shortcut controls for the current desktop (mirrors _update_shortcut_controls)."""
+        if self._should_delegate_shortcuts_to_kde():
+            self.assist_record_btn.setChecked(False)
+            self.assist_record_btn.setEnabled(False)
+            self.assist_record_btn.hide()
+            self.assist_shortcut_display.setEnabled(False)
+            self.assist_shortcut_display.setProperty("locked", True)
+            self.assist_shortcut_display.setText(t("settings.shortcut.disabled"))
+            self.assist_shortcut_display.setToolTip("")
+            self.assist_shortcut_hint.setText(t("settings.assist_shortcut.kde_hint"))
+            self.assist_shortcut_aux.show()
+            self.assist_shortcut_hint.show()
+            self.assist_kde_shortcuts_btn.show()
+        elif self._is_unsupported_wayland_shortcut_env():
+            self.assist_record_btn.setChecked(False)
+            self.assist_record_btn.setEnabled(False)
+            self.assist_record_btn.hide()
+            self.assist_shortcut_display.setEnabled(False)
+            self.assist_shortcut_display.setProperty("locked", True)
+            self.assist_shortcut_display.setText(t("settings.shortcut.disabled"))
+            self.assist_shortcut_display.setToolTip("")
+            self.assist_shortcut_hint.setText(t("settings.assist_shortcut.wayland_hint"))
+            self.assist_shortcut_aux.show()
+            self.assist_shortcut_hint.show()
+            self.assist_kde_shortcuts_btn.hide()
+        else:
+            self.assist_record_btn.show()
+            self.assist_shortcut_display.setEnabled(True)
+            self.assist_shortcut_display.setProperty("locked", False)
+            sc = self.config.get('assist_shortcut', {})
+            self.assist_shortcut_display.setText(sc.get('value', ''))
+            self.assist_shortcut_display.setToolTip("")
+            self.assist_record_btn.setEnabled(True)
+            self.assist_record_btn.setToolTip("")
+            self.assist_shortcut_aux.hide()
+            self.assist_shortcut_hint.hide()
+            self.assist_kde_shortcuts_btn.hide()
+
+        self.style().unpolish(self.assist_shortcut_display)
+        self.style().polish(self.assist_shortcut_display)
+        self.assist_shortcut_display.update()
 
     def _should_delegate_shortcuts_to_kde(self) -> bool:
         return sys.platform == 'linux' and is_kde_wayland_session()

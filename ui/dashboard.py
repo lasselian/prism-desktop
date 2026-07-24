@@ -39,6 +39,7 @@ from ui.constants import (
     GLASS_MIN_INTERVAL_MS, GLASS_MAX_INTERVAL_MS, GLASS_WORK_BUDGET,
 )
 from ui.widgets.notification_banner import NotificationBanner
+from ui.widgets.assist_overlay import AssistOverlay
 from ui.managers.overlay_manager import OverlayManager
 from ui.managers.grid_manager import GridManager
 from ui.settings_widget import SettingsWidget
@@ -116,7 +117,9 @@ class Dashboard(QWidget):
         self.overlay_manager.update_states(self._entity_states)
         self.overlay_manager.service_request.connect(self.button_clicked.emit)
         self.overlay_manager.morph_changed.connect(self._on_overlay_morph)
-        
+
+        self.assist_overlay = AssistOverlay(self)
+
         # Throttling
 
         
@@ -1008,6 +1011,17 @@ class Dashboard(QWidget):
         # Style handled in update_style or inline for now
         self.btn_settings.setStyleSheet("background: rgba(255,255,255,0.1); border: none; border-radius: 4px; color: #888;")
         footer_layout.addWidget(self.btn_settings, 1)
+
+        self.btn_assist = FooterButton("")
+        self.btn_assist.setFixedSize(btn_height, btn_height)
+        self.btn_assist.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_assist.setFont(get_mdi_font(11))
+        self.btn_assist.setText(get_icon("chat"))
+        self.btn_assist.setToolTip(t("dashboard.footer.assist"))
+        # lambda avoids clicked(bool) landing in open_assist_overlay's source_widget param
+        self.btn_assist.clicked.connect(lambda: self.open_assist_overlay(self.btn_assist))
+        self.btn_assist.setStyleSheet("background: rgba(255,255,255,0.1); border: none; border-radius: 4px; color: #888;")
+        footer_layout.addWidget(self.btn_assist, 0)
         
         self.content_layout.addWidget(self.footer_widget)
         
@@ -1050,11 +1064,59 @@ class Dashboard(QWidget):
             QDesktopServices.openUrl(QUrl(url))
         self.hide()
 
+    ASSIST_OVERLAY_MARGIN = 10
+
+    def open_assist_overlay(self, source_widget=None, instant=False):
+        """Open the full-window Assist chat popup, morphing from source_widget's
+        rect if given (footer button click) or from the popup's own center
+        (global hotkey). With instant=True it appears already at full size —
+        no grow animation — so the grid is never exposed behind it; used when
+        the dashboard itself was just shown quietly for this same open."""
+        if not self.config.get('assist', {}).get('enabled', False):
+            return
+        if self.overlay_manager:
+            self.overlay_manager.close_all_overlays()
+
+        m = self.ASSIST_OVERLAY_MARGIN
+        target_rect = self.rect().adjusted(m, m, -m, -m)
+
+        if instant:
+            start_rect = target_rect
+        elif source_widget is not None:
+            global_pos = source_widget.mapToGlobal(QPoint(0, 0))
+            local_pos = self.mapFromGlobal(global_pos)
+            start_rect = QRect(local_pos, source_widget.size())
+        else:
+            center = target_rect.center()
+            start_rect = QRect(center.x(), center.y(), 0, 0)
+
+        if self.theme_manager:
+            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
+            accent_color = QColor(self.theme_manager.get_colors().get('accent', '#7C4DFF'))
+        else:
+            base_color = QColor("#2d2d2d")
+            accent_color = QColor("#7C4DFF")
+
+        self.assist_overlay.set_border_effect(self._border_effect)
+        self.assist_overlay.start_morph(start_rect, target_rect, color=accent_color, base_color=base_color,
+                                         instant_close=instant)
+
+    def set_assist_enabled(self, enabled: bool):
+        """Master on/off; force-closes any open Assist session when disabled."""
+        if not enabled and self.assist_overlay.isVisible():
+            self.assist_overlay.request_close()
+
+    def set_assist_visible_in_footer(self, visible: bool):
+        """Show/hide the footer trigger button independently of the master toggle."""
+        self.btn_assist.setVisible(visible)
+
     def update_style(self):
         """Update dashboard style based on theme."""
         # Ensure overlay manager has latest border effect
         if hasattr(self, 'overlay_manager'):
             self.overlay_manager.set_border_effect(self._border_effect)
+        if hasattr(self, 'assist_overlay'):
+            self.assist_overlay.set_border_effect(self._border_effect)
 
         if self.theme_manager:
             colors = self.theme_manager.get_colors()
@@ -1539,7 +1601,30 @@ class Dashboard(QWidget):
             self.close_animated()
         else:
             self.show_near_tray(tray_geometry=tray_geometry)
-    
+
+    def show_for_assist(self, tray_geometry: QRect | None = None):
+        """Show the window at full opacity with no entrance animation, so a
+        hotkey-triggered Assist open doesn't flash the grid in behind it."""
+        screen = self._screen_for_tray_geometry(tray_geometry)
+        if screen:
+            self.refresh_tray_anchor(tray_geometry=tray_geometry)
+            self.move(self._target_pos)
+        self._ignore_focus_loss = True
+        self.anim.stop()
+        self.set_anim_progress(1.0)
+        super().show()
+        QTimer.singleShot(0, self._activate_after_show)
+
+    def hide_instant(self):
+        """Hide immediately with no fade/slide — the counterpart to show_for_assist()."""
+        self._dismiss_banner_immediate()
+        self.anim.stop()
+        self.border_anim.stop()
+        self._glass_refresh_timer.stop()
+        self._set_capture_exclusion(False)
+        self.set_anim_progress(0.0)
+        super().hide()
+
     def close_animated(self):
         """Fade out and slide toward the tray edge, then hide."""
         self._dismiss_banner_immediate()
@@ -1693,6 +1778,12 @@ class Dashboard(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'assist_overlay') and self.assist_overlay.isVisible():
+            self.assist_overlay.hide()
+            self.assist_overlay.finished.emit()
+
     def _activate_after_show(self):
         """Activate the window after a no-animation show (fallback path)."""
         self._ignore_focus_loss = False
@@ -1701,10 +1792,10 @@ class Dashboard(QWidget):
 
     # ============ VIEW SWITCHING (Grid <-> Settings) ============
     
-    def _init_settings_widget(self, config: dict, input_manager=None):
+    def _init_settings_widget(self, config: dict, input_manager=None, assist_input_manager=None):
         """Initialize the SettingsWidget (call from main.py after Dashboard creation)."""
         # IMPORT Settings Widget
-        self.settings_widget = SettingsWidget(config, self.theme_manager, input_manager, self.version, self, dashboard=self)
+        self.settings_widget = SettingsWidget(config, self.theme_manager, input_manager, self.version, self, dashboard=self, assist_input_manager=assist_input_manager)
         self.settings_widget.back_requested.connect(self.hide_settings)
         self.settings_widget.settings_saved.connect(self._on_settings_saved)
         self.settings_widget.content_height_changed.connect(self._on_settings_content_changed)

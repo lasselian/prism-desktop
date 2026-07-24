@@ -35,6 +35,8 @@ class HAWebSocket(QObject):
         self._config_lock = threading.Lock()
         self._webhook_id: str = ""  # Set after Mobile App registration
         self._push_channel_id: int = 0   # WS message ID for push_notification_channel
+        self._pending_results: dict[int, asyncio.Future] = {}
+        self._pending_pipeline_runs: dict[int, asyncio.Queue] = {}
         self.logger = logging.getLogger(__name__)
     
     def configure(self, url: str, token: str):
@@ -181,7 +183,29 @@ class HAWebSocket(QObject):
     async def _handle_message(self, data: dict):
         """Handle incoming message."""
         msg_type = data.get('type', '')
-        
+        msg_id = data.get('id')
+
+        if msg_type == 'result':
+            future = self._pending_results.pop(msg_id, None)
+            if future and not future.done():
+                future.set_result(data)
+                return
+            # Ack for a streaming command — only surface it if HA rejected the command outright.
+            if msg_id in self._pending_pipeline_runs and not data.get('success', True):
+                error = data.get('error', {}) or {}
+                await self._pending_pipeline_runs[msg_id].put({
+                    'type': 'error',
+                    'data': {
+                        'code': error.get('code', 'unknown'),
+                        'message': error.get('message', 'assist_pipeline/run failed'),
+                    },
+                })
+            return
+
+        if msg_type == 'event' and msg_id in self._pending_pipeline_runs:
+            await self._pending_pipeline_runs[msg_id].put(data.get('event', {}))
+            return
+
         if msg_type == 'event':
             # Check if this is a push_notification_channel event
             if self._push_channel_id and data.get('id') == self._push_channel_id:
@@ -240,6 +264,13 @@ class HAWebSocket(QObject):
     async def _cleanup(self):
         """Clean up WebSocket connection."""
         self._running = False
+        for future in self._pending_results.values():
+            if not future.done():
+                future.set_exception(ConnectionError("WebSocket disconnected"))
+        self._pending_results.clear()
+        for queue in self._pending_pipeline_runs.values():
+            await queue.put({'type': 'error', 'data': {'code': 'disconnected', 'message': 'WebSocket disconnected'}})
+        self._pending_pipeline_runs.clear()
         try:
             if self._ws and not self._ws.closed:
                 await self._ws.close()
@@ -265,6 +296,82 @@ class HAWebSocket(QObject):
         except RuntimeError:
             # Object was deleted
             pass
+
+    async def conversation_process(
+        self,
+        text: str,
+        conversation_id: Optional[str] = None,
+        language: Optional[str] = None,
+        timeout: float = 15.0,
+    ) -> dict:
+        """Send text to HA's conversation agent. Returns the 'result' payload
+        (contains 'response' and 'conversation_id')."""
+        if not self._ws or self._ws.closed:
+            raise ConnectionError("WebSocket is not connected")
+
+        msg_id = self._next_id()
+        future = asyncio.get_running_loop().create_future()
+        self._pending_results[msg_id] = future
+
+        payload = {"id": msg_id, "type": "conversation/process", "text": text}
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
+        if language:
+            payload["language"] = language
+
+        try:
+            await self._send(payload)
+            data = await asyncio.wait_for(future, timeout=timeout)
+        finally:
+            self._pending_results.pop(msg_id, None)
+
+        if not data.get('success', False):
+            error = data.get('error', {}) or {}
+            raise RuntimeError(error.get('message', 'conversation/process failed'))
+
+        return data.get('result', {})
+
+    async def run_assist_pipeline(self, conversation_id: Optional[str] = None, sample_rate: int = 16000):
+        """Start an Assist pipeline (stt -> tts) and yield its events as they
+        arrive (run-start, stt-start, stt-end, intent-end, tts-end, run-end, error, ...).
+        Stops iterating after a 'run-end' or 'error' event. `sample_rate` must
+        match the rate of the audio actually sent via send_stt_audio."""
+        if not self._ws or self._ws.closed:
+            raise ConnectionError("WebSocket is not connected")
+
+        msg_id = self._next_id()
+        queue: asyncio.Queue = asyncio.Queue()
+        self._pending_pipeline_runs[msg_id] = queue
+
+        payload = {
+            "id": msg_id,
+            "type": "assist_pipeline/run",
+            "start_stage": "stt",
+            "end_stage": "tts",
+            "input": {"sample_rate": sample_rate},
+        }
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
+
+        try:
+            await self._send(payload)
+            while True:
+                event = await queue.get()
+                yield event
+                if event.get('type') in ('run-end', 'error'):
+                    break
+        finally:
+            self._pending_pipeline_runs.pop(msg_id, None)
+
+    async def send_stt_audio(self, handler_id: int, chunk: bytes):
+        """Send a chunk of raw PCM16LE mono 16kHz audio for a pipeline's STT stage."""
+        if self._ws and not self._ws.closed:
+            await self._ws.send_bytes(bytes([handler_id]) + chunk)
+
+    async def end_stt_audio(self, handler_id: int):
+        """Signal end of audio input for a pipeline's STT stage."""
+        if self._ws and not self._ws.closed:
+            await self._ws.send_bytes(bytes([handler_id]))
 
     async def run_reconnect_loop(self):
         """Run the WebSocket client with auto-reconnection in the main loop."""
