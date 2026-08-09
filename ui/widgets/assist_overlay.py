@@ -2,15 +2,15 @@
 Assist chat overlay: full-window text/voice chat that talks to Home
 Assistant's Assist (conversation + pipeline) APIs. Unlike the other overlays
 it isn't tied to a specific grid button/entity — it's opened from the footer
-button or a global hotkey, so callers just hand it a start/target rect to
-morph between.
+button or a global hotkey, so callers just hand it the rect to appear at
+(see open_fade_in).
 """
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel,
-    QScrollArea, QFrame,
+    QScrollArea, QFrame, QGraphicsOpacityEffect,
 )
-from PyQt6.QtCore import Qt, QRect, QRectF, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, QRectF, QPropertyAnimation, QEasingCurve, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter
 
 from ui.icons import get_icon, get_mdi_font
@@ -32,6 +32,9 @@ class AssistOverlay(BaseOverlay):
     text_submitted = pyqtSignal(str)
     voice_start_requested = pyqtSignal()
     voice_stop_requested = pyqtSignal()
+    content_changed = pyqtSignal()
+
+    _FADE_DURATION = 160
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -40,6 +43,7 @@ class AssistOverlay(BaseOverlay):
         self._base_color = QColor("#2d2d2d")
         self._listening = False
         self._instant_close = False
+        self._fade_anim = None
         self._build_content()
 
     def _build_content(self):
@@ -54,6 +58,7 @@ class AssistOverlay(BaseOverlay):
         content_layout.setSpacing(0)
 
         header = QWidget()
+        self._header = header
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(18, 14, 14, 8)
 
@@ -94,8 +99,7 @@ class AssistOverlay(BaseOverlay):
         self.chat_layout.addStretch(1)  # keeps early messages pinned near the top
 
         self.chat_scroll.setWidget(self.chat_container)
-        # Fires exactly when new content actually changes the scrollable range —
-        # more reliable than a deferred timer, which can fire before layout catches up.
+        # Fires once layout has actually settled — more reliable than a deferred timer.
         self.chat_scroll.verticalScrollBar().rangeChanged.connect(self._on_chat_range_changed)
         content_layout.addWidget(self.chat_scroll, 1)
 
@@ -106,6 +110,7 @@ class AssistOverlay(BaseOverlay):
         content_layout.addWidget(self.status_label)
 
         input_row = QWidget()
+        self._input_row = input_row
         row = QHBoxLayout(input_row)
         row.setContentsMargins(18, 8, 18, 16)
         row.setSpacing(8)
@@ -130,8 +135,12 @@ class AssistOverlay(BaseOverlay):
         content_layout.addWidget(input_row)
         self._update_mic_style()
 
-    def start_morph(self, start_geo: QRect, target_geo: QRect, color: QColor = None, base_color: QColor = None,
-                     instant_close: bool = False):
+    def open_fade_in(self, target_rect: QRect, color: QColor = None, base_color: QColor = None,
+                      instant_close: bool = False, instant: bool = False):
+        """Show the panel directly at its final size/position and fade it
+        in. With instant=True, appear immediately with no fade at all —
+        used when the dashboard itself was just shown quietly for this same
+        open, so nothing should flash."""
         self._color = color or QColor("#4285F4")
         self._base_color = base_color or QColor("#2d2d2d")
         self._listening = False
@@ -141,36 +150,67 @@ class AssistOverlay(BaseOverlay):
         self.input.clear()
         self.clear_chat()
         self._update_mic_style()
-        self._start_morph_animations(start_geo, target_geo)
+        self.setGeometry(target_rect)
 
-    def on_anim_finished(self):
-        super().on_anim_finished()
-        if not self._is_closing:
+        self.anim_border.stop()
+        self.anim_border.setStartValue(0.0)
+        self.anim_border.setEndValue(1.0)
+        self.anim_border.start()
+
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+        if instant:
             self._content.setVisible(True)
             self.input.setFocus()
+            return
+
+        self._fade(0.0, 1.0, QEasingCurve.Type.OutQuad, self._on_fade_in_finished)
+
+    def _on_fade_in_finished(self):
+        self._content.setVisible(True)
+        self.input.setFocus()
 
     def request_close(self):
-        """Close via the normal fade+shrink, or instantly if this session was
-        opened quietly (hotkey while the dashboard was hidden) — a fade here
-        would otherwise reveal the grid through the overlay as it fades."""
-        if self._instant_close:
-            self.close_instant()
-        else:
-            self.close_morph()
-
-    def close_instant(self):
-        self.anim.stop()
-        self.content_anim.stop()
+        """Instant if this session was opened quietly (hotkey while the
+        dashboard was hidden — a fade would reveal the grid), otherwise a
+        quick fade-out."""
         self.input.clearFocus()
         self._content.setVisible(False)
-        self._is_closing = True
+        if self._instant_close:
+            if self._fade_anim is not None:
+                self._fade_anim.stop()
+                self._fade_anim = None
+                self.setGraphicsEffect(None)
+            self.hide()
+            self.finished.emit()
+        else:
+            self._fade(1.0, 0.0, QEasingCurve.Type.Linear, self._on_fade_out_finished)
+
+    def _on_fade_out_finished(self):
         self.hide()
         self.finished.emit()
 
-    def close_morph(self):
-        self.input.clearFocus()
-        self._content.setVisible(False)
-        super().close_morph()
+    def _fade(self, start: float, end: float, easing: QEasingCurve.Type, on_finished):
+        effect = QGraphicsOpacityEffect(self)
+        effect.setOpacity(start)
+        self.setGraphicsEffect(effect)
+
+        anim = QPropertyAnimation(effect, b"opacity", self)
+        anim.setDuration(self._FADE_DURATION)
+        anim.setEasingCurve(easing)
+        anim.setStartValue(start)
+        anim.setEndValue(end)
+
+        def _finished():
+            self.setGraphicsEffect(None)
+            self._fade_anim = None
+            on_finished()
+
+        anim.finished.connect(_finished)
+        self._fade_anim = anim  # keep alive until finished
+        anim.start()
 
     def clear_chat(self):
         while self.chat_layout.count() > 1:
@@ -216,6 +256,22 @@ class AssistOverlay(BaseOverlay):
 
     def _on_chat_range_changed(self, _minimum, maximum):
         self.chat_scroll.verticalScrollBar().setValue(maximum)
+        self.content_changed.emit()
+
+    def measure_target_content_height(self) -> int:
+        """Natural height of the header/status/input chrome plus the chat
+        bubbles, used by the parent window to size itself around this
+        overlay's content."""
+        return (
+            self._header.sizeHint().height()
+            + self.status_label.sizeHint().height()
+            + self._input_row.sizeHint().height()
+            + self.chat_container.sizeHint().height()
+        )
+
+    def retarget(self, rect: QRect):
+        """Reposition/resize instantly to a new rect while already open."""
+        self.setGeometry(rect)
 
     def set_status(self, text: str):
         self.status_label.setText(text)
@@ -253,7 +309,6 @@ class AssistOverlay(BaseOverlay):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self._draw_close_fade(painter)
 
         rect = self.rect()
         self._draw_background(painter, rect)

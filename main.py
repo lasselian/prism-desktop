@@ -473,8 +473,10 @@ class PrismDesktopApp(QObject):
     def _on_assist_overlay_closed(self):
         self.assist_controller.cancel()
         self.assist_controller.reset_conversation()
-        if self._assist_opened_dashboard and self.dashboard:
-            self.dashboard.hide_instant()
+        if self.dashboard:
+            if self._assist_opened_dashboard:
+                self.dashboard.hide_instant()
+            self.dashboard.restore_grid_size()
         self._assist_opened_dashboard = False
 
     def start_websocket(self):

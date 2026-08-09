@@ -119,6 +119,7 @@ class Dashboard(QWidget):
         self.overlay_manager.morph_changed.connect(self._on_overlay_morph)
 
         self.assist_overlay = AssistOverlay(self)
+        self.assist_overlay.content_changed.connect(self._on_assist_content_changed)
 
         # Throttling
 
@@ -201,6 +202,17 @@ class Dashboard(QWidget):
         self.width_anim.setDuration(ANIM_DURATION_WIDTH)
         self.width_anim.setEasingCurve(QEasingCurve.Type.OutBack)
         self.width_anim.finished.connect(self._on_width_anim_finished)
+
+        # Assist content-driven resize (separate from height_anim so its
+        # finished handler doesn't persist rows / emit save_config_requested)
+        self._assist_active = False
+        self._assist_ceiling_height = None
+        self._assist_resize_target = None
+        self._assist_grid_fade_anim = None
+        self.assist_resize_anim = QPropertyAnimation(self, b"anim_height")
+        self.assist_resize_anim.setDuration(ANIM_DURATION_HEIGHT)
+        self.assist_resize_anim.setEasingCurve(QEasingCurve.Type.OutBack)
+        self.assist_resize_anim.finished.connect(self._on_assist_resize_anim_finished)
 
         self._last_tray_geometry = QRect()
 
@@ -464,7 +476,14 @@ class Dashboard(QWidget):
                  self._height_anim_anchor_bottom = self.y() + self.height()
             new_y = self._height_anim_anchor_bottom - h
         self.setGeometry(self.x(), new_y, self.width(), h)
-        
+
+        # Keep the (opaque) Assist overlay locked to the window's rect on
+        # every frame of an Assist-driven resize, so the grid underneath is
+        # never exposed mid-animation.
+        if self._assist_active and self.assist_overlay.isVisible():
+            m = self.ASSIST_OVERLAY_MARGIN
+            self.assist_overlay.retarget(self.rect().adjusted(m, m, -m, -m))
+
     anim_height = pyqtProperty(float, get_anim_height, set_anim_height)
 
     def get_anim_width(self):
@@ -1018,8 +1037,8 @@ class Dashboard(QWidget):
         self.btn_assist.setFont(get_mdi_font(11))
         self.btn_assist.setText(get_icon("chat"))
         self.btn_assist.setToolTip(t("dashboard.footer.assist"))
-        # lambda avoids clicked(bool) landing in open_assist_overlay's source_widget param
-        self.btn_assist.clicked.connect(lambda: self.open_assist_overlay(self.btn_assist))
+        # lambda avoids clicked(bool) landing in open_assist_overlay's instant param
+        self.btn_assist.clicked.connect(lambda: self.open_assist_overlay())
         self.btn_assist.setStyleSheet("background: rgba(255,255,255,0.1); border: none; border-radius: 4px; color: #888;")
         footer_layout.addWidget(self.btn_assist, 0)
         
@@ -1065,41 +1084,198 @@ class Dashboard(QWidget):
         self.hide()
 
     ASSIST_OVERLAY_MARGIN = 10
+    ASSIST_WIDTH_COLS = 4
+    ASSIST_MIN_HEIGHT = 220
+    ASSIST_FADE_DURATION = 160
 
-    def open_assist_overlay(self, source_widget=None, instant=False):
-        """Open the full-window Assist chat popup, morphing from source_widget's
-        rect if given (footer button click) or from the popup's own center
-        (global hotkey). With instant=True it appears already at full size —
-        no grow animation — so the grid is never exposed behind it; used when
-        the dashboard itself was just shown quietly for this same open."""
+    def open_assist_overlay(self, instant=False):
+        """Open the Assist chat popup: fade the grid out, snap the window to
+        the final Assist size, then fade the panel in at that size — never a
+        grid resize while it's visible, never a grow-from-a-point morph.
+
+        With instant=True (global hotkey while the dashboard was hidden)
+        both steps are instant instead of faded — the dashboard was just
+        shown quietly for this same open, so nothing should flash."""
         if not self.config.get('assist', {}).get('enabled', False):
             return
         if self.overlay_manager:
             self.overlay_manager.close_all_overlays()
 
-        m = self.ASSIST_OVERLAY_MARGIN
-        target_rect = self.rect().adjusted(m, m, -m, -m)
+        # Clear stale chat before measuring below, or the compact size is
+        # based on the previous session's bubbles and a corrective resize
+        # fires right as the panel appears.
+        self.assist_overlay.clear_chat()
+
+        self._assist_ceiling_height = self.height()
+        self._assist_active = True
+
+        target_width = calculate_width(self.ASSIST_WIDTH_COLS)
+        compact_height = max(
+            self.ASSIST_MIN_HEIGHT,
+            min(self.assist_overlay.measure_target_content_height() + 2 * self.ASSIST_OVERLAY_MARGIN,
+                self._assist_ceiling_height),
+        )
+
+        def _open_at_compact_size():
+            self.setMinimumSize(0, 0)
+            self.setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
+            self.setFixedSize(target_width, compact_height)
+            self.refresh_tray_anchor(move_now=True)
+
+            m = self.ASSIST_OVERLAY_MARGIN
+            target_rect = self.rect().adjusted(m, m, -m, -m)
+
+            if self.theme_manager:
+                base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
+                accent_color = QColor(self.theme_manager.get_colors().get('accent', '#7C4DFF'))
+            else:
+                base_color = QColor("#2d2d2d")
+                accent_color = QColor("#7C4DFF")
+
+            self.assist_overlay.set_border_effect(self._border_effect)
+            self.assist_overlay.open_fade_in(target_rect, color=accent_color, base_color=base_color,
+                                              instant_close=instant, instant=instant)
 
         if instant:
-            start_rect = target_rect
-        elif source_widget is not None:
-            global_pos = source_widget.mapToGlobal(QPoint(0, 0))
-            local_pos = self.mapFromGlobal(global_pos)
-            start_rect = QRect(local_pos, source_widget.size())
+            self.stack_widget.hide()
+            self.footer_widget.hide()
+            _open_at_compact_size()
         else:
-            center = target_rect.center()
-            start_rect = QRect(center.x(), center.y(), 0, 0)
+            self._fade_grid_for_assist(fade_in=False, then=_open_at_compact_size)
 
-        if self.theme_manager:
-            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
-            accent_color = QColor(self.theme_manager.get_colors().get('accent', '#7C4DFF'))
+    def _ensure_assist_curtain(self):
+        """Lazily create the solid-color 'curtain' used to fade the grid
+        out/in for Assist. A bare QFrame with no children on purpose: every
+        DashboardButton already has its own QGraphicsEffect (_morph_eff),
+        and a second opacity effect on their ancestor (stack_widget) nests
+        graphics effects, which Qt renders with a visible glitch. Fading
+        this separate widget over the grid instead avoids that."""
+        curtain = getattr(self, '_assist_curtain', None)
+        if curtain is None:
+            curtain = QFrame(self.container)
+            curtain.setObjectName("assistFadeCurtain")
+            self._assist_curtain = curtain
+        bg_color, _ = self._get_container_colors()
+        curtain.setStyleSheet(f"""
+            QFrame#assistFadeCurtain {{
+                background-color: {bg_color};
+                border: none;
+                border-radius: 11px;
+            }}
+        """)
+        curtain.setGeometry(self.container.rect().adjusted(1, 1, -1, -1))
+        return curtain
+
+    def _fade_grid_for_assist(self, fade_in: bool, then=None):
+        """Quickly fade the grid + footer in or out around an Assist
+        open/close, so the window can jump straight to/from the compact
+        Assist size without the grid ever being visibly resized while
+        exposed. See _ensure_assist_curtain for why this animates a
+        separate covering widget rather than the grid itself."""
+        from PyQt6.QtWidgets import QGraphicsOpacityEffect
+
+        curtain = self._ensure_assist_curtain()
+
+        if fade_in:
+            # Grid/footer are already showing underneath, untouched.
+            self.stack_widget.show()
+            self.footer_widget.show()
+            start_val, end_val = 1.0, 0.0
         else:
-            base_color = QColor("#2d2d2d")
-            accent_color = QColor("#7C4DFF")
+            start_val, end_val = 0.0, 1.0
 
-        self.assist_overlay.set_border_effect(self._border_effect)
-        self.assist_overlay.start_morph(start_rect, target_rect, color=accent_color, base_color=base_color,
-                                         instant_close=instant)
+        curtain.show()
+        curtain.raise_()
+
+        effect = QGraphicsOpacityEffect(curtain)
+        effect.setOpacity(start_val)
+        curtain.setGraphicsEffect(effect)
+
+        anim = QPropertyAnimation(effect, b"opacity", self)
+        anim.setDuration(self.ASSIST_FADE_DURATION)
+        # Linear, not OutQuad — OutQuad front-loads the opacity change,
+        # which reads as an abrupt snap rather than a smooth dissolve.
+        anim.setEasingCurve(QEasingCurve.Type.Linear)
+        anim.setStartValue(start_val)
+        anim.setEndValue(end_val)
+        self._assist_grid_fade_anim = anim  # keep alive until finished
+
+        def _on_finished():
+            curtain.setGraphicsEffect(None)
+            if fade_in:
+                curtain.hide()
+            else:
+                self.stack_widget.hide()
+                self.footer_widget.hide()
+            self._assist_grid_fade_anim = None
+            if then is not None:
+                then()
+
+        anim.finished.connect(_on_finished)
+        anim.start()
+
+    def _on_assist_content_changed(self):
+        """Grow (or hold) the window height to fit the chat once per message,
+        capped at the height captured when Assist was opened."""
+        if not self._assist_active:
+            return
+        target_height = max(
+            self.ASSIST_MIN_HEIGHT,
+            min(self.assist_overlay.measure_target_content_height() + 2 * self.ASSIST_OVERLAY_MARGIN,
+                self._assist_ceiling_height),
+        )
+        if target_height == self.height():
+            return
+
+        if self.assist_resize_anim.state() == QPropertyAnimation.State.Running:
+            self.assist_resize_anim.stop()
+
+        self._height_anim_anchor_bottom = None
+        self._height_anim_anchor_top = None
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
+        self._assist_resize_target = (calculate_width(self.ASSIST_WIDTH_COLS), target_height)
+        self.assist_resize_anim.setStartValue(float(self.height()))
+        self.assist_resize_anim.setEndValue(float(target_height))
+        self.assist_resize_anim.start()
+
+    def _on_assist_resize_anim_finished(self):
+        """Re-lock the window size after a content-driven Assist resize and
+        keep the overlay's geometry in sync with the window's new rect."""
+        if self._assist_resize_target is not None:
+            self.setFixedSize(*self._assist_resize_target)
+        self.refresh_tray_anchor(move_now=True)
+        if self._assist_active and self.assist_overlay.isVisible():
+            m = self.ASSIST_OVERLAY_MARGIN
+            self.assist_overlay.retarget(self.rect().adjusted(m, m, -m, -m))
+
+    def restore_grid_size(self):
+        """Called once the Assist overlay has fully closed — snap the window
+        back to grid size and fade the grid back in. Safe to call even if
+        Assist was never opened (no-op)."""
+        if not self._assist_active:
+            return
+        self._assist_ceiling_height = None
+        self.assist_resize_anim.stop()
+
+        target_w = calculate_width(self._cols)
+        target_h = self._calculate_target_height()
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
+        self.setFixedSize(target_w, target_h)
+        self.refresh_tray_anchor(move_now=True)
+
+        if not self.isVisible():
+            # About to hide anyway (quiet hotkey close) — nothing to animate.
+            self.stack_widget.show()
+            self.footer_widget.show()
+            self._assist_active = False
+            return
+
+        self._fade_grid_for_assist(fade_in=True, then=self._on_assist_grid_restored)
+
+    def _on_assist_grid_restored(self):
+        self._assist_active = False
 
     def set_assist_enabled(self, enabled: bool):
         """Master on/off; force-closes any open Assist session when disabled."""
@@ -1109,6 +1285,23 @@ class Dashboard(QWidget):
     def set_assist_visible_in_footer(self, visible: bool):
         """Show/hide the footer trigger button independently of the master toggle."""
         self.btn_assist.setVisible(visible)
+
+    def _get_container_colors(self, colors=None):
+        """Background/border colors for self.container's own styling —
+        factored out so the Assist fade curtain (see _ensure_assist_curtain)
+        can match it exactly."""
+        if colors is None:
+            colors = self.theme_manager.get_colors() if self.theme_manager else {
+                'window': '#1e1e1e', 'border': '#555555',
+            }
+
+        # Glass UI: use semi-transparent tint over blurred desktop
+        if self._glass_ui:
+            is_light = (self.theme_manager and self.theme_manager.get_effective_theme() == 'light')
+            if is_light:
+                return 'rgba(240, 240, 240, 120)', 'rgba(0, 0, 0, 0.10)'
+            return 'rgba(20, 20, 20, 100)', 'rgba(255, 255, 255, 0.12)'
+        return colors['window'], colors['border']
 
     def update_style(self):
         """Update dashboard style based on theme."""
@@ -1125,20 +1318,8 @@ class Dashboard(QWidget):
                 'window': '#1e1e1e',
                 'border': '#555555',
             }
-        
-        # Glass UI: use semi-transparent tint over blurred desktop
-        if self._glass_ui:
-            is_light = (self.theme_manager and self.theme_manager.get_effective_theme() == 'light')
-            if is_light:
-                bg_color = 'rgba(240, 240, 240, 120)'
-                border_color = 'rgba(0, 0, 0, 0.10)'
-            else:
-                bg_color = 'rgba(20, 20, 20, 100)'
-                border_color = 'rgba(255, 255, 255, 0.12)'
-        else:
-            bg_color = colors['window']
-            border_color = colors['border']
-        
+        bg_color, border_color = self._get_container_colors(colors)
+
         self.container.setStyleSheet(f"""
             QFrame#dashboardContainer {{
                 background-color: {bg_color};
@@ -1780,6 +1961,8 @@ class Dashboard(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        if self._assist_active:
+            return
         if hasattr(self, 'assist_overlay') and self.assist_overlay.isVisible():
             self.assist_overlay.hide()
             self.assist_overlay.finished.emit()
@@ -2371,8 +2554,8 @@ class Dashboard(QWidget):
     
     def mousePressEvent(self, event):
         """Handle window resize drag start."""
-        # Only allow resizing in Grid View
-        if self._current_view != 'grid':
+        # Only allow resizing in Grid View (and not while Assist is open)
+        if self._current_view != 'grid' or self._assist_active:
             super().mousePressEvent(event)
             return
 
@@ -2422,6 +2605,7 @@ class Dashboard(QWidget):
         if (event.type() == QEvent.Type.MouseMove
                 and not self._is_resizing_window
                 and self._current_view == 'grid'
+                and not self._assist_active
                 and isinstance(obj, QWidget)
                 and (obj is self or self.isAncestorOf(obj))):
             pos = self.mapFromGlobal(event.globalPosition().toPoint())
@@ -2436,8 +2620,8 @@ class Dashboard(QWidget):
 
     def mouseMoveEvent(self, event):
         """Handle resize drag and hover cursor."""
-        # Only allow resizing in Grid View
-        if self._current_view != 'grid':
+        # Only allow resizing in Grid View (and not while Assist is open)
+        if self._current_view != 'grid' or self._assist_active:
             self.unsetCursor()
             super().mouseMoveEvent(event)
             return
