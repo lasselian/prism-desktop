@@ -45,9 +45,8 @@ class ThemeManager(QObject):
         'accent': '#0078d4',
     }
     
-    def __init__(self, config_manager=None):
+    def __init__(self):
         super().__init__()
-        self.config_manager = config_manager
         self._current_theme = 'system'
         self._effective_theme = 'dark'
     

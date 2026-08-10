@@ -230,23 +230,18 @@ class OverlayManager(QObject):
             if entity_id in relevant_entities:
                 self._push_printer_state()
                 
-        # Notify active climate overlay
         if self.climate_overlay.isVisible() and self._active_climate_entity == entity_id:
             self.climate_overlay.update_state(state)
-            
-        # Notify active weather overlay
+
         if self.weather_overlay.isVisible() and self._active_weather_entity == entity_id:
             self.weather_overlay.update_state(state)
 
-        # Notify active mower overlay
         if self.mower_overlay.isVisible() and self._active_mower_entity == entity_id:
             self.mower_overlay.update_state(state)
 
-        # Notify active vacuum overlay
         if self.vacuum_overlay.isVisible() and self._active_vacuum_entity == entity_id:
             self.vacuum_overlay.update_state(state)
 
-        # Notify active alarm overlay
         if self.alarm_overlay.isVisible() and self._active_alarm_entity == entity_id:
             self.alarm_overlay.update_state(state)
 
@@ -391,9 +386,7 @@ class OverlayManager(QObject):
         self.dimmer_overlay.set_border_effect(self._border_effect)
         
         label = config.get('label', 'Dimmer')
-        # If type is media_player (via Volume), label usually passed differently or inferred?
-        # Standard dimmer uses config label.
-        
+
         self.dimmer_overlay.start_morph(
             start_rect, target_rect, current_val, label,
             color=accent_color, base_color=base_color
@@ -411,8 +404,7 @@ class OverlayManager(QObject):
         
         source_btn = next((b for b in self.buttons if b.slot == slot), None)
         if not source_btn: return
-        
-        # Get volume
+
         current_vol = source_btn._media_state.get('attributes', {}).get('volume_level', 0.5)
         start_pct = int(current_vol * 100)
         
@@ -815,8 +807,6 @@ class OverlayManager(QObject):
         source_btn = next((b for b in self.buttons if b.slot == slot), None)
         self._overlay_state[self.printer_overlay]['source'] = source_btn
 
-        # Prepare initial data
-        
         # Push initial camera if available on button
         if source_btn and hasattr(source_btn, '_last_camera_pixmap') and source_btn._last_camera_pixmap:
             self.printer_overlay.set_camera_pixmap(source_btn._last_camera_pixmap)

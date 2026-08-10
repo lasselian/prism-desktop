@@ -1760,11 +1760,6 @@ class DashboardButton(QFrame):
         gp.setClipPath(clip_path)
         self.render(gp)
         gp.setClipping(False)
-        # pen = QPen(QColor("#4285F4"))
-        # pen.setWidth(2)
-        # gp.setPen(pen)
-        # gp.setBrush(Qt.BrushStyle.NoBrush)
-        # gp.drawRoundedRect(QRectF(ghost.rect()).adjusted(1, 1, -1, -1), 12, 12)
         gp.end()
 
         drag.setPixmap(ghost)

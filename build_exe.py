@@ -96,8 +96,7 @@ def build():
         cmd.extend(["--add-data", f"{translations_path};translations"])
 
     write_build_info(base_dir)
-        
-    # Main script
+
     cmd.append("main.py")
     
     print(f"Running: {' '.join(str(x) for x in cmd)}")

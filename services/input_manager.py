@@ -287,13 +287,9 @@ class InputManager(QObject):
     def _on_record_key_release(self, key):
         """Handle key release during recording - Finalize record."""
         if not self._is_recording: return
-        
-        # Determine the combination from currently pressed keys + the released key.
-        # Ensure the released key is accounted for even if it was just removed (logic below handles removal AFTER)
-        
-        # We need to construct string from the set of keys that were active.
-        # If I release 'h', 'h' should supply the char part.
-        
+
+        # Build the combo from keys still held, including the one just released
+        # (it's removed from _pressed_keys below, after this).
         combo_str = self._format_combo(self._pressed_keys)
         
         if combo_str:
@@ -307,29 +303,17 @@ class InputManager(QObject):
     def _on_record_mouse_click(self, x, y, button, pressed):
         """Handle mouse click during recording."""
         if not self._is_recording or not pressed: return
-        
-        # Ignore left/right click if you want to allow UI interaction?
-        # User said "mouse buttons". Usually Middle/Side.
-        # We can capture all, but maybe warn if L/R. 
-        # Actually, if they click "Record", the next click is captured.
-        # If they click "Record" with Left Click, that click triggers the button. We start listening AFTER.
-        # So next click is safe.
-        
+
+        # Listening starts after the "Record" button click returns, so that
+        # click itself is never captured here.
         btn_str = self._mouse_map.get(button, str(button))
-        
-        # Prevent capturing Left Click immediately if it was used to press the GUI button?
-        # Pynput might catch the release of the Record button click?
-        # We handle 'pressed' only.
-        
+
         print(f"Recorded Mouse: {btn_str}")
         self.recorded.emit({'type': 'mouse', 'value': btn_str})
         self.stop_listening()
 
     def _format_combo(self, keys):
         """Format a set of keys into a pynput hotkey string (e.g., '<ctrl>+<alt>+h')."""
-        # Mapping for pynput special keys
-        # pynput expects <ctrl>, <alt>, <shift>, <cmd>
-        
         mods = []
         char_key = None
         
@@ -352,8 +336,7 @@ class InputManager(QObject):
             # Found a character or other special key (e.g. F1, esc, space)
             vk = getattr(k, 'vk', None)
             char = getattr(k, 'char', None)
-            
-            # Helper to check if VK is a standard ASCII letters/digit
+
             is_standard_vk = vk and ((48 <= vk <= 57) or (65 <= vk <= 90))
             
             key_str = ""

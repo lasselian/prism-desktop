@@ -35,7 +35,6 @@ class Dimensions:
     # Border Radii
     RADIUS_SMALL = "4px"
     RADIUS_MEDIUM = "6px"
-    RADIUS_LARGE = "8px"
     RADIUS_XLARGE = "12px"  # Standard for dashboard buttons / container
     
     # Padding

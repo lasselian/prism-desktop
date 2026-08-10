@@ -17,15 +17,6 @@ class ConfigManager:
         self.config = self.load_config()
         self.save_config()  # Scrub sensitive data (tokens) from disk immediately
 
-    def get(self, key: str, default=None):
-        return self.config.get(key, default)
-        
-    def __getitem__(self, key):
-        return self.config[key]
-        
-    def __setitem__(self, key, value):
-        self.config[key] = value
-
     def load_config(self) -> dict:
         """Load configuration from file."""
         if self.config_path.exists():

@@ -201,7 +201,6 @@ class DashboardButtonPainter:
             DashboardButtonPainter._paint_lock_hold_ring(button)
 
         # Draw Camera Image (if applicable)
-        # Draw Camera Image (if applicable)
         if button.config and button.config.get('type') == 'camera':
              # Use cached rounded pixmap if available (Performance + Style)
              if hasattr(button, '_cached_display_pixmap') and button._cached_display_pixmap and not button._cached_display_pixmap.isNull():
@@ -746,8 +745,6 @@ class DashboardButtonPainter:
             elif hasattr(button, '_last_camera_pixmap') and button._last_camera_pixmap:
                  camera_pixmap = button._last_camera_pixmap
             
-            # Progress (read from state attributes or secondary entity if configured - sticking to state attributes for simplicity if it's there)
-            # Many HA integrations put progress in attributes of the state entity or a dedicated entity.
             # Prefer dedicated progress entity if configured
             state_data = dashboard._entity_states.get(cfg.get('printer_state_entity'), {})
             attrs = state_data.get('attributes', {})
@@ -1092,7 +1089,6 @@ class DashboardButtonPainter:
         else:
             c = QColor(255, 255, 255)
             
-        # Fade opacity
         c.setAlphaF(getattr(button, '_arrow_opacity', 0.0) * 0.6)
         painter.setPen(c)
         rect = button.rect()
@@ -1139,8 +1135,7 @@ class DashboardButtonPainter:
         opacity = 1.0
         if button._anim_progress > 0.8:
             opacity = (1.0 - button._anim_progress) / 0.2
-        
-        # Make sure opacity doesn't go below 0
+
         opacity = max(0.0, opacity)
         
         painter.setOpacity(opacity)
@@ -1184,7 +1179,6 @@ class DashboardButtonPainter:
         painter = QPainter(button)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        # Opacity control
         painter.setOpacity(button._resize_handle_opacity)
         
         # Bottom-right corner
@@ -1297,8 +1291,6 @@ class DashboardButtonPainter:
                 force_dark=force_dark
             )
 
-        # Draw Label Text (Final Step)
-        # System Font, Bold
         font = QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold)
         painter.setFont(font)
         painter.setPen(text_color)
@@ -1330,12 +1322,6 @@ class DashboardButtonPainter:
     def draw_gradient_border(painter, rect, angle, colors):
         """Draw a conical gradient border."""
         gradient = QConicalGradient(QPointF(rect.center()), angle)
-        
-        # Ensure smooth loop if not already handled
-        if colors[0] != colors[-1]:
-             # If colors don't wrap, we might need logic, but for Rainbow/Aurora they usually loop naturally 
-             # or are defined to loop. If we pass custom 2 colors, we expect the caller to make them loop (C1, C2, C1).
-             pass
 
         for i, color in enumerate(colors):
             gradient.setColorAt(i / (len(colors) - 1), QColor(color))

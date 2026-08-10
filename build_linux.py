@@ -108,7 +108,6 @@ def build_binary(base_dir):
     venv_dir = base_dir / '.build_venv'
     
     print("Setting up clean virtual environment...")
-    # Create venv
     subprocess.run([sys.executable, '-m', 'venv', str(venv_dir)], check=True)
     
     # Get venv python path

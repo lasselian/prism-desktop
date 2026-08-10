@@ -185,8 +185,6 @@ class Icons:
 
 # --- MDI Mapping Logic ---
 
-# --- MDI Mapping Logic ---
-
 _mdi_cache = {}
 MDI_CSS_URL = "https://raw.githubusercontent.com/Templarian/MaterialDesign-Webfont/master/css/materialdesignicons.css"
 _is_fetching = False

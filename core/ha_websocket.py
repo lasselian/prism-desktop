@@ -39,12 +39,6 @@ class HAWebSocket(QObject):
         self._pending_pipeline_runs: dict[int, asyncio.Queue] = {}
         self.logger = logging.getLogger(__name__)
     
-    def configure(self, url: str, token: str):
-        """Update connection settings thread-safely."""
-        with self._config_lock:
-            self.url = url.rstrip('/')
-            self.token = token
-
     def set_webhook_id(self, webhook_id: str):
         """Set the Mobile App webhook_id for push notification delivery."""
         self._webhook_id = webhook_id
@@ -93,20 +87,17 @@ class HAWebSocket(QObject):
             if msg.get('type') != 'auth_required':
                 raise Exception("Unexpected message type")
 
-            # Send auth
             await self._send({
                 "type": "auth",
                 "access_token": current_token
             })
 
-            # Wait for auth_ok
             msg = await asyncio.wait_for(self._ws.receive_json(), timeout=10)
             if msg.get('type') != 'auth_ok':
                 raise Exception(f"Authentication failed: {msg.get('message', 'Unknown error')}")
-            
+
             self.connected.emit()
-            
-            # Subscribe to state changes
+
             await self._send({
                 "id": self._next_id(),
                 "type": "subscribe_events",
@@ -132,8 +123,7 @@ class HAWebSocket(QObject):
                     "support_confirm": False,
                 })
                 self.logger.info(f"[HAWebSocket] Subscribed to push_notification_channel (id={push_id})")
-            
-            # Start message loop
+
             await self._message_loop()
             
         except asyncio.CancelledError:
@@ -164,7 +154,6 @@ class HAWebSocket(QObject):
                     break
                     
             except asyncio.TimeoutError:
-                # Check if we should stop
                 if not self._running:
                     break
                 # Send ping to keep connection alive
@@ -207,7 +196,6 @@ class HAWebSocket(QObject):
             return
 
         if msg_type == 'event':
-            # Check if this is a push_notification_channel event
             if self._push_channel_id and data.get('id') == self._push_channel_id:
                 event = data.get('event', {})
                 title = event.get('title', 'Home Assistant')
@@ -229,7 +217,6 @@ class HAWebSocket(QObject):
                 entity_id = event_data.get('entity_id', '')
                 new_state = event_data.get('new_state', {})
                 
-                # Check for persistent_notification entities
                 if entity_id.startswith('persistent_notification.'):
                     # New notification created
                     if new_state:
@@ -288,15 +275,6 @@ class HAWebSocket(QObject):
             # Object was deleted
             pass
     
-    async def disconnect(self):
-        """Disconnect from WebSocket."""
-        self._running = False
-        try:
-            await self._cleanup()
-        except RuntimeError:
-            # Object was deleted
-            pass
-
     async def conversation_process(
         self,
         text: str,

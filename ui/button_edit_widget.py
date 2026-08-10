@@ -359,9 +359,7 @@ class ButtonEditWidget(QWidget):
         self.populate_entities()
 
         self.form.addRow(t("button_editor.entity_label"), self.entity_combo)
-        
-        # (Advanced mode toggle removed - climate now defaults to advanced)
-        
+
         # Show Album Art (Media Player Only)
         self.show_album_art_check = ToggleSwitch(t("button_editor.album_art_toggle"))
         self.show_album_art_check.setToolTip(t("button_editor.album_art_tooltip"))
@@ -424,19 +422,6 @@ class ButtonEditWidget(QWidget):
         self.service_combo = QComboBox()
         self.service_combo.addItems(["toggle", "turn_on", "turn_off"])
         self.form.addRow(self.service_label, self.service_combo)
-        
-        # Camera Display Mode (Removed - always stream)
-        # self.camera_mode_label = QLabel("Display:")
-        # self.camera_mode_combo = QComboBox()
-        # self.camera_mode_combo.addItems(["Picture", "Live Stream"])
-        # self.camera_mode_combo.setToolTip("Picture refreshes periodically, Live Stream is continuous")
-        # self.camera_mode_combo.setVisible(False)
-        # self.camera_mode_label.setVisible(False)
-        # self.form.addRow(self.camera_mode_label, self.camera_mode_combo)
-        
-        # Camera Size (Removed - handled by drag resize)
-        # self.camera_size_label = QLabel("Size:")
-        # self.camera_size_combo = QComboBox() ...
         
         # Automation Action (Automation Only)
         self.automation_action_label = QLabel(t("button_editor.action_label"))
@@ -780,7 +765,7 @@ class ButtonEditWidget(QWidget):
             if domain not in domains: domains[domain] = []
             domains[domain].append((eid, friendly))
         
-        show_friendly = ButtonEditWidget._global_show_friendly_names # Use class-level variable
+        show_friendly = ButtonEditWidget._global_show_friendly_names
         
         for domain in sorted(domains.keys()):
             for eid, friendly in sorted(domains[domain], key=lambda x: x[0]):
@@ -790,10 +775,7 @@ class ButtonEditWidget(QWidget):
                  
                  self.entity_combo.addItem(display, eid)
                  self.entity_combo.setItemData(self.entity_combo.count()-1, tooltip, Qt.ItemDataRole.ToolTipRole)
-                 
-                 # All entities (unfiltered) go to printer combos
-                 # They get populated with the full set in a separate pass below
-        
+
         # Populate printer combos with ALL entities (unfiltered)
         if has_printer_combos:
             all_domains = {}
@@ -895,7 +877,6 @@ class ButtonEditWidget(QWidget):
     def on_type_changed(self, index):
         current_type = self.TYPE_DEFINITIONS[index][1] if 0 <= index < len(self.TYPE_DEFINITIONS) else 'switch'
 
-        # (Advanced mode visibility logic removed)
         self.show_album_art_check.setVisible(current_type == 'media_player')
         self.animated_bg_toggle.setVisible(current_type == 'media_player')
         self.service_combo.setVisible(current_type == 'switch')
@@ -907,10 +888,8 @@ class ButtonEditWidget(QWidget):
         self.form.setRowVisible(self.display_style_combo, is_sensor)
         self._on_display_style_changed()
 
-        # Show camera-specific controls
         is_camera = current_type == 'camera'
-        # mode combo removed
-        
+
         # Show automation specific controls
         is_automation = current_type == 'automation'
         self.automation_action_combo.setVisible(is_automation)
@@ -1263,7 +1242,6 @@ class ButtonEditWidget(QWidget):
         svc_idx = self.service_combo.findText(svc_name)
         if svc_idx >= 0: self.service_combo.setCurrentIndex(svc_idx)
         
-        # (Advanced mode checked logic removed)
         self.show_album_art_check.setChecked(self.config.get('show_album_art', True))
         self.animated_bg_toggle.setChecked(self.config.get('animated_bg', True))
         # Precision
@@ -1276,10 +1254,6 @@ class ButtonEditWidget(QWidget):
         self.sensor_min_spin.setValue(float(self.config.get('sensor_min', 0.0)))
         self.sensor_max_spin.setValue(float(self.config.get('sensor_max', 100.0)))
         self.entry_animation_toggle.setChecked(self.config.get('entry_animation', True))
-        
-        # Camera settings (Removed - always stream)
-        # camera_mode = self.config.get('camera_mode', 'picture')
-        # self.camera_mode_combo.setCurrentIndex(0 if camera_mode == 'picture' else 1)
         
         # Automation settings
         automation_action = self.config.get('action', 'toggle')

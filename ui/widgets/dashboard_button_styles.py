@@ -136,14 +136,7 @@ class DashboardButtonStyleManager:
                      button_color = "#ffffff"
                  else:
                      button_color = "#3c3c3c"
-                     
-             # Special case for sensors: Lighten custom colors (but NOT if it's the dynamic gray)
-             elif (button.config and button.config.get('type') == 'widget'):
-                 # Custom color -> lighten it slightly for visibility
-                 # c = QColor(button_color)
-                 # button_color = c.lighter(117).name() # 115% brightness
-                 pass
-             
+
              # Apply Dimming Logic (if enabled)
              if getattr(button, '_show_dimming', False) and getattr(button, '_brightness', None) is not None:
                  # Only applies if we have a brightness value

@@ -66,8 +66,8 @@ class Dashboard(QWidget):
     add_button_clicked = pyqtSignal(int)  # Slot index
     buttons_reordered = pyqtSignal(int, int) # (source, target)
     edit_button_requested = pyqtSignal(int)
-    edit_button_saved = pyqtSignal(int, dict) # NEW: Signal for save completion
-    save_config_requested = pyqtSignal() # New signal to request save from parent 
+    edit_button_saved = pyqtSignal(int, dict)  # slot, config
+    save_config_requested = pyqtSignal()
     duplicate_button_requested = pyqtSignal(int)
     clear_button_requested = pyqtSignal(int)
     rows_changed = pyqtSignal()  # Emitted after row count changes and UI rebuilds
@@ -121,10 +121,6 @@ class Dashboard(QWidget):
         self.assist_overlay = AssistOverlay(self)
         self.assist_overlay.content_changed.connect(self._on_assist_content_changed)
 
-        # Throttling
-
-        
-        
         # Load theme settings
         app_config = self.config.get('appearance', {})
         self._border_effect = app_config.get('border_effect', 'Rainbow')
@@ -288,7 +284,6 @@ class Dashboard(QWidget):
         
         if target_slot != -1:
              # Check bounds: Does source button fit at target position?
-             # Target slot -> (row, col)
              target_row = target_slot // self._cols
              target_col = target_slot % self._cols
              
@@ -317,9 +312,8 @@ class Dashboard(QWidget):
         # Determine target slot based on drop position
         drop_pos = event.position().toPoint()
         
-        # Check if dropped on another button
         target_slot = -1
-        
+
         # Find button under mouse
         for btn in self.buttons:
             if not btn.isVisible(): continue
@@ -329,7 +323,6 @@ class Dashboard(QWidget):
         
         if target_slot != -1 and target_slot != source_slot:
             # 1. Bounds Check
-            # Get source button to check dimensions
             source_btn = next((b for b in self.buttons if b.slot == source_slot), None)
             
             if source_btn:
@@ -796,9 +789,7 @@ class Dashboard(QWidget):
             if self.width_anim.state() == QPropertyAnimation.State.Running:
                 self.width_anim.stop()
                 
-            # Capture RIGHT anchor for animation (if not already?)
-            # Actually anchor is captured in set_anim_width dynamically or init?
-            # Existing code captured it here. Let's keep it safe.
+            # Capture the right edge so the window grows/shrinks leftward
             self._width_anim_anchor_right = self.x() + self.width()
 
             # Unlock size constraints for animation (Window)
@@ -1402,12 +1393,9 @@ class Dashboard(QWidget):
             sc = button.config.get('custom_shortcut', {})
             if sc.get('enabled') and sc.get('value'):
                 if self.matches_pynput_shortcut(event, sc.get('value')):
-                    # print(f"DEBUG: Triggering custom shortcut match for button {button.slot}")
                     button.simulate_click()
                     event.accept()
                     return
-
-
 
         super().keyPressEvent(event)
         
@@ -1549,17 +1537,6 @@ class Dashboard(QWidget):
             if btn.isVisible():
                 btn.play_entry_animation()
 
-
-
-
-
-    def set_effect(self, effect_name: str):
-        """Set the active border effect."""
-        self._effect = effect_name
-        if hasattr(self, 'overlay_manager'):
-            self.overlay_manager.set_border_effect(effect_name)
-        self.update()
-
     def paintEvent(self, event):
         """Paint overlay and effects."""
         painter = QPainter(self)
@@ -1620,14 +1597,9 @@ class Dashboard(QWidget):
         
     def _on_weather_requested(self, slot: int, rect: QRect):
         config = self._get_button_config(slot)
-        
-        # Emit a special signal to request the main app to fetch forecast
-        # and then call self.overlay_manager.start_weather
-        # So we need a signal for it.
-        # Wait, if we use a pyqtSignal, we can just emit an action dict to main app
-        # and have a callback passed in.
-        
-        # Actually I need a way to fetch the forecast. Let's emit a signal.
+
+        # Forecast fetching requires an HA API call, so forward the request to
+        # the main app rather than handling it here.
         self.weather_forecast_requested.emit(slot, rect, config)
         
     def _on_volume_requested(self, slot: int, rect: QRect):
@@ -2182,9 +2154,7 @@ class Dashboard(QWidget):
         
         self._lock_view_sizes('edit_button', target_height)
         self._animation_timer.start()
-        
-    # edit_button_saved = pyqtSignal(dict) # REMOVED: Defined at top of class with (int, dict)
-    
+
     def show_edit_button(self, slot: int, config: dict = None, entities: list = None):
         """Open the embedded button editor."""
         if self._current_view == 'edit_button': return
@@ -2479,8 +2449,8 @@ class Dashboard(QWidget):
     def _on_transition_done(self):
         """After transition (morph), restore styles and cleanup."""
         try:
-            # Not actually using QPropertyAnimation for window, so this might be old code
-            # But just in case
+            # Defensive: height_anim isn't used for window transitions anymore,
+            # but disconnect in case a stale connection still exists.
             if hasattr(self, 'height_anim') and self.height_anim:
                  self.height_anim.finished.disconnect(self._on_transition_done)
         except:

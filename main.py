@@ -201,7 +201,6 @@ class PrismDesktopApp(QObject):
         # Refresh buttons once the MDI mapping finishes loading in the background
         icon_signals.mapping_loaded.connect(self._on_mdi_mapping_loaded)
 
-        # Check for updates
         QTimer.singleShot(2000, self.check_for_updates)
     
     def _maybe_show_welcome(self):
@@ -631,9 +630,7 @@ class PrismDesktopApp(QObject):
         if data:
              pixmap = QPixmap()
              if pixmap.loadFromData(data):
-                 # Update Cache
                  self._put_cache(self._camera_cache, entity_id, (time.time(), pixmap))
-                 # Update UI
                  if self.dashboard:
                      self.dashboard.update_camera_image(entity_id, pixmap)
 
@@ -946,10 +943,9 @@ class PrismDesktopApp(QObject):
             source_btn['row'] = valid_tgt_row
             source_btn['col'] = valid_tgt_col
             
-        # Save
         self.config['buttons'] = buttons
         self.save_config()
-        
+
         # Refresh Dashboard
         if self.dashboard:
             self.dashboard.set_buttons(buttons, self.config.get('appearance', {}))
