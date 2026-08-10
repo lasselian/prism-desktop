@@ -193,8 +193,7 @@ class ButtonEditWidget(QWidget):
                 font-size: {Typography.SIZE_SMALL};
                 font-weight: {Typography.WEIGHT_BOLD};
                 color: {section_header_color};
-                margin-top: 10px;
-                margin-bottom: 2px;
+                margin-bottom: 4px;
             }}
             QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
                 background-color: {input_bg};
@@ -327,7 +326,7 @@ class ButtonEditWidget(QWidget):
         
         # 2. Form
         self.form = QFormLayout()
-        self.form.setVerticalSpacing(14)
+        self.form.setVerticalSpacing(8)
         self.form.setHorizontalSpacing(16)
         
         # --- Config Section ---
