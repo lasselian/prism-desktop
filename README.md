@@ -120,8 +120,28 @@ chmod +x PrismDesktop-x86_64.AppImage
 - System tray works out of the box.
 - App-toggle shortcut is supported via `org.freedesktop.portal.GlobalShortcuts`.
 - Per-entity shortcuts are not supported on KDE.
+### macOS (.dmg / .zip)
+
+Download the latest `PrismDesktop-macOS-Universal.zip` or `.dmg` from the [Releases page](https://github.com/lasselian/prism-desktop/releases).
+
+1. **Install**: Open the `.dmg` and drag `PrismDesktop.app` into your `/Applications` folder.
+2. **First-Run Gatekeeper Approval (Unsigned App)**:
+   Because this open-source build is distributed without a paid Apple Developer certificate ($99/year), macOS Gatekeeper may show a security notice on first launch:
+   - **Method 1 (Recommended Terminal command)**:
+     ```bash
+     xattr -cr /Applications/PrismDesktop.app
+     ```
+   - **Method 2 (Finder)**:
+     Right-click (or Control-click) `PrismDesktop.app` in `/Applications`, select **Open**, and click **Open** in the dialog.
+3. **Global Shortcuts**:
+   To allow Prism Desktop to listen for global keyboard shortcuts from anywhere on your Mac:
+   - Open **System Settings → Privacy & Security → Accessibility**.
+   - Click **+** and add **PrismDesktop** (or toggle the switch to ON).
+4. **Menu Bar App**:
+   Prism Desktop lives in your **top-right macOS Menu Bar** (near the clock and Wi-Fi icons). Click the Prism cube icon to toggle your dashboard.
+
 ---
- 
+
 ### Nix (flakes)
  
 Run directly without installing:
@@ -176,6 +196,27 @@ python3 build_linux.py
 ```
  
 This builds the binary, creates an AppDir, and packages it into an AppImage.
+
+### macOS (.app, .dmg, .zip)
+
+1. Install dependencies:
+```bash
+pip install -r requirements.txt pyinstaller
+```
+2. Run the macOS build script:
+```bash
+python3 build_macos.py
+```
+
+This compiles `PrismDesktop.app` (supporting both Intel and Apple Silicon M-series Macs), applies an ad-hoc cryptographic signature, and generates `.dmg` and `.zip` releases in `dist/`.
+
+> **Gatekeeper / First Launch Note**: On modern macOS, remove the quarantine attribute after copying to `/Applications`:
+> ```bash
+> xattr -cr /Applications/PrismDesktop.app
+> ```
+> or right-click (Control-click) `PrismDesktop.app` and choose **Open**.
+>
+> **Global Shortcuts**: Grant Accessibility permissions in **System Settings → Privacy & Security → Accessibility**.
  
 ---
  

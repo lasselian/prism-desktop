@@ -15,7 +15,13 @@ import logging
 import platform
 from pathlib import Path
 
-import keyring
+# On macOS, we never use the OS Keychain (ad-hoc signed apps trigger
+# SecurityAgent password prompts). Skip importing keyring entirely to
+# avoid any accidental Keychain interaction.
+if sys.platform != "darwin":
+    import keyring
+else:
+    keyring = None  # type: ignore[assignment]
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -46,6 +52,15 @@ def _probe_keyring() -> bool:
     global _keyring_probed, _keyring_available
     if _keyring_probed:
         return _keyring_available
+
+    # On macOS, ad-hoc signed applications trigger SecurityAgent dialogs on every session
+    # because the ad-hoc code signature changes between builds. We use hardware-tied
+    # encrypted storage (Fernet + IOPlatformUUID) on macOS to prevent modal prompt interruptions.
+    if sys.platform == "darwin":
+        _keyring_probed = True
+        _keyring_available = False
+        logger.info("[TokenStorage] macOS ad-hoc mode: Using hardware-tied encrypted token storage.")
+        return False
 
     _keyring_probed = True
     probe_key = "__prism_probe__"
@@ -134,7 +149,14 @@ def _get_machine_seed() -> bytes:
             pass
 
     if not seed:
-        seed = f"{platform.node()}:{os.getlogin()}"
+        # os.getlogin() can raise OSError on macOS GUI apps launched without a
+        # controlling terminal (e.g. from Finder / LaunchServices). Fall back
+        # to os.getuid() which always works.
+        try:
+            login = os.getlogin()
+        except OSError:
+            login = str(os.getuid())
+        seed = f"{platform.node()}:{login}"
 
     return seed.encode("utf-8")
 

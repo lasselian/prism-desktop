@@ -39,6 +39,8 @@ def _platform_asset_name() -> str | None:
         machine = platform.machine().lower()
         arch = "aarch64" if machine in ("aarch64", "arm64") else "x86_64"
         return f"PrismDesktop-{arch}.AppImage"
+    if sys.platform == "darwin":
+        return "PrismDesktop-macOS-Universal.zip"
     return None
 
 
@@ -216,6 +218,8 @@ class AutoUpdateThread(QThread):
             self._apply_windows(asset_path)
         elif sys.platform.startswith("linux"):
             self._apply_linux(asset_path)
+        elif sys.platform == "darwin":
+            self._apply_macos(asset_path)
         else:
             raise OSError(f"Unsupported platform for in-place update: {sys.platform}")
 
@@ -249,6 +253,57 @@ class AutoUpdateThread(QThread):
             raise OSError(
                 f"Cannot replace {current} — check that you own the file or have write permission."
             )
+
+    def _apply_macos(self, zip_path: Path) -> None:
+        """
+        Extract the updated .app bundle from the downloaded ZIP and replace
+        the running application bundle in /Applications (or current bundle dir).
+        """
+        import zipfile
+        current_app = None
+        for p in Path(sys.executable).parents:
+            if p.suffix == ".app":
+                current_app = p
+                break
+
+        if not current_app or not current_app.exists():
+            raise OSError(f"Could not locate the .app bundle for {sys.executable}")
+
+        extract_dir = zip_path.parent / "extracted"
+        extract_dir.mkdir(exist_ok=True)
+
+        try:
+            subprocess.run(["ditto", "-xk", str(zip_path), str(extract_dir)], check=True)
+        except Exception:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(extract_dir)
+
+        new_app = extract_dir / "PrismDesktop.app"
+        if not new_app.exists():
+            apps = list(extract_dir.glob("*.app"))
+            if apps:
+                new_app = apps[0]
+            else:
+                raise OSError("Downloaded archive did not contain PrismDesktop.app")
+
+        # Strip quarantine flag and ad-hoc sign new .app
+        try:
+            subprocess.run(["xattr", "-cr", str(new_app)], check=False)
+            subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(new_app)], check=False)
+        except Exception:
+            pass
+
+        # Move/replace current .app bundle
+        backup_app = current_app.with_suffix(".app.old")
+        if backup_app.exists():
+            shutil.rmtree(backup_app, ignore_errors=True)
+
+        try:
+            shutil.move(str(current_app), str(backup_app))
+            shutil.move(str(new_app), str(current_app))
+            shutil.rmtree(backup_app, ignore_errors=True)
+        except PermissionError:
+            raise OSError(f"Cannot replace {current_app} — check write permissions.")
 
 
 # ── Post-update flag ──────────────────────────────────────────────────────────
@@ -292,6 +347,16 @@ def restart_app() -> None:
             # sys.executable points into the /tmp squashfs mount, not the file.
             appimage = os.environ.get("APPIMAGE") or sys.executable
             subprocess.Popen([appimage])
+        elif sys.platform == "darwin":
+            current_app = None
+            for p in Path(sys.executable).parents:
+                if p.suffix == ".app":
+                    current_app = p
+                    break
+            if current_app:
+                subprocess.Popen(["open", "-n", str(current_app)])
+            else:
+                subprocess.Popen([sys.executable])
         else:
             # Windows: the installer (spawned in _apply_windows) relaunches the
             # app itself once it's done; don't race it by launching here too.

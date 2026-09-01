@@ -688,16 +688,23 @@ class ButtonEditWidget(QWidget):
         self.form.addRow(lbl)
         return lbl
 
+    def update_entities(self, entities: list):
+        """Update available entities list dynamically without resetting user edits."""
+        self.entities = entities or []
+        self.populate_entities()
+
     def populate_entities(self):
-        """Fill entity dropdown based on the selected button type."""
-        # Check if printer combos exist yet (populate_entities can be called
-        # during setup_ui before they are created)
+        """Fill entity dropdown based on the selected button type with high-performance bulk insertion."""
+        # Determine allowed domains based on selected type
+        type_idx = self.type_combo.currentIndex()
+        current_type = self.TYPE_DEFINITIONS[type_idx][1] if 0 <= type_idx < len(self.TYPE_DEFINITIONS) else None
+        is_printer = (current_type == '3d_printer')
         has_printer_combos = hasattr(self, 'printer_state_combo')
-        
+
         # Save current selections (entity IDs) to restore later
         current_entity = self._get_combo_entity_id(self.entity_combo)
         current_printer_ids = {}
-        if has_printer_combos:
+        if has_printer_combos and is_printer:
             current_printer_ids = {
                 'state': self._get_combo_entity_id(self.printer_state_combo),
                 'progress': self._get_combo_entity_id(self.printer_progress_combo),
@@ -709,26 +716,34 @@ class ButtonEditWidget(QWidget):
                 'pause': self._get_combo_entity_id(self.printer_pause_combo),
                 'stop': self._get_combo_entity_id(self.printer_stop_combo),
             }
-        
-        # Clear all combos
+
+        # Block signals and disable view updates during bulk insertion to avoid UI freeze
+        self.entity_combo.blockSignals(True)
+        self.entity_combo.setUpdatesEnabled(False)
         self.entity_combo.clear()
+
+        printer_combos = []
         if has_printer_combos:
-            self.printer_state_combo.clear()
-            self.printer_progress_combo.clear()
-            self.printer_camera_combo.clear()
-            self.printer_nozzle_combo.clear()
-            self.printer_bed_combo.clear()
-            self.printer_nozzle_target_combo.clear()
-            self.printer_bed_target_combo.clear()
-            self.printer_pause_combo.clear()
-            self.printer_stop_combo.clear()
-        
-        if not self.entities: return
-        
-        # Determine allowed domains based on selected type
-        type_idx = self.type_combo.currentIndex()
-        current_type = self.TYPE_DEFINITIONS[type_idx][1] if 0 <= type_idx < len(self.TYPE_DEFINITIONS) else None
-        
+            printer_combos = [
+                self.printer_state_combo, self.printer_progress_combo,
+                self.printer_camera_combo,
+                self.printer_nozzle_combo, self.printer_bed_combo,
+                self.printer_nozzle_target_combo, self.printer_bed_target_combo,
+                self.printer_pause_combo, self.printer_stop_combo
+            ]
+            for combo in printer_combos:
+                combo.blockSignals(True)
+                combo.setUpdatesEnabled(False)
+                combo.clear()
+
+        if not self.entities:
+            self.entity_combo.setUpdatesEnabled(True)
+            self.entity_combo.blockSignals(False)
+            for combo in printer_combos:
+                combo.setUpdatesEnabled(True)
+                combo.blockSignals(False)
+            return
+
         domain_map = {
             'alarm_control_panel': {'alarm_control_panel'},
             'automation': {'automation'},
@@ -749,61 +764,50 @@ class ButtonEditWidget(QWidget):
             'sun': {'sun'}
         }
         allowed_domains = domain_map.get(current_type)
-        
-        # Group by domain (filtered)
+
+        # Group by domain (filtered for the primary entity combo)
         domains = {}
+        all_domains = {} if (has_printer_combos and is_printer) else None
+
+        show_friendly = ButtonEditWidget._global_show_friendly_names
+
         for entity in self.entities:
             eid = entity.get('entity_id', '')
-            domain = eid.split('.')[0] if '.' in eid else 'other'
-            
-            # Filter by allowed domains
-            if allowed_domains and domain not in allowed_domains:
+            if not eid:
                 continue
-                
+            domain = eid.split('.')[0] if '.' in eid else 'other'
             friendly = entity.get('attributes', {}).get('friendly_name', eid)
-            
-            if domain not in domains: domains[domain] = []
-            domains[domain].append((eid, friendly))
-        
-        show_friendly = ButtonEditWidget._global_show_friendly_names
-        
+
+            if not allowed_domains or domain in allowed_domains:
+                if domain not in domains:
+                    domains[domain] = []
+                domains[domain].append((eid, friendly))
+
+            if all_domains is not None:
+                if domain not in all_domains:
+                    all_domains[domain] = []
+                all_domains[domain].append((eid, friendly))
+
         for domain in sorted(domains.keys()):
             for eid, friendly in sorted(domains[domain], key=lambda x: x[0]):
-                 # Display text depends on toggle; UserRole always stores entity_id
-                 display = friendly if show_friendly else eid
-                 tooltip = f"{friendly} ({eid})" if show_friendly else f"{eid} ({friendly})"
-                 
-                 self.entity_combo.addItem(display, eid)
-                 self.entity_combo.setItemData(self.entity_combo.count()-1, tooltip, Qt.ItemDataRole.ToolTipRole)
+                display = friendly if show_friendly else eid
+                tooltip = f"{friendly} ({eid})" if show_friendly else f"{eid} ({friendly})"
+                self.entity_combo.addItem(display, eid)
+                self.entity_combo.setItemData(self.entity_combo.count() - 1, tooltip, Qt.ItemDataRole.ToolTipRole)
 
-        # Populate printer combos with ALL entities (unfiltered)
-        if has_printer_combos:
-            all_domains = {}
-            for entity in self.entities:
-                eid = entity.get('entity_id', '')
-                domain = eid.split('.')[0] if '.' in eid else 'other'
-                friendly = entity.get('attributes', {}).get('friendly_name', eid)
-                if domain not in all_domains: all_domains[domain] = []
-                all_domains[domain].append((eid, friendly))
-            
-            printer_combos = [
-                self.printer_state_combo, self.printer_progress_combo,
-                self.printer_camera_combo,
-                self.printer_nozzle_combo, self.printer_bed_combo,
-                self.printer_nozzle_target_combo, self.printer_bed_target_combo,
-                self.printer_pause_combo, self.printer_stop_combo
-            ]
+        # Populate printer combos ONLY when the current button type is 3D Printer
+        if all_domains is not None and printer_combos:
             for domain in sorted(all_domains.keys()):
                 for eid, friendly in sorted(all_domains[domain], key=lambda x: x[0]):
                     display = friendly if show_friendly else eid
                     tooltip = f"{friendly} ({eid})" if show_friendly else f"{eid} ({friendly})"
                     for combo in printer_combos:
                         combo.addItem(display, eid)
-                        combo.setItemData(combo.count()-1, tooltip, Qt.ItemDataRole.ToolTipRole)
-        
+                        combo.setItemData(combo.count() - 1, tooltip, Qt.ItemDataRole.ToolTipRole)
+
         # Restore previous selections by entity ID
         self._restore_combo_selection(self.entity_combo, current_entity)
-        if has_printer_combos and current_printer_ids:
+        if has_printer_combos and is_printer and current_printer_ids:
             self._restore_combo_selection(self.printer_state_combo, current_printer_ids.get('state', ''))
             self._restore_combo_selection(self.printer_progress_combo, current_printer_ids.get('progress', ''))
             self._restore_combo_selection(self.printer_camera_combo, current_printer_ids.get('camera', ''))
@@ -813,7 +817,14 @@ class ButtonEditWidget(QWidget):
             self._restore_combo_selection(self.printer_bed_target_combo, current_printer_ids.get('bed_target', ''))
             self._restore_combo_selection(self.printer_pause_combo, current_printer_ids.get('pause', ''))
             self._restore_combo_selection(self.printer_stop_combo, current_printer_ids.get('stop', ''))
-    
+
+        # Re-enable updates and signals
+        self.entity_combo.setUpdatesEnabled(True)
+        self.entity_combo.blockSignals(False)
+        for combo in printer_combos:
+            combo.setUpdatesEnabled(True)
+            combo.blockSignals(False)
+
     def _get_combo_entity_id(self, combo):
         """Get the entity ID from a combo, whether from userData or typed text."""
         # If the user has typed nothing or it is cleared, return empty

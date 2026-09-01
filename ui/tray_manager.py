@@ -5,13 +5,14 @@ desktop environments, including KDE/SNI where pystray's left-click
 delivery is unreliable.
 """
 
+import sys
 from io import BytesIO
 from typing import Callable, Optional
 
 from PIL import Image, ImageDraw
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
 from core.localization_manager import t
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtGui import QIcon, QPixmap, QCursor
 from PyQt6.QtCore import QObject, Qt, pyqtSignal, QRect
 
 
@@ -128,12 +129,17 @@ class TrayManager:
         self._menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._menu.setStyleSheet(self._menu_stylesheet())
         show_action = self._menu.addAction(t("tray.show_dashboard"))
-        show_action.triggered.connect(self.signals.left_clicked)
+        show_action.triggered.connect(lambda _checked=False: self.signals.left_clicked.emit())
         self._menu.addSeparator()
         quit_action = self._menu.addAction(t("tray.quit"))
-        quit_action.triggered.connect(self.signals.quit_clicked)
+        quit_action.triggered.connect(lambda _checked=False: self.signals.quit_clicked.emit())
 
-        self._tray.setContextMenu(self._menu)
+        # On macOS, calling setContextMenu() intercepts left-click and forces
+        # opening the NSMenu instead of firing activated(Trigger).
+        # We omit setContextMenu on macOS so left-click directly toggles the dashboard,
+        # and right-click pops up the context menu in _on_activated.
+        if sys.platform != 'darwin':
+            self._tray.setContextMenu(self._menu)
 
         # activated covers left-click (Trigger), double-click (DoubleClick),
         # and middle-click (MiddleClick) — all toggle the dashboard.
@@ -142,8 +148,11 @@ class TrayManager:
         self._tray.show()
 
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason):
-        """Handle tray icon activation (left-click, double-click, etc.)."""
-        if reason in (
+        """Handle tray icon activation (left-click, double-click, right-click, etc.)."""
+        if reason == QSystemTrayIcon.ActivationReason.Context:
+            if self._menu:
+                self._menu.popup(QCursor.pos())
+        elif reason in (
             QSystemTrayIcon.ActivationReason.Trigger,
             QSystemTrayIcon.ActivationReason.DoubleClick,
             QSystemTrayIcon.ActivationReason.MiddleClick,
