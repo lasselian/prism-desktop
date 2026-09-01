@@ -38,15 +38,15 @@ jobs:
           python-version: '3.11'
           architecture: ${{ matrix.python-arch }}
 
-      - name: Install Dependencies
+      - name: Install Dependencies & Build Environment
         run: |
-          arch -${{ matrix.arch }} python3 -m pip install --upgrade pip
-          arch -${{ matrix.arch }} python3 -m pip install --no-cache-dir -r requirements.txt
-          arch -${{ matrix.arch }} python3 -m pip install --no-cache-dir pyinstaller
+          arch -${{ matrix.arch }} python3 -m venv .build_venv
+          arch -${{ matrix.arch }} .build_venv/bin/pip install --upgrade pip
+          arch -${{ matrix.arch }} .build_venv/bin/pip install --no-cache-dir -r requirements.txt pyinstaller
 
       - name: Build macOS App Bundle (.app, .dmg, .zip)
         run: |
-          arch -${{ matrix.arch }} python3 build_macos.py --target-arch ${{ matrix.arch }}
+          arch -${{ matrix.arch }} .build_venv/bin/python build_macos.py --target-arch ${{ matrix.arch }}
 
       - name: Upload Artifacts to GitHub Actions Run
         uses: actions/upload-artifact@v4
