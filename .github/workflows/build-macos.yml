@@ -6,18 +6,21 @@ on:
       - 'v*'
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE20: 'true'
+
 jobs:
   build-macos:
     name: Build macOS (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-14
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - python-arch: arm64
             arch: arm64
             name: Apple Silicon (M-series)
-          - os: macos-13
+          - python-arch: x64
             arch: x86_64
             name: Intel (x86_64)
     permissions:
@@ -29,10 +32,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python
+      - name: Set up Python (${{ matrix.python-arch }})
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          architecture: ${{ matrix.python-arch }}
           cache: 'pip'
 
       - name: Install Dependencies
