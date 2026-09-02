@@ -39,14 +39,20 @@ jobs:
           architecture: ${{ matrix.python-arch }}
 
       - name: Install Dependencies & Build Environment
+        env:
+          ARCHFLAGS: ${{ matrix.arch == 'x86_64' && '-arch x86_64' || '-arch arm64' }}
+          _PYTHON_HOST_PLATFORM: ${{ matrix.arch == 'x86_64' && 'macosx-11.0-x86_64' || 'macosx-11.0-arm64' }}
         run: |
-          python -m venv .build_venv
-          .build_venv/bin/pip install --upgrade pip
-          .build_venv/bin/pip install --no-cache-dir -r requirements.txt pyinstaller
+          arch -${{ matrix.arch }} python3 -m venv .build_venv
+          arch -${{ matrix.arch }} .build_venv/bin/python -m pip install --upgrade pip
+          arch -${{ matrix.arch }} .build_venv/bin/python -m pip install --no-cache-dir -r requirements.txt pyinstaller
 
       - name: Build macOS App Bundle (.app, .dmg, .zip)
+        env:
+          ARCHFLAGS: ${{ matrix.arch == 'x86_64' && '-arch x86_64' || '-arch arm64' }}
+          _PYTHON_HOST_PLATFORM: ${{ matrix.arch == 'x86_64' && 'macosx-11.0-x86_64' || 'macosx-11.0-arm64' }}
         run: |
-          .build_venv/bin/python build_macos.py --target-arch ${{ matrix.arch }}
+          arch -${{ matrix.arch }} .build_venv/bin/python build_macos.py --target-arch ${{ matrix.arch }}
 
       - name: Upload Artifacts to GitHub Actions Run
         uses: actions/upload-artifact@v4
