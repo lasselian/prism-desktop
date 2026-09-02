@@ -40,7 +40,33 @@ jobs:
 
       - name: Install Dependencies & Build Environment
         run: |
-          python -m venv .build_venv
+          python3 -m venv .build_venv
+          
+          # On Apple Silicon (macos-14), if building for x86_64, thin the Python binary
+          # to x86_64 only so macOS is forced to execute it under Rosetta 2.
+          # This guarantees pip downloads x86_64 wheels (Pillow, cryptography, PyQt6, etc.)
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            python3 -c "
+          import shutil, subprocess, os
+          from pathlib import Path
+
+          venv_py = Path('.build_venv/bin/python3')
+          real_py = venv_py.resolve()
+          out = subprocess.run(['lipo', '-info', str(real_py)], capture_output=True, text=True).stdout
+          if 'x86_64' in out and 'arm64' in out:
+              print('Thinning venv python binary to x86_64...')
+              thinned = Path('.build_venv/bin/python3_x86_64')
+              subprocess.run(['lipo', '-thin', 'x86_64', str(real_py), '-output', str(thinned)], check=True)
+              venv_py.unlink(missing_ok=True)
+              shutil.move(str(thinned), str(venv_py))
+              venv_py.chmod(0o755)
+              py_link = Path('.build_venv/bin/python')
+              py_link.unlink(missing_ok=True)
+              py_link.symlink_to('python3')
+              print('Successfully configured x86_64-only Python binary for Rosetta.')
+          "
+          fi
+
           .build_venv/bin/python -m pip install --upgrade pip
           .build_venv/bin/python -m pip install --prefer-binary --no-cache-dir -r requirements.txt pyinstaller
 
