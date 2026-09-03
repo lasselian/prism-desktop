@@ -20,7 +20,7 @@ jobs:
             arch: x86_64
             name: Intel (x86_64)
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout Code
@@ -78,13 +78,35 @@ jobs:
             dist/*.dmg
             dist/*.zip
 
+  release:
+    name: Publish GitHub Release
+    needs: build-macos
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd dist
+          sha256sum *.dmg *.zip > SHA256SUMS
+          cat SHA256SUMS
+
       - name: Publish to GitHub Release
-        uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
+        # Third-party action with release write access — pinned to the v3 commit.
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: |
             dist/*.dmg
             dist/*.zip
+            dist/SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
