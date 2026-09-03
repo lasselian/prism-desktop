@@ -289,27 +289,30 @@ class PrismDesktopApp(QObject):
         signal.signal(signal.SIGUSR1, _handler)
 
     def _request_macos_accessibility(self):
-        """Prompt macOS to grant Accessibility permission on first run only.
+        """Prompt macOS to grant Accessibility permission once per app version.
 
-        To prevent popping open the macOS Accessibility settings dialog on every
-        launch or application update, we only request the prompt if the app has
-        never prompted before. Subsequent launches perform a silent check.
+        Ad-hoc signed builds get a new code signature on every update, which
+        invalidates the previous TCC Accessibility grant — shortcuts would then
+        silently stop working. Prompting once per version covers that case while
+        avoiding a dialog on every launch. When the grant survived the update,
+        AXIsProcessTrustedWithOptions returns trusted without showing any dialog.
         """
         try:
             from ApplicationServices import AXIsProcessTrusted, AXIsProcessTrustedWithOptions
             import CoreFoundation
+            from core.build_info import APP_VERSION
 
-            # If user has already been prompted, do not pop open settings dialog on subsequent launches
-            already_prompted = self.config.get('macos_accessibility_prompted', False)
-            if already_prompted:
+            # Already prompted for this version: silent check only
+            prompted_version = self.config.get('macos_accessibility_prompted_version')
+            if prompted_version == APP_VERSION:
                 is_trusted = AXIsProcessTrusted()
                 logger.info(f"macOS Accessibility: Silent check (trusted={is_trusted}).")
                 return
 
-            # First launch ever: prompt user once to grant permission
+            # First launch of this version: prompt if not (or no longer) trusted
             options = {CoreFoundation.CFSTR("AXTrustedCheckOptionPrompt"): True}
             trusted = AXIsProcessTrustedWithOptions(options)
-            self.config['macos_accessibility_prompted'] = True
+            self.config['macos_accessibility_prompted_version'] = APP_VERSION
             self.save_config()
 
             if trusted:
