@@ -8,8 +8,6 @@ installer/
 AppDir/
 *.spec
 *.AppImage
-*.dmg
-*.zip
 appimagetool*
 
 # Python

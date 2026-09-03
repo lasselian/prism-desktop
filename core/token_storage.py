@@ -53,13 +53,17 @@ def _probe_keyring() -> bool:
     if _keyring_probed:
         return _keyring_available
 
-    # On macOS, ad-hoc signed applications trigger SecurityAgent dialogs on every session
-    # because the ad-hoc code signature changes between builds. We use hardware-tied
-    # encrypted storage (Fernet + IOPlatformUUID) on macOS to prevent modal prompt interruptions.
+    # On macOS, ad-hoc signed applications trigger SecurityAgent password dialogs
+    # after every update because the code signature changes between builds, so the
+    # Keychain is unusable without a paid Developer ID certificate. We use the
+    # encrypted-file fallback (Fernet, key derived from IOPlatformUUID) instead.
+    # NOTE: this is weaker than the Keychain — the key material is readable by any
+    # process running as the user — it protects the token at rest, not from local
+    # malware. Documented in README (macOS section).
     if sys.platform == "darwin":
         _keyring_probed = True
         _keyring_available = False
-        logger.info("[TokenStorage] macOS ad-hoc mode: Using hardware-tied encrypted token storage.")
+        logger.info("[TokenStorage] macOS ad-hoc build: Keychain disabled, using encrypted file storage.")
         return False
 
     _keyring_probed = True

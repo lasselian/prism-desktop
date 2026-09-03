@@ -122,7 +122,10 @@ chmod +x PrismDesktop-x86_64.AppImage
 - Per-entity shortcuts are not supported on KDE.
 ### macOS (.dmg / .zip)
 
-Download the latest `PrismDesktop-macOS-Universal.zip` or `.dmg` from the [Releases page](https://github.com/lasselian/prism-desktop/releases).
+Download the latest `.dmg` (or `.zip`) for your Mac from the [Releases page](https://github.com/lasselian/prism-desktop/releases):
+
+- `PrismDesktop-macOS-arm64` — Apple Silicon (M1/M2/M3/M4)
+- `PrismDesktop-macOS-x86_64` — Intel Macs
 
 1. **Install**: Open the `.dmg` and drag `PrismDesktop.app` into your `/Applications` folder.
 2. **First-Run Gatekeeper Approval (Unsigned App)**:
@@ -139,6 +142,8 @@ Download the latest `PrismDesktop-macOS-Universal.zip` or `.dmg` from the [Relea
    - Click **+** and add **PrismDesktop** (or toggle the switch to ON).
 4. **Menu Bar App**:
    Prism Desktop lives in your **top-right macOS Menu Bar** (near the clock and Wi-Fi icons). Click the Prism cube icon to toggle your dashboard.
+5. **Token storage**:
+   Because these builds are ad-hoc signed (no paid Apple Developer certificate), the macOS Keychain is not used — the app's code signature changes with every update, which would otherwise trigger repeated Keychain password prompts. Your Home Assistant token is instead stored in an encrypted file keyed to this Mac's hardware UUID. This protects the token at rest, but is weaker than the Keychain: other software running under your user account could potentially recover it.
 
 ---
 
