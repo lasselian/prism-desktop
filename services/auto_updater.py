@@ -40,7 +40,9 @@ def _platform_asset_name() -> str | None:
         arch = "aarch64" if machine in ("aarch64", "arm64") else "x86_64"
         return f"PrismDesktop-{arch}.AppImage"
     if sys.platform == "darwin":
-        return "PrismDesktop-macOS-Universal.zip"
+        machine = platform.machine().lower()
+        arch = "arm64" if machine in ("arm64", "aarch64") else "x86_64"
+        return f"PrismDesktop-macOS-{arch}.zip"
     return None
 
 
