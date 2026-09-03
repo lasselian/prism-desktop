@@ -300,12 +300,39 @@ class AutoUpdateThread(QThread):
         if backup_app.exists():
             shutil.rmtree(backup_app, ignore_errors=True)
 
+        # Two moves, and the window between them is the dangerous part: if the
+        # second fails the bundle has already been moved aside, so without a
+        # rollback a failed update leaves the user with no application at all.
+        # Restore the backup before reporting the failure.
         try:
             shutil.move(str(current_app), str(backup_app))
+        except OSError as exc:
+            raise OSError(
+                f"Cannot replace {current_app} — check that you own the bundle "
+                f"or have write permission ({exc})."
+            ) from exc
+
+        try:
             shutil.move(str(new_app), str(current_app))
-            shutil.rmtree(backup_app, ignore_errors=True)
-        except PermissionError:
-            raise OSError(f"Cannot replace {current_app} — check write permissions.")
+        except OSError as exc:
+            try:
+                shutil.move(str(backup_app), str(current_app))
+            except OSError:
+                # Both the install and the rollback failed. Say exactly where
+                # the old bundle is: it is still on disk and the user can move
+                # it back by hand, which is much better than "update failed"
+                # next to an empty /Applications entry.
+                raise OSError(
+                    f"Update failed and the previous version could not be "
+                    f"restored automatically. Your app is still on disk at "
+                    f"{backup_app} — rename it back to {current_app.name} to "
+                    f"recover ({exc})."
+                ) from exc
+            raise OSError(
+                f"Update failed; the previous version has been restored ({exc})."
+            ) from exc
+
+        shutil.rmtree(backup_app, ignore_errors=True)
 
 
 # ── Post-update flag ──────────────────────────────────────────────────────────
