@@ -347,7 +347,8 @@ class Dashboard(QWidget):
 
     def _get_tray_position(self) -> str:
         """Return the configured tray anchor position."""
-        return self.config.get('appearance', {}).get('tray_position', 'bottom')
+        default_pos = 'top' if sys.platform == 'darwin' else 'bottom'
+        return self.config.get('appearance', {}).get('tray_position', default_pos)
 
     def _is_top_anchored(self) -> bool:
         """Whether the dashboard should stay pinned to the top edge."""
@@ -1731,6 +1732,7 @@ class Dashboard(QWidget):
         self._ignore_focus_loss = True
 
         # Show without activating — activation happens after animation completes
+        self.raise_()
         super().show()
 
         # Start Entrance Animation
@@ -1853,6 +1855,7 @@ class Dashboard(QWidget):
             # Activate only after the window is fully visible — prevents focus theft
             # at opacity 0 which causes the previous window's title bar to flash.
             self._ignore_focus_loss = False
+            self.raise_()
             self.activateWindow()
             self.setFocus()
             if self._glass_ui and not self._glass_refresh_timer.isActive():
@@ -1999,6 +2002,10 @@ class Dashboard(QWidget):
 
     def _on_settings_saved(self, config: dict):
         """Handle settings saved - emit signal and return to grid."""
+        # macOS/Qt Fix: Prevent window auto-hide from triggering when focus changes
+        # during the morph back to the grid view.
+        self._ignore_focus_loss = True
+
         # Update local config immediately
         app = config.get('appearance', {})
         self._border_effect = app.get('border_effect', 'Rainbow')
@@ -2039,6 +2046,12 @@ class Dashboard(QWidget):
         
         self.settings_saved.emit(config)
         self.hide_settings()
+
+        # macOS/Qt: Re-raise and ensure window maintains active focus on the grid
+        self.raise_()
+        self.activateWindow()
+        self.setFocus()
+        QTimer.singleShot(800, lambda: self.set_ignore_focus_loss(False))
             
     # ── Public accessors for the app controller ─────────────────────────────
 
@@ -2163,14 +2176,19 @@ class Dashboard(QWidget):
         self.edit_widget.slot = slot
         self.edit_widget.config = config or {}
         self.edit_widget.entities = entities or []
-        # IMPORTANT: Populate entities FIRST, then load config so entity_id can be selected
+        # Populate entities with initial/cached list, then load config
         self.edit_widget.populate_entities()
         custom_colors = self.config.get('appearance', {}).get('custom_colors', [])
         self.edit_widget.set_custom_colors(custom_colors)
         self.edit_widget.load_config()
         
-        # Transition
+        # Transition immediately
         self.transition_to('edit_button')
+
+    def update_edit_entities(self, entities: list):
+        """Update available entities in the open edit widget without interrupting the user."""
+        if self._current_view == 'edit_button' and hasattr(self, 'edit_widget'):
+            self.edit_widget.update_entities(entities)
 
 
     def _calculate_view_height(self, view_name: str) -> int:
@@ -2496,6 +2514,10 @@ class Dashboard(QWidget):
         # Show footer now that animation is complete (with fade-in) -- ONLY IF GRID
         if self._current_view == 'grid':
             self._fade_in_footer()
+            self.raise_()
+            self.activateWindow()
+            self.setFocus()
+            QTimer.singleShot(600, lambda: self.set_ignore_focus_loss(False))
         
         # Reposition window to the configured tray edge.
         self._reposition_after_morph()

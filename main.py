@@ -173,8 +173,15 @@ class PrismDesktopApp(QObject):
         self._write_pid_file()
         self._setup_signal_handlers()
 
-        # Initialize shortcuts in background
-        QTimer.singleShot(100, self.init_shortcuts)
+        # macOS: Request Accessibility permission before starting keyboard listeners.
+        # AXIsProcessTrustedWithOptions with kAXTrustedCheckOptionPrompt=True shows
+        # the system "allow Accessibility" dialog if the app is not yet trusted.
+        # This is required for pynput to monitor global keyboard shortcuts.
+        if sys.platform == "darwin":
+            QTimer.singleShot(50, self._request_macos_accessibility)
+
+        # Initialize shortcuts in background (after accessibility prompt)
+        QTimer.singleShot(200, self.init_shortcuts)
         
         # Defer task execution to the event loop so it occurs after QApplication begins
         def start_background_tasks():
@@ -280,6 +287,40 @@ class PrismDesktopApp(QObject):
         def _handler(signum, frame):
             QTimer.singleShot(0, self._toggle_dashboard)
         signal.signal(signal.SIGUSR1, _handler)
+
+    def _request_macos_accessibility(self):
+        """Prompt macOS to grant Accessibility permission once per app version.
+
+        Ad-hoc signed builds get a new code signature on every update, which
+        invalidates the previous TCC Accessibility grant — shortcuts would then
+        silently stop working. Prompting once per version covers that case while
+        avoiding a dialog on every launch. When the grant survived the update,
+        AXIsProcessTrustedWithOptions returns trusted without showing any dialog.
+        """
+        try:
+            from ApplicationServices import AXIsProcessTrusted, AXIsProcessTrustedWithOptions
+            import CoreFoundation
+            from core.build_info import APP_VERSION
+
+            # Already prompted for this version: silent check only
+            prompted_version = self.config.get('macos_accessibility_prompted_version')
+            if prompted_version == APP_VERSION:
+                is_trusted = AXIsProcessTrusted()
+                logger.info(f"macOS Accessibility: Silent check (trusted={is_trusted}).")
+                return
+
+            # First launch of this version: prompt if not (or no longer) trusted
+            options = {CoreFoundation.CFSTR("AXTrustedCheckOptionPrompt"): True}
+            trusted = AXIsProcessTrustedWithOptions(options)
+            self.config['macos_accessibility_prompted_version'] = APP_VERSION
+            self.save_config()
+
+            if trusted:
+                logger.info("macOS Accessibility: Already trusted.")
+            else:
+                logger.info("macOS Accessibility: First-time prompt shown to user.")
+        except Exception as e:
+            logger.warning(f"macOS Accessibility: Could not check/request permission: {e}")
 
     def init_shortcuts(self):
         """Initialize global shortcuts."""
@@ -785,18 +826,33 @@ class PrismDesktopApp(QObject):
 
     @pyqtSlot(int)
     def on_edit_button_requested(self, slot: int):
-        # Async fetch entities
-        _create_task_safe(self._async_open_editor(slot))
-        
-    async def _async_open_editor(self, slot: int):
-        logger.info(f"Fetching entities for slot {slot}...")
-        # Since we are async now, we can await directly!
-        entities = await self.ha_client.get_entities()
-        if entities:
-            self._available_entities = entities
-            self._open_button_editor(slot)
-        else:
-            logger.warning("Failed to fetch entities")
+        """Open the button editor immediately and refresh entities in the background."""
+        # Open editor immediately with cached entities (0ms delay)
+        self._open_button_editor(slot)
+
+        # Asynchronously fetch / refresh entities in background without blocking UI
+        _create_task_safe(self._async_refresh_entities(slot))
+
+    async def _prefetch_entities(self):
+        """Prefetch entities in background so tile editor opens with full entity list."""
+        try:
+            entities = await self.ha_client.get_entities()
+            if entities:
+                self._available_entities = entities
+                logger.info(f"[Main] Prefetched {len(entities)} entities from Home Assistant.")
+        except Exception as e:
+            logger.warning(f"[Main] Failed to prefetch entities: {e}")
+
+    async def _async_refresh_entities(self, slot: int):
+        """Fetch fresh entities and update the active editor if open."""
+        try:
+            entities = await self.ha_client.get_entities()
+            if entities:
+                self._available_entities = entities
+                if self.dashboard:
+                    self.dashboard.update_edit_entities(entities)
+        except Exception as e:
+            logger.warning(f"[Main] Failed to refresh entities for slot {slot}: {e}")
             
     def _current_page(self) -> int:
         """Return the active dashboard page index."""
@@ -1132,6 +1188,8 @@ class PrismDesktopApp(QObject):
         self._ws_connected = True
         _create_task_safe(self._ensure_temperature_unit_default())
         self.fetch_initial_states()
+        # Prefetch entities in background so tile editor opens instantly
+        _create_task_safe(self._prefetch_entities())
         # Register as a Mobile App so HA exposes notify.mobile_app_prism_desktop
         _create_task_safe(self._register_mobile_app())
 
@@ -1458,5 +1516,12 @@ if __name__ == '__main__':
         # the application before any widgets are created so they inherit it.
         if is_rtl():
             app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+
+        # macOS: The pynput Carbon TIS monkey-patch in services/input_manager.py
+        # must run on the main thread BEFORE any Listener is created.  Importing
+        # the module here ensures the patch is applied early enough.
+        if sys.platform == "darwin":
+            import services.input_manager  # noqa: F401  — triggers the keycode_context cache
+
         controller = PrismDesktopApp()
         loop.run_forever()

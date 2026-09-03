@@ -4,9 +4,62 @@ Handles global keyboard shortcuts and mouse button triggers using pynput.
 Includes ButtonShortcutManager for per-button global shortcuts active while in tray.
 """
 
+import sys
+import logging
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from pynput import keyboard, mouse
 import re
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# macOS crash fix: Monkey-patch pynput's Carbon keyboard layout queries.
+#
+# On modern macOS (14+), the Carbon/HIToolbox function
+# TISCopyCurrentKeyboardInputSource (and friends) MUST be called on the main
+# dispatch queue.  pynput calls these from background listener threads via
+# keycode_context(), which triggers:
+#   _dispatch_assert_queue_fail → SIGILL (Illegal instruction: 4)
+#
+# The fix:
+#   1. Call keycode_context() once NOW on the main thread and cache its result
+#      (keyboard_type, layout_data).
+#   2. Replace pynput._util.darwin.keycode_context with a version that always
+#      yields the cached tuple, so background threads never touch Carbon TIS.
+#   3. Also replace pynput.keyboard._darwin.keycode_context (the imported
+#      reference) so Listener._run() uses the cached version too.
+# ---------------------------------------------------------------------------
+if sys.platform == "darwin":
+    try:
+        import contextlib
+        import pynput._util.darwin as _pynput_darwin
+        import pynput.keyboard._darwin as _pynput_kb_darwin
+
+        # Step 1: Call the ORIGINAL keycode_context on the main thread to
+        # obtain the keyboard layout data (keyboard_type, layout_data).
+        with _pynput_darwin.keycode_context() as _cached_ctx:
+            _CACHED_KEYCODE_CONTEXT = _cached_ctx  # (keyboard_type, layout_data)
+
+        # Step 2: Build a replacement that just yields the cached tuple.
+        @contextlib.contextmanager
+        def _cached_keycode_context():
+            """Thread-safe replacement for pynput's keycode_context().
+            Always yields the keyboard layout captured on the main thread
+            so background listener threads never call Carbon TIS functions."""
+            yield _CACHED_KEYCODE_CONTEXT
+
+        # Step 3: Patch both the module-level function AND the imported
+        # reference inside pynput.keyboard._darwin so every code path
+        # (Listener._run, get_unicode_to_keycode_map, etc.) uses the cache.
+        _pynput_darwin.keycode_context = _cached_keycode_context
+        _pynput_kb_darwin.keycode_context = _cached_keycode_context
+
+        # Also pre-warm the unicode→keycode map (used by Controller.__init__)
+        _pynput_darwin.get_unicode_to_keycode_map()
+
+        logger.info("[InputManager] macOS: Cached keyboard layout from main thread (pynput SIGILL fix applied).")
+    except Exception as _e:
+        logger.warning(f"[InputManager] Could not apply macOS pynput fix: {_e}")
 
 _WAYLAND_PORTAL_AVAILABLE = False
 try:

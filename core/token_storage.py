@@ -15,7 +15,13 @@ import logging
 import platform
 from pathlib import Path
 
-import keyring
+# On macOS, we never use the OS Keychain (ad-hoc signed apps trigger
+# SecurityAgent password prompts). Skip importing keyring entirely to
+# avoid any accidental Keychain interaction.
+if sys.platform != "darwin":
+    import keyring
+else:
+    keyring = None  # type: ignore[assignment]
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -46,6 +52,19 @@ def _probe_keyring() -> bool:
     global _keyring_probed, _keyring_available
     if _keyring_probed:
         return _keyring_available
+
+    # On macOS, ad-hoc signed applications trigger SecurityAgent password dialogs
+    # after every update because the code signature changes between builds, so the
+    # Keychain is unusable without a paid Developer ID certificate. We use the
+    # encrypted-file fallback (Fernet, key derived from IOPlatformUUID) instead.
+    # NOTE: this is weaker than the Keychain — the key material is readable by any
+    # process running as the user — it protects the token at rest, not from local
+    # malware. Documented in README (macOS section).
+    if sys.platform == "darwin":
+        _keyring_probed = True
+        _keyring_available = False
+        logger.info("[TokenStorage] macOS ad-hoc build: Keychain disabled, using encrypted file storage.")
+        return False
 
     _keyring_probed = True
     probe_key = "__prism_probe__"
@@ -134,7 +153,14 @@ def _get_machine_seed() -> bytes:
             pass
 
     if not seed:
-        seed = f"{platform.node()}:{os.getlogin()}"
+        # os.getlogin() can raise OSError on macOS GUI apps launched without a
+        # controlling terminal (e.g. from Finder / LaunchServices). Fall back
+        # to os.getuid() which always works.
+        try:
+            login = os.getlogin()
+        except OSError:
+            login = str(os.getuid())
+        seed = f"{platform.node()}:{login}"
 
     return seed.encode("utf-8")
 

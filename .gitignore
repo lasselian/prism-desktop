@@ -23,6 +23,7 @@ core/_generated_build_info.py
 
 # Virtual Environments
 venv/
+.venv/
 env/
 
 # Runtime

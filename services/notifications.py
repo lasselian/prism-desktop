@@ -137,6 +137,8 @@ class NotificationManager(QObject):
                 )
             else:
                 self._show_linux(title, message, image_path)
+        elif system == 'Darwin':
+            self._show_macos(title, message)
         else:
             self._show_fallback(title, message)
 
@@ -294,6 +296,24 @@ class NotificationManager(QObject):
         idx = parse_action_token(key, len(actions))
         if idx is not None:
             self._handle_action(actions[idx], action_data)
+
+    def _show_macos(self, title: str, message: str):
+        """macOS notification via Qt tray or osascript fallback."""
+        if self.tray_icon and self.tray_icon.isSystemTrayAvailable():
+            self.tray_icon.showMessage(
+                title, message,
+                QSystemTrayIcon.MessageIcon.Information, 5000
+            )
+        else:
+            try:
+                safe_title = title.replace('\\', '\\\\').replace('"', '\\"')
+                safe_msg = message.replace('\\', '\\\\').replace('"', '\\"')
+                subprocess.run(
+                    ['osascript', '-e', f'display notification "{safe_msg}" with title "{safe_title}"'],
+                    check=False, timeout=5
+                )
+            except Exception:
+                self._show_fallback(title, message)
 
     def _show_fallback(self, title: str, message: str):
         """Fallback: Qt system tray balloon (no image support)."""
