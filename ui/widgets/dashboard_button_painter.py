@@ -276,21 +276,23 @@ class DashboardButtonPainter:
         if button._pulse_opacity > 0.01:
             DashboardButtonPainter._paint_pulse(button)
 
-        # Per-tile refresh indicator (opt-in, Settings > Appearance > Options)
-        if getattr(button, '_refresh_flash_opacity', 0.0) > 0.01:
-            DashboardButtonPainter._paint_refresh_indicator(button)
-
         # Only draw special border if animating or if progress > 0
         if button.anim.state() == QPropertyAnimation.State.Running or button._anim_progress > 0.0:
             DashboardButtonPainter._paint_border_animation(button)
-            
+
         # Draw input_number blink feedback
         if getattr(button, '_input_blink_opacity', 0.0) > 0.01 and button.config.get('type') == 'input_number':
             DashboardButtonPainter._paint_input_blink(button)
-            
+
         # Draw input_number hover arrows
         if getattr(button, '_arrow_opacity', 0.0) > 0.01 and button.config.get('type') == 'input_number':
             DashboardButtonPainter._paint_input_arrows(button)
+
+        # Per-tile refresh indicator (opt-in, Settings > Appearance > Options):
+        # painted last among these overlays so a simultaneous full-tile flash
+        # (script pulse, input_number blink) never hides the corner dot.
+        if getattr(button, '_refresh_flash_opacity', 0.0) > 0.01:
+            DashboardButtonPainter._paint_refresh_indicator(button)
 
         if not button.config:
             DashboardButtonPainter._paint_empty_slot(button)

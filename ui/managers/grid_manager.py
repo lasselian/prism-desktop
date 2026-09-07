@@ -136,6 +136,12 @@ class GridManager:
         self.dashboard._virtual_buttons = []
         
         for button in self.dashboard.buttons:
+            # Stash the pre-clear entity_id: it's compared against the incoming
+            # config below to tell "reassigned to a different entity" (which
+            # should reset the button) from "same entity, just rebuilt" (which
+            # shouldn't) -- reading button.config for that after clearing it
+            # here would always see {}, making that comparison always true.
+            button._prev_entity_id = button.config.get('entity_id')
             button.config = {}
             button.set_spans(1, 1)
         
@@ -161,7 +167,7 @@ class GridManager:
                 button = self.dashboard.buttons[config_idx]
                 config_idx += 1
                 
-                old_entity = button.config.get('entity_id')
+                old_entity = getattr(button, '_prev_entity_id', None)
                 new_entity = cfg.get('entity_id')
                 
                 button.config = cfg

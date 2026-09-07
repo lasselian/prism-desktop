@@ -1656,14 +1656,14 @@ class Dashboard(QWidget):
             # Standard entity match
             if cfg.get('entity_id') == entity_id:
                 button.apply_ha_state(state)
-                if live:
+                if live and state:
                     button.flash_refresh_indicator()
 
             # 3D Printer handles multiple entities
             elif cfg.get('type') == '3d_printer':
                 if entity_id == cfg.get('printer_state_entity'):
                     button.apply_ha_state(state) # Primary state
-                    if live:
+                    if live and state:
                         button.flash_refresh_indicator()
                 elif entity_id in (cfg.get('printer_camera_entity'), cfg.get('printer_nozzle_entity'), cfg.get('printer_bed_entity')):
                     button.update_content() # Just trigger a redraw, dashboard_button_painter will fetch the latest state from _entity_states
