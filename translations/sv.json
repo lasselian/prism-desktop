@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "Tona knappfärg baserat på ljusnivå",
   "settings.appearance.glass_toggle": "Glasgränssnitt (EXPERIMENTELLT)",
   "settings.appearance.glass_tooltip": "Använd en genomskinlig glasbakgrund för fönstret",
+  "settings.appearance.refresh_indicator_toggle": "Visa uppdateringsindikator",
+  "settings.appearance.refresh_indicator_tooltip": "Blinkar kort en prick när en ruta får en direktuppdatering",
   "settings.appearance.pin_toggle": "Fäst fönster",
   "settings.appearance.pin_tooltip": "Håll fönstret öppet när du klickar utanför det",
   "settings.shortcut.label": "App-toggle:",

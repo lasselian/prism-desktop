@@ -125,6 +125,7 @@ class Dashboard(QWidget):
         app_config = self.config.get('appearance', {})
         self._border_effect = app_config.get('border_effect', 'Rainbow')
         self._show_dimming = app_config.get('show_dimming', False)
+        self._refresh_indicators_enabled = app_config.get('refresh_indicators', False)
         self._glass_ui = app_config.get('glass_ui', False) and not sys.platform.startswith('linux')
         self._button_style = app_config.get('button_style', 'Gradient').capitalize()
         self._temperature_unit = app_config.get('temperature_unit', 'celsius')
@@ -1639,22 +1640,31 @@ class Dashboard(QWidget):
                  
 
 
-    def update_entity_state(self, entity_id: str, state: dict):
-        """Update a button/widget when entity state changes."""
+    def update_entity_state(self, entity_id: str, state: dict, live: bool = False):
+        """Update a button/widget when entity state changes.
+
+        `live` marks a genuine push from Home Assistant, as opposed to an
+        internal refetch/replay of already-known state. Only a live update
+        flashes the opt-in per-tile refresh indicator.
+        """
         self._entity_states[entity_id] = state
-        
+
         for button in self.buttons:
             cfg = button.config
             if not cfg: continue
-            
+
             # Standard entity match
             if cfg.get('entity_id') == entity_id:
                 button.apply_ha_state(state)
-            
+                if live:
+                    button.flash_refresh_indicator()
+
             # 3D Printer handles multiple entities
             elif cfg.get('type') == '3d_printer':
                 if entity_id == cfg.get('printer_state_entity'):
                     button.apply_ha_state(state) # Primary state
+                    if live:
+                        button.flash_refresh_indicator()
                 elif entity_id in (cfg.get('printer_camera_entity'), cfg.get('printer_nozzle_entity'), cfg.get('printer_bed_entity')):
                     button.update_content() # Just trigger a redraw, dashboard_button_painter will fetch the latest state from _entity_states
         
@@ -2013,6 +2023,7 @@ class Dashboard(QWidget):
         
         # Update custom colors
         self._show_dimming = app.get('show_dimming', False)
+        self._refresh_indicators_enabled = app.get('refresh_indicators', False)
         self._glass_ui = app.get('glass_ui', False) and not sys.platform.startswith('linux')
         if self._glass_ui:
             self._set_capture_exclusion(True)
@@ -2032,6 +2043,7 @@ class Dashboard(QWidget):
         for btn in self.buttons:
             btn.set_border_effect(self._border_effect)
             btn.show_dimming = self._show_dimming
+            btn.refresh_indicators_enabled = self._refresh_indicators_enabled
             btn.button_style = self._button_style
             btn.set_temperature_unit_preference(self._temperature_unit)
 

@@ -52,6 +52,8 @@
   "settings.appearance.dimming_tooltip": "Изменение цвета кнопок в зависимости от уровня яркости",
   "settings.appearance.glass_toggle": "Стеклянный интерфейс (ЭКСПЕРИМЕНТАЛЬНО)",
   "settings.appearance.glass_tooltip": "Использовать полупрозрачный стеклянный фон для окна",
+  "settings.appearance.refresh_indicator_toggle": "Индикаторы обновления",
+  "settings.appearance.refresh_indicator_tooltip": "Кратко подсвечивает точку при получении плиткой live-обновления",
   "settings.appearance.pin_toggle": "Отображать поверх всех окон",
   "settings.appearance.pin_tooltip": "Оставлять окно открытым при клике вне его области",
   "settings.shortcut.label": "Показать/Скрыть:",

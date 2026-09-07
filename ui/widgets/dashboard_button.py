@@ -163,6 +163,7 @@ class DashboardButton(QFrame):
         self.theme_manager = theme_manager
         self._show_border_effect = False
         self._show_dimming = False
+        self.refresh_indicators_enabled = False
         self._brightness = 255
         self.temperature_unit_preference = "celsius"
         
@@ -231,7 +232,16 @@ class DashboardButton(QFrame):
         self.pulse_anim.setKeyValueAt(0, 0.0)
         self.pulse_anim.setKeyValueAt(0.5, 0.8)
         self.pulse_anim.setKeyValueAt(1, 0.0)
-        
+
+        # Per-tile refresh indicator (opt-in, Settings > Appearance > Options):
+        # a quick fade marking a live push from Home Assistant landed on this tile.
+        self._refresh_flash_opacity = 0.0  # current dot opacity (0 = invisible, 1 = fully lit); animated below
+        self.refresh_flash_anim = QPropertyAnimation(self, b"refresh_flash_opacity")
+        self.refresh_flash_anim.setDuration(500)  # <-- HOW LONG THE FLASH LASTS, in milliseconds. Raise this to make it linger longer (e.g. 10000 = 10s for screenshots), lower it for a quicker blink.
+        self.refresh_flash_anim.setStartValue(1.0)  # opacity at the moment of the flash: 1.0 = fully visible
+        self.refresh_flash_anim.setEndValue(0.0)  # opacity once the fade finishes: 0.0 = fully faded out
+        self.refresh_flash_anim.setEasingCurve(QEasingCurve.Type.OutCubic)  # shape of the fade over time: OutCubic = fast at first, then eases out gently (not a constant/linear fade)
+
         # Perimeter progress animation
         self._perimeter_fraction = 0.0
         self.perimeter_anim = QPropertyAnimation(self, b"perimeter_fraction")
@@ -349,7 +359,29 @@ class DashboardButton(QFrame):
         self.update() 
         
     pulse_opacity = pyqtProperty(float, get_pulse_opacity, set_pulse_opacity)
-    
+
+    def get_refresh_flash_opacity(self):
+        return self._refresh_flash_opacity
+
+    def set_refresh_flash_opacity(self, val):
+        self._refresh_flash_opacity = val
+        self.update()
+
+    refresh_flash_opacity = pyqtProperty(float, get_refresh_flash_opacity, set_refresh_flash_opacity)
+
+    def flash_refresh_indicator(self):
+        """Briefly light the corner dot marking a live Home Assistant push.
+
+        Opt-in (Settings > Appearance > Options). No-ops while a fade is
+        already in flight, so a fast-updating entity reads as a steady soft
+        pulse rather than a permanently-lit dot.
+        """
+        if not self.refresh_indicators_enabled:
+            return
+        if self.refresh_flash_anim.state() == QPropertyAnimation.State.Running:
+            return
+        self.refresh_flash_anim.start()
+
     def get_resize_handle_opacity(self):
         return self._resize_handle_opacity
 
@@ -1191,7 +1223,10 @@ class DashboardButton(QFrame):
         
         self.pulse_anim.stop()
         self._pulse_opacity = 0.0
-        
+
+        self.refresh_flash_anim.stop()
+        self._refresh_flash_opacity = 0.0
+
         self.resize_anim.stop()
         self._resize_handle_opacity = 0.0
         

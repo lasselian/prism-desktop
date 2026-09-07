@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "Tøm knappefargen basert på lysnivå",
   "settings.appearance.glass_toggle": "Glass-UI (EKSPERIMENTELT)",
   "settings.appearance.glass_tooltip": "Bruk en gjennomsiktig glassbakgrunn for vinduet",
+  "settings.appearance.refresh_indicator_toggle": "Vis oppdateringsindikator",
+  "settings.appearance.refresh_indicator_tooltip": "Blinker kort en prikk når en rute mottar en direkteoppdatering",
   "settings.appearance.pin_toggle": "Fest vindu",
   "settings.appearance.pin_tooltip": "Hold vinduet åpent når du klikker utenfor det",
   "settings.shortcut.label": "App-toggle:",

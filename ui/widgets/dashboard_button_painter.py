@@ -275,7 +275,11 @@ class DashboardButtonPainter:
         # Pulse Animation (Script)
         if button._pulse_opacity > 0.01:
             DashboardButtonPainter._paint_pulse(button)
-        
+
+        # Per-tile refresh indicator (opt-in, Settings > Appearance > Options)
+        if getattr(button, '_refresh_flash_opacity', 0.0) > 0.01:
+            DashboardButtonPainter._paint_refresh_indicator(button)
+
         # Only draw special border if animating or if progress > 0
         if button.anim.state() == QPropertyAnimation.State.Running or button._anim_progress > 0.0:
             DashboardButtonPainter._paint_border_animation(button)
@@ -1058,6 +1062,43 @@ class DashboardButtonPainter:
         painter.setBrush(QBrush(c))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(QRectF(button.rect()), 12, 12)
+        painter.end()
+
+    @staticmethod
+    def _paint_refresh_indicator(button):
+        """Small corner dot marking a live push from Home Assistant (opt-in).
+
+        Deliberately ignores the tile's accent/custom color: unlike the
+        script pulse (a full-tile wash, where matching the tile's color
+        looks intentional), this dot has to stand out *against* the tile —
+        including tiles whose custom color equals the theme accent, where a
+        same-colored dot would be invisible. A white fill with a dark
+        outline reads on light and dark tiles alike.
+        """
+        painter = QPainter(button)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        opacity = button._refresh_flash_opacity
+        radius = 3.5
+        margin = 8.0
+        cx = button.rect().width() - margin - radius
+        cy = margin + radius
+        center = QPointF(cx, cy)
+
+        outline = QColor(0, 0, 0)
+        outline.setAlphaF(0.35 * opacity)
+        pen = QPen(outline)
+        pen.setWidthF(1.2)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(center, radius + 0.6, radius + 0.6)
+
+        fill = QColor(255, 255, 255)
+        fill.setAlphaF(opacity)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(fill))
+        painter.drawEllipse(center, radius, radius)
+
         painter.end()
 
     @staticmethod

@@ -769,6 +769,10 @@ class SettingsWidget(QWidget):
         self.show_dimming_check.setToolTip(t("settings.appearance.dimming_tooltip"))
         toggle_form.addRow("", self.show_dimming_check)
 
+        self.refresh_indicator_check = ToggleSwitch(t("settings.appearance.refresh_indicator_toggle"))
+        self.refresh_indicator_check.setToolTip(t("settings.appearance.refresh_indicator_tooltip"))
+        toggle_form.addRow("", self.refresh_indicator_check)
+
         self.glass_ui_check = ToggleSwitch(t("settings.appearance.glass_toggle"))
         self.glass_ui_check.setToolTip(t("settings.appearance.glass_tooltip"))
         if sys.platform.startswith('linux'):
@@ -1290,6 +1294,7 @@ class SettingsWidget(QWidget):
         )
 
         self.show_dimming_check.setChecked(app.get('show_dimming', False))
+        self.refresh_indicator_check.setChecked(app.get('refresh_indicators', False))
         self.glass_ui_check.setChecked(app.get('glass_ui', False) and not sys.platform.startswith('linux'))
         self.pin_check.setChecked(app.get('pin_window', False))
 
@@ -1355,6 +1360,7 @@ class SettingsWidget(QWidget):
             'border_effect': self.border_effect_combo.currentText(),
             'button_style': {0: 'Gradient', 1: 'Flat'}.get(self.button_style_combo.currentIndex(), 'Gradient'),
             'show_dimming': self.show_dimming_check.isChecked(),
+            'refresh_indicators': self.refresh_indicator_check.isChecked(),
             'glass_ui': self.glass_ui_check.isChecked(),
             'pin_window': self.pin_check.isChecked(),
             'pages': self.pages_combo.currentIndex() + 1,

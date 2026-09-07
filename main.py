@@ -1016,7 +1016,7 @@ class PrismDesktopApp(QObject):
             
             # Re-apply known states to newly built buttons without an HTTP round-trip
             for eid, state in self.dashboard.entity_states.items():
-                self.on_state_changed(eid, state)
+                self.on_state_changed(eid, state, live=False)
 
     @pyqtSlot(int)
     def on_clear_button_requested(self, slot):
@@ -1148,8 +1148,8 @@ class PrismDesktopApp(QObject):
         # 1. Fetch current state to ensure ui has it
         state = await self.ha_client.get_state(entity_id)
         if state:
-            self.on_state_changed(entity_id, state)
-        
+            self.on_state_changed(entity_id, state, live=False)
+
         # 2. Fetch forecast
         forecast_response = await self.ha_client.get_weather_forecast(entity_id, "daily")
         
@@ -1160,9 +1160,17 @@ class PrismDesktopApp(QObject):
             self.dashboard.overlay_manager.start_weather(slot, rect, config, forecasts)
 
     @pyqtSlot(str, dict)
-    def on_state_changed(self, entity_id, new_state):
+    def on_state_changed(self, entity_id, new_state, live=True):
+        """Handle a state update for a subscribed entity.
+
+        `live` distinguishes a genuine push from Home Assistant (the direct
+        websocket signal target, hence the default) from an internal refetch
+        or replay of already-known state — initial load, reconnect, a single
+        entity refresh after editing a button, or a post-rebuild replay —
+        which must stay silent for the opt-in per-tile refresh indicator.
+        """
         if self.dashboard:
-            self.dashboard.update_entity_state(entity_id, new_state)
+            self.dashboard.update_entity_state(entity_id, new_state, live=live)
             
             if entity_id.startswith('camera.'):
                 _create_task_safe(self._fetch_camera_image(entity_id))
@@ -1359,12 +1367,12 @@ class PrismDesktopApp(QObject):
         )
         for eid, state in zip(entity_ids, results):
             if isinstance(state, dict):
-                self.on_state_changed(eid, state)
-                
+                self.on_state_changed(eid, state, live=False)
+
     async def _fetch_single_state(self, entity_id):
         state = await self.ha_client.get_state(entity_id)
         if state:
-            self.on_state_changed(entity_id, state)
+            self.on_state_changed(entity_id, state, live=False)
 
     async def _fetch_album_art(self, entity_id, state):
         pic_path = state.get('attributes', {}).get('entity_picture')

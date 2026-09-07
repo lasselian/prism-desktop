@@ -122,6 +122,7 @@ class GridManager:
             self.dashboard._live_dimming = True
             self.dashboard._border_effect = appearance_config.get('border_effect', 'Rainbow')
             self.dashboard._show_dimming = appearance_config.get('show_dimming', False)
+            self.dashboard._refresh_indicators_enabled = appearance_config.get('refresh_indicators', False)
             self.dashboard._glass_ui = appearance_config.get('glass_ui', False)
             self.dashboard._button_style = appearance_config.get('button_style', 'Gradient')
             self.dashboard._temperature_unit = appearance_config.get('temperature_unit', 'celsius')
@@ -181,6 +182,7 @@ class GridManager:
                 button.update_style()
                 button.set_border_effect(self.dashboard._border_effect)
                 button.show_dimming = self.dashboard._show_dimming
+                button.refresh_indicators_enabled = self.dashboard._refresh_indicators_enabled
                 
                 try:
                     button.resize_requested.disconnect(self.dashboard.handle_button_resize)

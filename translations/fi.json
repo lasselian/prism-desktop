@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "Himmentää painikkeen väriä kirkkausasteen mukaan",
   "settings.appearance.glass_toggle": "Lasi-käyttöliittymä (KOKEELLINEN)",
   "settings.appearance.glass_tooltip": "Käytä läpikuultavaa lasitaustaa ikkunalle",
+  "settings.appearance.refresh_indicator_toggle": "Näytä päivitysilmaisin",
+  "settings.appearance.refresh_indicator_tooltip": "Vilauttaa lyhyesti pistettä, kun ruutu päivittyy livenä",
   "settings.appearance.pin_toggle": "Kiinnitä ikkuna",
   "settings.appearance.pin_tooltip": "Pidä ikkuna auki, kun napsautat sen ulkopuolelle",
   "settings.shortcut.label": "Sovelluksen vaihto:",

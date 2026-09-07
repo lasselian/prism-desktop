@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "עמעום צבע הכפתור בהתאם לרמת הבהירות",
   "settings.appearance.glass_toggle": "ממשק זכוכית (ניסיוני)",
   "settings.appearance.glass_tooltip": "שימוש ברקע זכוכית שקוף-למחצה עבור החלון",
+  "settings.appearance.refresh_indicator_toggle": "מחווני עדכון",
+  "settings.appearance.refresh_indicator_tooltip": "הבהוב קצר של נקודה כשאריח מקבל עדכון חי",
   "settings.appearance.pin_toggle": "הצמדת חלון",
   "settings.appearance.pin_tooltip": "השארת החלון פתוח גם בעת לחיצה מחוצה לו",
   "settings.shortcut.label": "הצגה/הסתרה:",

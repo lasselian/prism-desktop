@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "依據亮度等級淡化按鈕顏色",
   "settings.appearance.glass_toggle": "毛玻璃介面（實驗性）",
   "settings.appearance.glass_tooltip": "為視窗使用半透明毛玻璃背景",
+  "settings.appearance.refresh_indicator_toggle": "顯示更新指示點",
+  "settings.appearance.refresh_indicator_tooltip": "磚塊收到即時更新時,短暫閃爍一個小點",
   "settings.appearance.pin_toggle": "固定視窗",
   "settings.appearance.pin_tooltip": "點擊視窗外部時保持視窗不關閉",
   "settings.shortcut.label": "切換應用程式：",

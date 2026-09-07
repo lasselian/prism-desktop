@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "Atenúa el color del botón según el nivel de brillo",
   "settings.appearance.glass_toggle": "Interfaz de cristal (EXPERIMENTAL)",
   "settings.appearance.glass_tooltip": "Usa un fondo de cristal translúcido para la ventana",
+  "settings.appearance.refresh_indicator_toggle": "Indicadores de actualización",
+  "settings.appearance.refresh_indicator_tooltip": "Destella brevemente un punto cuando una ficha recibe una actualización en vivo",
   "settings.appearance.pin_toggle": "Anclar ventana",
   "settings.appearance.pin_tooltip": "Mantiene la ventana abierta al hacer clic fuera de ella",
   "settings.shortcut.label": "Alternar app:",
