@@ -1,3 +1,4 @@
+import sys
 import json
 import copy
 import logging
@@ -65,7 +66,9 @@ class ConfigManager:
                 "rows": 2,
                 "button_style": "Gradient",
                 "border_effect": "Liquid Mercury",
-                "tray_position": "bottom",
+                # macOS menu bar is located at the top of the screen;
+                # Windows and Linux taskbars conventionally default to the bottom.
+                "tray_position": "top" if sys.platform == "darwin" else "bottom",
                 "pages": 1,
                 "pin_window": False,
             },
