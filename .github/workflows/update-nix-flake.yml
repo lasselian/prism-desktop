@@ -1,0 +1,191 @@
+name: Update Nix flake
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '[0-9]*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag to package, for example 1.7
+        required: true
+        type: string
+      dry_run:
+        description: Validate without committing, pushing, or opening a PR
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: nix-flake-update-${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    name: Update and test Nix flake
+    runs-on: ubuntu-latest
+    env:
+      NIX_CONFIG: experimental-features = nix-command flakes
+      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+      DRY_RUN: ${{ github.repository != 'lasselian/prism-desktop' || (github.event_name == 'workflow_dispatch' && inputs.dry_run) || false }}
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+
+      - name: Resolve release and source hash
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${RELEASE_TAG#v}"
+          if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+)+$ ]]; then
+            echo "Release tag is not a stable semantic version: $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          branch="flake/update-$version"
+          git fetch --no-tags https://github.com/lasselian/prism-desktop.git \
+            "refs/tags/$RELEASE_TAG"
+          release_commit="$(git rev-parse 'FETCH_HEAD^{commit}')"
+          source_hash="$(nix store prefetch-file --json --unpack --hash-type sha256 \
+            "https://github.com/lasselian/prism-desktop/archive/$release_commit.tar.gz" \
+            | jq -r .hash)"
+
+          {
+            echo "version=$version"
+            echo "branch=$branch"
+            echo "release_commit=$release_commit"
+            echo "build_commit=${release_commit:0:12}"
+            echo "source_hash=$source_hash"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update flake sources
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.release_commit }}
+          BUILD_COMMIT: ${{ steps.release.outputs.build_commit }}
+          SOURCE_HASH: ${{ steps.release.outputs.source_hash }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path("flake.nix")
+          text = path.read_text()
+
+          replacements = [
+              (r'(buildCommit = ")[^"]+(";)', rf'\g<1>{os.environ["BUILD_COMMIT"]}\g<2>'),
+              (r'(version = ")[^"]+(";)', rf'\g<1>{os.environ["VERSION"]}\g<2>'),
+              (r'(rev = )(?:version|"[^"]+")(;)', rf'\g<1>"{os.environ["RELEASE_COMMIT"]}"\g<2>'),
+              (r'(hash = ")[^"]+(";)', rf'\g<1>{os.environ["SOURCE_HASH"]}\g<2>'),
+          ]
+          for pattern, replacement in replacements:
+              text, count = re.subn(pattern, replacement, text, count=1)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one match for {pattern!r}")
+          path.write_text(text)
+          PY
+
+      - name: Refresh nixpkgs lock
+        run: nix flake update nixpkgs
+
+      - name: Validate changed files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t changed < <(git diff --name-only)
+          printf 'Changed files:\n'
+          printf '  %s\n' "${changed[@]}"
+          [[ " ${changed[*]} " == *" flake.nix "* ]] || {
+            echo "flake.nix was not changed" >&2
+            exit 1
+          }
+          for path in "${changed[@]}"; do
+            [[ "$path" == "flake.nix" || "$path" == "flake.lock" ]] || {
+              echo "Unexpected changed file: $path" >&2
+              exit 1
+            }
+          done
+          git diff --check
+
+      - name: Check flake
+        run: nix flake check --no-update-lock-file
+
+      - name: Build package
+        run: nix build .#default --no-link --print-build-logs
+
+      - name: Commit and push update branch
+        if: env.DRY_RUN != 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          BRANCH: ${{ steps.release.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git switch -c "$BRANCH"
+          git add flake.nix flake.lock
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "flake: update to $VERSION"
+
+          remote_oid="$(git ls-remote --heads origin "$BRANCH" | cut -f1)"
+          if [[ -n "$remote_oid" ]]; then
+            git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            git diff --quiet "origin/$BRANCH" HEAD || {
+              echo "Remote branch $BRANCH exists with different content; refusing to overwrite it." >&2
+              exit 1
+            }
+            echo "Remote branch $BRANCH already contains the generated update."
+          else
+            git push --set-upstream origin "$BRANCH"
+          fi
+
+      - name: Review dry-run diff
+        if: env.DRY_RUN == 'true'
+        run: |
+          git diff --check
+          git diff --stat
+          git diff -- flake.nix flake.lock
+
+      - name: Create pull request
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+          BRANCH: ${{ steps.release.outputs.branch }}
+        run: |
+          set -euo pipefail
+          if gh pr list --state open --head "$BRANCH" --json number --jq 'length' | grep -q '^0$'; then
+            body="$(cat <<EOF
+          ## Summary
+
+          - update the flake version to $VERSION
+          - refresh flake.lock to the current nixos-unstable input
+
+          ## Testing performed
+
+          - nix flake check
+          - nix build .#default --no-link --print-build-logs
+          EOF
+          )"
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "flake: update to $VERSION" \
+              --body "$body"
+          else
+            echo "An open PR already exists for $BRANCH; leaving it unchanged."
+          fi
