@@ -1,9 +1,9 @@
 # Prism Desktop
  
-**A Home Assistant desktop app for Windows & Linux — control your smart home from your PC.**
+**A Home Assistant desktop app for Windows, Linux & macOS — control your smart home from your PC.**
  
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/lasselian/prism-desktop/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](https://github.com/lasselian/prism-desktop/releases)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-WebSocket%20API-41BDF5?logo=home-assistant)](https://www.home-assistant.io/)
 [![GitHub Releases](https://img.shields.io/github/v/release/lasselian/prism-desktop)](https://github.com/lasselian/prism-desktop/releases)
  
@@ -12,11 +12,11 @@
  
 ## What is Prism Desktop?
  
-Prism Desktop is a **lightweight Home Assistant client for Windows and Linux**. It lives in your system tray and gives you instant access to your smart home — lights, thermostats, cameras, sensors, and more — without opening a browser.
+Prism Desktop is a **lightweight Home Assistant client for Windows, Linux and macOS**. It lives in your system tray and gives you instant access to your smart home — lights, thermostats, cameras, sensors, and more — without opening a browser.
  
 Built on Home Assistant's WebSocket API, it keeps your dashboard in **real-time sync** with your home. Control entities, trigger automations, and receive PC notifications, all from a sleek, customizable dashboard.
  
-> **Perfect for:** Home Assistant users who want a native desktop experience on Windows or Linux instead of a browser tab.
+> **Perfect for:** Home Assistant users who want a native desktop experience on Windows, Linux or macOS instead of a browser tab.
  
 ---
  
@@ -27,6 +27,7 @@ Built on Home Assistant's WebSocket API, it keeps your dashboard in **real-time 
 - [Installation](#installation)
   - [Windows](#windows-installer)
   - [Linux](#linux-appimage)
+  - [macOS](#macos-dmg--zip)
   - [Nix (flakes)](#nix-flakes)
   - [Running from Source](#running-from-source)
 - [Configuration](#configuration)
@@ -45,6 +46,7 @@ Built on Home Assistant's WebSocket API, it keeps your dashboard in **real-time 
 - **Real-time Sync** — Powered by Home Assistant's WebSocket API for instant state updates.
 - **Customizable Appearance** — Choose border effects (Rainbow, Aurora, and more) and customize button colors.
 - **Keyboard Shortcuts** — Bind global shortcuts to toggle the app or trigger individual entities.
+- **Assist (beta)** — Talk or type to Home Assistant's Assist pipeline from the dashboard. Off by default; turn it on under *Settings → Assist (Beta)*.
 ---
  
 ## Supported Entity Types
