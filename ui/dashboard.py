@@ -2271,7 +2271,19 @@ class Dashboard(QWidget):
         if self._current_view == 'grid':
             self._grid_height = self.height()
             self._captured_grid_widget_h = self.grid_widget.height()
-            
+
+        # 1b. Any path back to the grid restores the grid's own width. Settings
+        # widens the window and the button editor inherits that width, so a
+        # save/cancel straight out of the editor would otherwise leave the grid
+        # stuck at the settings width. hide_settings() already did this, so the
+        # guard keeps it a no-op there.
+        if view_name == 'grid':
+            self._settings_locked_height = None
+            grid_width = calculate_width(self._cols)
+            if grid_width != self._fixed_width:
+                self._anim_start_width = self.width()
+                self._fixed_width = grid_width
+
         # 2. Update view state
         self._current_view = view_name
         
