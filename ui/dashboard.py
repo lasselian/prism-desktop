@@ -2101,10 +2101,10 @@ class Dashboard(QWidget):
 
     def _on_settings_delete_shortcut(self, btn_cfg: dict):
         """Show a confirm banner then delete the shortcut on confirmation."""
-        name = btn_cfg.get('label') or btn_cfg.get('entity_id', 'this button')
-        msg = f"Remove shortcut for '{name}'?"
+        from ui.notifications import notify_delete_shortcut
+        name = btn_cfg.get('label') or btn_cfg.get('entity_id', '')
         sw = self.settings_widget
-        self.show_confirm_banner(msg, on_confirm=lambda: sw.apply_shortcut_delete(btn_cfg))
+        notify_delete_shortcut(self, name, lambda: sw.apply_shortcut_delete(btn_cfg))
 
     def _on_edit_saved(self, config: dict):
         """Handle save from embedded editor."""

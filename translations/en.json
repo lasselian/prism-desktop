@@ -194,6 +194,8 @@
   "notifications.glass_ui_warning": "Glass UI is experimental — not optimised for light mode and may impact performance on low-end hardware.",
   "notifications.page_full": "Page {page_num} is full. Cannot move button.",
   "notifications.move_as_1x1": "No room at {orig_w}×{orig_h} on Page {page_num}. Move as 1×1?",
+  "notifications.delete_shortcut": "Remove shortcut for \u2018{name}\u2019?",
+  "notifications.delete_shortcut_unnamed": "Remove this shortcut?",
   "notifications.update_available": "Prism Desktop {version} is available. Install now?",
   "notifications.update_restart": "Update complete — restarting Prism Desktop",
   "notifications.update_success": "Updated to Prism Desktop {version}",

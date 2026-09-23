@@ -48,6 +48,15 @@ def notify_move_as_1x1(dashboard, orig_w: int, orig_h: int, page_num: int, on_co
     )
 
 
+# ── Shortcuts ─────────────────────────────────────────────────────────────────
+
+def notify_delete_shortcut(dashboard, name: str, on_confirm):
+    """Confirm dialog asking whether to clear a button's custom shortcut."""
+    msg = (t("notifications.delete_shortcut", name=name) if name
+           else t("notifications.delete_shortcut_unnamed"))
+    dashboard.show_confirm(msg, on_confirm=on_confirm)
+
+
 # ── Updates ───────────────────────────────────────────────────────────────────
 
 def notify_update_available(dashboard, new_version: str, on_confirm):
