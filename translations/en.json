@@ -52,6 +52,8 @@
   "settings.appearance.dimming_tooltip": "Fade button color based on brightness level",
   "settings.appearance.glass_toggle": "Glass UI (EXPERIMENTAL)",
   "settings.appearance.glass_tooltip": "Use a translucent glass background for the window",
+  "settings.appearance.refresh_indicator_toggle": "Update indicators",
+  "settings.appearance.refresh_indicator_tooltip": "Briefly flash a dot when a tile updates live",
   "settings.appearance.pin_toggle": "Always on top",
   "settings.appearance.pin_tooltip": "Keep the window open when clicking outside it",
   "settings.shortcut.label": "App Toggle:",

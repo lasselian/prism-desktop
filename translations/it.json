@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "Attenua il colore del pulsante in base al livello di luminosità",
   "settings.appearance.glass_toggle": "Interfaccia vetro (SPERIMENTALE)",
   "settings.appearance.glass_tooltip": "Usa uno sfondo vetro traslucido per la finestra",
+  "settings.appearance.refresh_indicator_toggle": "Indicatori di aggiornamento",
+  "settings.appearance.refresh_indicator_tooltip": "Lampeggia brevemente un punto quando un riquadro riceve un aggiornamento in tempo reale",
   "settings.appearance.pin_toggle": "Blocca finestra",
   "settings.appearance.pin_tooltip": "Mantiene la finestra aperta quando si fa clic all'esterno",
   "settings.shortcut.label": "Attiva/disattiva app:",

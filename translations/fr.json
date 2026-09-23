@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "Atténue la couleur du bouton selon le niveau de luminosité",
   "settings.appearance.glass_toggle": "Interface verre (EXPÉRIMENTAL)",
   "settings.appearance.glass_tooltip": "Utilise un fond vitré translucide pour la fenêtre",
+  "settings.appearance.refresh_indicator_toggle": "Indicateurs de mise à jour",
+  "settings.appearance.refresh_indicator_tooltip": "Fait clignoter brièvement un point quand une tuile reçoit une mise à jour en direct",
   "settings.appearance.pin_toggle": "Épingler la fenêtre",
   "settings.appearance.pin_tooltip": "Garde la fenêtre ouverte lors d'un clic à l'extérieur",
   "settings.shortcut.label": "Bascule de l'app :",

@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "Zatamni boju dugmeta na osnovu nivoa osvetljaja",
   "settings.appearance.glass_toggle": "Korisnički izgled mutnog stakla / Glass UI (EXPERIMENTALNO)",
   "settings.appearance.glass_tooltip": "Koristi pozadinu od providnog stakla za prozor",
+  "settings.appearance.refresh_indicator_toggle": "Pokaži indikator ažuriranja",
+  "settings.appearance.refresh_indicator_tooltip": "Nakratko zatreperi tačka kada pločica primi ažuriranje uživo",
   "settings.appearance.pin_toggle": "Fiksiraj prozor",
   "settings.appearance.pin_tooltip": "Zadrži program otvorenim i kad se klikne van njega",
   "settings.shortcut.label": "Uključi/Isključi vidljivost panela:",

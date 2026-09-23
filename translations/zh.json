@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "根据亮度级别淡化按钮颜色",
   "settings.appearance.glass_toggle": "毛玻璃界面（实验性）",
   "settings.appearance.glass_tooltip": "为窗口使用半透明毛玻璃背景",
+  "settings.appearance.refresh_indicator_toggle": "显示更新指示点",
+  "settings.appearance.refresh_indicator_tooltip": "磁贴收到实时更新时,短暂闪烁一个小点",
   "settings.appearance.pin_toggle": "固定窗口",
   "settings.appearance.pin_tooltip": "点击窗口外部时保持窗口不关闭",
   "settings.shortcut.label": "切换应用：",

@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "輝度レベルに応じてボタンの色をフェードします",
   "settings.appearance.glass_toggle": "ガラス UI（実験的）",
   "settings.appearance.glass_tooltip": "ウィンドウに半透明のすりガラス背景を使用します",
+  "settings.appearance.refresh_indicator_toggle": "更新インジケーターを表示",
+  "settings.appearance.refresh_indicator_tooltip": "タイルがライブ更新を受信すると、ドットが一瞬点滅します",
   "settings.appearance.pin_toggle": "ウィンドウを固定",
   "settings.appearance.pin_tooltip": "ウィンドウ外をクリックしてもウィンドウを開いたままにします",
   "settings.shortcut.label": "アプリの切り替え：",

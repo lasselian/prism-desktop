@@ -122,6 +122,7 @@ class GridManager:
             self.dashboard._live_dimming = True
             self.dashboard._border_effect = appearance_config.get('border_effect', 'Rainbow')
             self.dashboard._show_dimming = appearance_config.get('show_dimming', False)
+            self.dashboard._refresh_indicators_enabled = appearance_config.get('refresh_indicators', False)
             self.dashboard._glass_ui = appearance_config.get('glass_ui', False)
             self.dashboard._button_style = appearance_config.get('button_style', 'Gradient')
             self.dashboard._temperature_unit = appearance_config.get('temperature_unit', 'celsius')
@@ -135,6 +136,12 @@ class GridManager:
         self.dashboard._virtual_buttons = []
         
         for button in self.dashboard.buttons:
+            # Stash the pre-clear entity_id: it's compared against the incoming
+            # config below to tell "reassigned to a different entity" (which
+            # should reset the button) from "same entity, just rebuilt" (which
+            # shouldn't) -- reading button.config for that after clearing it
+            # here would always see {}, making that comparison always true.
+            button._prev_entity_id = button.config.get('entity_id')
             button.config = {}
             button.set_spans(1, 1)
         
@@ -160,7 +167,7 @@ class GridManager:
                 button = self.dashboard.buttons[config_idx]
                 config_idx += 1
                 
-                old_entity = button.config.get('entity_id')
+                old_entity = getattr(button, '_prev_entity_id', None)
                 new_entity = cfg.get('entity_id')
                 
                 button.config = cfg
@@ -181,6 +188,7 @@ class GridManager:
                 button.update_style()
                 button.set_border_effect(self.dashboard._border_effect)
                 button.show_dimming = self.dashboard._show_dimming
+                button.refresh_indicators_enabled = self.dashboard._refresh_indicators_enabled
                 
                 try:
                     button.resize_requested.disconnect(self.dashboard.handle_button_resize)

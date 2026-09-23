@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "Ton knapfarve baseret på lysniveau",
   "settings.appearance.glass_toggle": "Glasgrænseflade (EKSPERIMENTEL)",
   "settings.appearance.glass_tooltip": "Brug en gennemsigtig glasbaggrund til vinduet",
+  "settings.appearance.refresh_indicator_toggle": "Vis opdateringsindikator",
+  "settings.appearance.refresh_indicator_tooltip": "Blink kortvarigt en prik på en flise ved live-opdatering",
   "settings.appearance.pin_toggle": "Fastgør vindue",
   "settings.appearance.pin_tooltip": "Hold vinduet åbent, når du klikker uden for det",
   "settings.shortcut.label": "App-skift:",

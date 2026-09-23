@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "Blendet die Schaltflächenfarbe basierend auf dem Helligkeitsniveau aus",
   "settings.appearance.glass_toggle": "Glas-Oberfläche (EXPERIMENTELL)",
   "settings.appearance.glass_tooltip": "Verwendet einen halbtransparenten Glashintergrund für das Fenster",
+  "settings.appearance.refresh_indicator_toggle": "Aktualisierungsanzeige",
+  "settings.appearance.refresh_indicator_tooltip": "Lässt kurz einen Punkt aufblitzen, wenn eine Kachel live aktualisiert wird",
   "settings.appearance.pin_toggle": "Fenster anheften",
   "settings.appearance.pin_tooltip": "Hält das Fenster offen, wenn außerhalb geklickt wird",
   "settings.shortcut.label": "App umschalten:",

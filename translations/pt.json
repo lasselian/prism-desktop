@@ -42,6 +42,8 @@
   "settings.appearance.dimming_tooltip": "Atenua a cor do botão com base no nível de brilho",
   "settings.appearance.glass_toggle": "Interface de Vidro (EXPERIMENTAL)",
   "settings.appearance.glass_tooltip": "Usa um fundo de vidro translúcido para a janela",
+  "settings.appearance.refresh_indicator_toggle": "Indicadores de atualização",
+  "settings.appearance.refresh_indicator_tooltip": "Pisca rapidamente um ponto quando um bloco recebe uma atualização em tempo real",
   "settings.appearance.pin_toggle": "Fixar janela",
   "settings.appearance.pin_tooltip": "Mantém a janela aberta ao clicar fora dela",
   "settings.shortcut.label": "Alternar App:",

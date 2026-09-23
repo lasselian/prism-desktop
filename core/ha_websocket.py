@@ -215,7 +215,10 @@ class HAWebSocket(QObject):
             
             if event_type == 'state_changed':
                 entity_id = event_data.get('entity_id', '')
-                new_state = event_data.get('new_state', {})
+                # HA sends new_state: null (not a missing key) when an entity is removed;
+                # `.get(key, {})` only substitutes the default for a missing key, so an
+                # explicit null would reach `state_changed.emit()` and fail its `dict` type.
+                new_state = event_data.get('new_state') or {}
                 
                 if entity_id.startswith('persistent_notification.'):
                     # New notification created
