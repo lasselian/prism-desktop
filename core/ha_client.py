@@ -1,7 +1,8 @@
 import asyncio
 import logging
 import aiohttp
-from typing import Optional
+from typing import Optional, Tuple
+from yarl import URL
 
 class HAClient:
     """Asynchronous client for Home Assistant REST API."""
@@ -10,6 +11,7 @@ class HAClient:
         self.url = url.rstrip('/')
         self.token = token
         self._session: Optional[aiohttp.ClientSession] = None
+        self._anon_session: Optional[aiohttp.ClientSession] = None
         self.logger = logging.getLogger(__name__)
     
     def configure(self, url: str, token: str):
@@ -40,11 +42,73 @@ class HAClient:
             self._session = aiohttp.ClientSession(headers=self.headers)
         return self._session
 
+    async def _get_anon_session(self) -> aiohttp.ClientSession:
+        """Get or create the credential-free session used for foreign origins.
+
+        Deliberately carries no Authorization header and stores no cookies, so
+        nothing sensitive can ride along to a third-party host.
+        """
+        if self._anon_session is None or self._anon_session.closed:
+            self._anon_session = aiohttp.ClientSession(
+                cookie_jar=aiohttp.DummyCookieJar()
+            )
+        return self._anon_session
+
+    def resolve_media_url(self, raw_url: str) -> Optional[Tuple[URL, bool]]:
+        """Resolve an entity-provided media URL. Returns (url, same_origin).
+
+        entity_picture and TTS URLs are entity-provided data, not trusted API
+        endpoints. Home Assistant hands out absolute third-party URLs whenever
+        an integration sets media_image_remotely_accessible (cast, heos, wiim,
+        music_assistant, xbox, ...), so the caller must know whether a URL
+        leaves the configured HA origin before deciding to authenticate.
+
+        Returns None if the URL is unusable or the HA base URL is unset/invalid.
+        """
+        if not raw_url or not isinstance(raw_url, str):
+            return None
+        # Control characters and backslashes can smuggle request syntax.
+        if any(ord(c) < 32 or ord(c) == 127 or c == '\\' for c in raw_url):
+            return None
+
+        try:
+            base = URL(self.url)
+            if (base.scheme not in ('http', 'https') or not base.raw_host
+                    or base.user is not None or base.password is not None):
+                return None
+
+            raw = raw_url.strip()
+            if raw.startswith('//'):
+                # Protocol-relative: inherits the HA scheme, not the HA host.
+                candidate = f"{base.scheme}:{raw}"
+            elif raw.startswith('/'):
+                # Plain concat, not URL.join(), so a HA instance hosted under a
+                # subpath keeps its prefix (e.g. https://example.com/ha).
+                candidate = f"{self.url}{raw}"
+            else:
+                candidate = raw
+
+            url = URL(candidate).with_fragment(None)
+            if (url.scheme not in ('http', 'https')
+                    or url.user is not None or url.password is not None):
+                return None
+
+            same_origin = (
+                (url.scheme, url.raw_host, url.port)
+                == (base.scheme, base.raw_host, base.port)
+            )
+            return url, same_origin
+        except Exception:
+            return None
+
     async def close(self):
-        """Close the HTTP session."""
+        """Close the HTTP sessions."""
         if self._session and not self._session.closed:
             await self._session.close()
         self._session = None
+        if self._anon_session and not self._anon_session.closed:
+            await self._anon_session.close()
+        self._anon_session = None
     
     async def test_connection(self) -> tuple[bool, str]:
         """
@@ -174,22 +238,61 @@ class HAClient:
             self.logger.error(f"Error fetching camera image for {entity_id}: {e}")
             return None
             
+    # Artwork/audio is decorative; cap it so a hostile host cannot stream
+    # unbounded data into memory.
+    MAX_MEDIA_BYTES = 16 * 1024 * 1024
+
+    async def fetch_media(self, raw_url: str, kind: str = "media") -> Optional[bytes]:
+        """Fetch entity-provided media, authenticating only on the HA origin.
+
+        Same-origin URLs use the authenticated session and refuse redirects, so
+        the bearer token cannot be bounced to a foreign host. Anything else is
+        fetched with no credentials at all -- which is exactly what Home
+        Assistant's own frontend does with these URLs.
+        """
+        resolved = self.resolve_media_url(raw_url)
+        if resolved is None:
+            self.logger.warning("Rejected unusable %s URL", kind)
+            return None
+        url, same_origin = resolved
+
+        try:
+            if same_origin:
+                session = await self._get_session()
+                # Fail closed: the HA proxy endpoints do not redirect, and
+                # following one could carry the token off-origin.
+                allow_redirects = False
+            else:
+                session = await self._get_anon_session()
+                # Safe to follow: this session carries no credentials.
+                allow_redirects = True
+
+            async with session.get(
+                url, timeout=10, allow_redirects=allow_redirects
+            ) as response:
+                if response.status != 200:
+                    return None
+                # Accumulate in chunks: StreamReader.read(n) returns *up to* n
+                # bytes, so a single sized read cannot enforce the cap.
+                buf = bytearray()
+                async for chunk in response.content.iter_chunked(64 * 1024):
+                    buf.extend(chunk)
+                    if len(buf) > self.MAX_MEDIA_BYTES:
+                        self.logger.warning(
+                            "Oversized %s response discarded", kind
+                        )
+                        return None
+                return bytes(buf)
+        except Exception as e:
+            # Never log the URL itself; it can carry signed query secrets.
+            self.logger.error("Error fetching %s (%s)", kind, type(e).__name__)
+            return None
+
     async def get_media_image(self, image_path: str) -> Optional[bytes]:
         """Fetch media player album art."""
         if not image_path:
             return None
-        try:
-            # entity_picture is a relative URL like /api/media_player_proxy/...
-            url = f"{self.url}{image_path}" if image_path.startswith('/') else image_path
-
-            session = await self._get_session()
-            async with session.get(url, timeout=10) as response:
-                if response.status == 200:
-                    return await response.read()
-                return None
-        except Exception as e:
-            self.logger.error(f"Error fetching media image: {e}")
-            return None
+        return await self.fetch_media(image_path, kind="media image")
 
     async def get_entity_image(self, entity_id: str, state: Optional[dict] = None) -> Optional[bytes]:
         """Fetch a snapshot for an `image.*` domain entity via its entity_picture attribute."""

@@ -8,7 +8,6 @@ import asyncio
 import logging
 from typing import Callable, Optional
 
-import aiohttp
 from PyQt6.QtCore import QObject, pyqtSignal, QBuffer, QIODeviceBase
 from PyQt6.QtMultimedia import (
     QAudio, QAudioFormat, QAudioSource, QMediaDevices, QMediaPlayer, QAudioOutput,
@@ -284,17 +283,14 @@ class AssistController(QObject):
             logger.error(f"Failed to stream Assist audio: {e}")
 
     async def _play_tts(self, url: str):
-        """Fetch the TTS reply and play it back."""
-        base_url = self._ha_client.url
-        full_url = url if url.startswith('http') else f"{base_url}{url}"
-        try:
-            async with aiohttp.ClientSession(headers=self._ha_client.headers) as session:
-                async with session.get(full_url, timeout=10) as response:
-                    if response.status != 200:
-                        return
-                    audio_bytes = await response.read()
-        except Exception as e:
-            logger.error(f"Failed to fetch Assist TTS audio: {e}")
+        """Fetch the TTS reply and play it back.
+
+        Routed through HAClient.fetch_media so the HA bearer token is only ever
+        sent to the configured HA origin; a pipeline that returns an absolute
+        third-party audio URL is fetched without credentials.
+        """
+        audio_bytes = await self._ha_client.fetch_media(url, kind="TTS audio")
+        if not audio_bytes:
             return
 
         # A previous reply's player/buffer would otherwise just get overwritten below —
