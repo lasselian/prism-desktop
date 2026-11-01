@@ -4,5 +4,5 @@
 
 ### Security
 
-- 2026-10-26: Raised the Python requirement floors to the latest releases (Pillow 13, aiohttp 3.14 and cryptography 50).
+- Raised minimum dependency versions so source installs don't pull in releases with known vulnerabilities. Running from source now needs Python 3.11 or newer.
 - Updated the workflow actions.

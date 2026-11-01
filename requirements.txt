@@ -9,7 +9,7 @@ pynput>=1.8.2
 requests>=2.34.2
 certifi>=2026.10.23
 keyring>=25.7.0; sys_platform != 'darwin'
-cryptography>=50.0.2
+cryptography>=48.0.1
 secretstorage>=3.5.0; sys_platform == 'linux'
 dbus-next>=0.2.3; sys_platform == 'linux'
 qasync>=0.28.0
