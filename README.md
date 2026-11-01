@@ -167,6 +167,8 @@ nix profile add github:lasselian/prism-desktop#default
  
 ### Running from Source
  
+Requires Python 3.11 or newer.
+ 
 ```bash
 git clone https://github.com/lasselian/prism-desktop.git
 cd prism-desktop
