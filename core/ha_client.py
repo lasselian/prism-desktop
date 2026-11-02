@@ -208,7 +208,7 @@ class HAClient:
     ) -> bool:
         """Call a service."""
         try:
-            payload = data or {}
+            payload = dict(data or {})
             if entity_id:
                 payload["entity_id"] = entity_id
             

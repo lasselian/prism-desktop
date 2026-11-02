@@ -160,7 +160,8 @@ class AutoUpdateThread(QThread):
 
             # 3. Verify checksum if a SHA256SUMS asset is present in the release
             if not self._verify_checksum(tmp_path, asset_name, assets):
-                self.error.emit("Checksum mismatch — the downloaded file may be corrupt. Aborting.")
+                self.error.emit("Checksum verification failed — the download is missing from "
+                                "or does not match the release's SHA256SUMS. Aborting.")
                 return
 
             # 4. Apply the downloaded asset
@@ -187,6 +188,7 @@ class AutoUpdateThread(QThread):
         Verify SHA-256 checksum against a SHA256SUMS release asset if one exists.
         Returns True (pass) when no checksum asset is published — verification is
         opportunistic, not mandatory, until checksums are part of every release.
+        Returns False when the sums file exists but has no line for asset_name.
         """
         sums_asset = next(
             (a for a in assets if a["name"] in ("SHA256SUMS", "sha256sums.txt")), None
@@ -206,8 +208,9 @@ class AutoUpdateThread(QThread):
                 expected = parts[0].lower()
                 break
 
+        # A published sums file that doesn't list this asset is not a pass.
         if not expected:
-            return True
+            return False
 
         sha = hashlib.sha256()
         with open(file_path, "rb") as f:

@@ -274,7 +274,7 @@ def plan_move(configs: list, source: dict, target, tgt_row: int, tgt_col: int,
         engine._mark_occupied(cfg.get('row', 0), cfg.get('col', 0),
                               cfg.get('span_x', 1), cfg.get('span_y', 1), occupied)
 
-    for cfg in (source, target):
+    for cfg in (source, None if target is source else target):
         if cfg is None or id(cfg) not in moves:
             continue
         r, c = moves[id(cfg)]

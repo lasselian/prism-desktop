@@ -94,12 +94,9 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Generate SHA256SUMS
-        run: |
-          cd dist
-          sha256sum *.dmg *.zip > SHA256SUMS
-          cat SHA256SUMS
-
+      # SHA256SUMS is not generated here: it must also cover the AppImage and
+      # Windows installer, which are uploaded by hand. Run
+      # ./update_sha256sums.sh <tag> once every asset is on the release.
       - name: Publish to GitHub Release
         # Third-party action with release write access — pinned to the v3 commit.
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
@@ -107,7 +104,6 @@ jobs:
           files: |
             dist/*.dmg
             dist/*.zip
-            dist/SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
