@@ -12,8 +12,6 @@ import sys
 import urllib.request
 from pathlib import Path
 
-import certifi
-
 MDI_CSS_URL = (
     "https://raw.githubusercontent.com/Templarian/"
     "MaterialDesign-Webfont/master/css/materialdesignicons.css"
@@ -27,7 +25,16 @@ def generate(force: bool = False) -> bool:
         return True
     try:
         print("Fetching MDI icon mapping from GitHub...")
-        context = ssl.create_default_context(cafile=certifi.where())
+        # Imported here, not at the top: build_linux.py imports this module in
+        # the host Python before the build venv exists, and that interpreter
+        # may not have certifi. Without it the system CA store is used;
+        # verification is on either way.
+        try:
+            import certifi
+            cafile = certifi.where()
+        except ImportError:
+            cafile = None
+        context = ssl.create_default_context(cafile=cafile)
         with urllib.request.urlopen(MDI_CSS_URL, context=context, timeout=30) as resp:
             css = resp.read().decode("utf-8")
 
