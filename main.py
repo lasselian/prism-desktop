@@ -75,6 +75,8 @@ if __name__ == '__main__' and ASSIST_ARG in sys.argv[1:]:
     sys.exit(1)
 
 import qasync
+from core import py315_compat
+py315_compat.apply()  # before dbus_next is imported and before any socket I/O
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QObject, pyqtSlot, QTimer, QRect, Qt
 from PyQt6.QtGui import QPixmap
