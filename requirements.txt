@@ -1,16 +1,16 @@
-PyQt6>=6.6.0
+PyQt6>=6.11.0
 pystray>=0.19.5
-aiohttp>=3.9.0
-Pillow>=10.0.0
-win11toast>=0.34; sys_platform == 'win32'
-winrt-runtime>=1.0.5; sys_platform == 'win32'
-winrt-Windows.Devices.Geolocation>=1.0.5; sys_platform == 'win32'
-pynput>=1.7.6
-requests>=2.31.0
-certifi>=2024.2.2
-keyring>=24.0.0; sys_platform != 'darwin'
-cryptography>=41.0.0
-secretstorage>=3.2; sys_platform == 'linux'
+aiohttp>=3.14.5
+Pillow>=13.0.0
+win11toast>=0.36.3; sys_platform == 'win32'
+winrt-runtime>=4.0.3; sys_platform == 'win32'
+winrt-Windows.Devices.Geolocation>=4!10.0.28000.2705; sys_platform == 'win32'
+pynput>=1.8.2
+requests>=2.34.2
+certifi>=2026.10.23
+keyring>=25.7.0; sys_platform != 'darwin'
+cryptography>=48.0.1
+secretstorage>=3.5.0; sys_platform == 'linux'
 dbus-next>=0.2.3; sys_platform == 'linux'
-qasync>=0.27.1
-psutil>=5.9.0
+qasync>=0.28.0
+psutil>=7.2.2
