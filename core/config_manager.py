@@ -80,6 +80,7 @@ class ConfigManager:
                 "mic_device_id": "",
                 "speaker_device_id": "",
                 "auto_listen": False,
+                "speak_replies": True,
             },
             "buttons": [],
             "welcome_shown": False,

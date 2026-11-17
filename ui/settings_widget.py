@@ -959,6 +959,10 @@ class SettingsWidget(QWidget):
         self.assist_auto_listen_check.setToolTip(t("settings.assist.auto_listen_tooltip"))
         toggle_form.addRow("", self.assist_auto_listen_check)
 
+        self.assist_speak_replies_check = ToggleSwitch(t("settings.assist.speak_replies_toggle"))
+        self.assist_speak_replies_check.setToolTip(t("settings.assist.speak_replies_tooltip"))
+        toggle_form.addRow("", self.assist_speak_replies_check)
+
         vbox.addWidget(toggle_frame)
 
         frame, form = self._make_pill_panel()
@@ -991,6 +995,7 @@ class SettingsWidget(QWidget):
         for widget in (
             self.assist_show_footer_check,
             self.assist_auto_listen_check,
+            self.assist_speak_replies_check,
             self.assist_mic_combo,
             self.assist_speaker_combo,
             self._assist_mic_label,
@@ -1341,6 +1346,7 @@ class SettingsWidget(QWidget):
         self.assist_enabled_check.setChecked(assist_cfg.get('enabled', False))
         self.assist_show_footer_check.setChecked(assist_cfg.get('show_in_footer', True))
         self.assist_auto_listen_check.setChecked(assist_cfg.get('auto_listen', False))
+        self.assist_speak_replies_check.setChecked(assist_cfg.get('speak_replies', True))
         self._refresh_assist_devices()
         self._select_combo_data(self.assist_mic_combo, assist_cfg.get('mic_device_id', ''))
         self._select_combo_data(self.assist_speaker_combo, assist_cfg.get('speaker_device_id', ''))
@@ -1394,6 +1400,7 @@ class SettingsWidget(QWidget):
         self.config['assist']['enabled'] = self.assist_enabled_check.isChecked()
         self.config['assist']['show_in_footer'] = self.assist_show_footer_check.isChecked()
         self.config['assist']['auto_listen'] = self.assist_auto_listen_check.isChecked()
+        self.config['assist']['speak_replies'] = self.assist_speak_replies_check.isChecked()
         self.config['assist']['mic_device_id'] = self.assist_mic_combo.currentData() or ""
         self.config['assist']['speaker_device_id'] = self.assist_speaker_combo.currentData() or ""
 

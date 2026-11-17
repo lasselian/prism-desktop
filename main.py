@@ -450,17 +450,27 @@ class PrismDesktopApp(QObject):
     def _init_assist(self):
         """Wire the Assist popup (footer button + hotkey) to AssistController."""
         overlay = self.dashboard.assist_overlay
-        overlay.text_submitted.connect(self.assist_controller.submit_text)
-        overlay.voice_start_requested.connect(self.assist_controller.start_voice)
-        overlay.voice_stop_requested.connect(self.assist_controller.stop_voice)
+        controller = self.assist_controller
+        overlay.text_submitted.connect(controller.submit_text)
+        overlay.voice_start_requested.connect(controller.start_voice)
+        overlay.voice_stop_requested.connect(controller.stop_voice)
+        overlay.cancel_requested.connect(self._on_assist_cancel_requested)
+        overlay.stop_speaking_requested.connect(controller.stop_speaking)
+        overlay.new_chat_requested.connect(self._on_assist_new_chat)
         overlay.finished.connect(self._on_assist_overlay_closed)
 
-        self.assist_controller.listening_started.connect(self._on_assist_listening_started)
-        self.assist_controller.listening_stopped.connect(self._on_assist_listening_stopped)
-        self.assist_controller.heard.connect(self._on_assist_heard)
-        self.assist_controller.thinking.connect(self._on_assist_thinking)
-        self.assist_controller.reply_ready.connect(self._on_assist_reply)
-        self.assist_controller.error.connect(self._on_assist_error)
+        controller.listening_started.connect(self._on_assist_listening_started)
+        controller.listening_stopped.connect(self._on_assist_listening_stopped)
+        controller.processing.connect(self._on_assist_processing)
+        controller.heard.connect(self._on_assist_heard)
+        controller.thinking.connect(self._on_assist_thinking)
+        controller.reply_partial.connect(self._on_assist_reply_partial)
+        controller.reply_ready.connect(self._on_assist_reply)
+        controller.notice.connect(self._on_assist_notice)
+        controller.error.connect(self._on_assist_error)
+        controller.busy_changed.connect(self._on_assist_busy_changed)
+        controller.speaking_changed.connect(self._on_assist_speaking_changed)
+        controller.input_level.connect(overlay.set_input_level)
 
     def _apply_assist_visibility(self):
         """Sync the dashboard with the current assist.enabled/show_in_footer config."""
@@ -502,24 +512,63 @@ class PrismDesktopApp(QObject):
 
     def _on_assist_listening_stopped(self):
         if self.dashboard:
-            self.dashboard.assist_overlay.set_listening(False)
+            overlay = self.dashboard.assist_overlay
+            overlay.set_listening(False)
+            if not self.assist_controller.busy:
+                overlay.set_status("")
+
+    def _on_assist_processing(self):
+        if self.dashboard:
+            self.dashboard.assist_overlay.set_status(t("assist.status.processing"))
+            self.dashboard.assist_overlay.show_typing(True)
 
     def _on_assist_heard(self, text: str):
         if self.dashboard:
-            self.dashboard.assist_overlay.set_status("")
             self.dashboard.assist_overlay.add_user_message(text)
 
     def _on_assist_thinking(self):
         if self.dashboard:
             self.dashboard.assist_overlay.set_status(t("assist.status.thinking"))
+            self.dashboard.assist_overlay.show_typing(True)
 
-    def _on_assist_reply(self, text: str):
+    def _on_assist_reply_partial(self, text: str):
         if self.dashboard:
-            self.dashboard.assist_overlay.add_assistant_message(text)
+            self.dashboard.assist_overlay.update_partial_reply(text)
+
+    def _on_assist_reply(self, text: str, is_error: bool = False):
+        if self.dashboard:
+            self.dashboard.assist_overlay.add_assistant_message(text, is_error)
+
+    def _on_assist_notice(self, message: str):
+        if self.dashboard:
+            self.dashboard.assist_overlay.show_typing(False)
+            self.dashboard.assist_overlay.set_status(message)
 
     def _on_assist_error(self, message: str):
         if self.dashboard:
             self.dashboard.assist_overlay.add_error_message(message)
+
+    def _on_assist_busy_changed(self, busy: bool):
+        if self.dashboard:
+            overlay = self.dashboard.assist_overlay
+            overlay.set_busy(busy)
+            if not busy and overlay.status_label.text() in (
+                t("assist.status.processing"), t("assist.status.thinking"),
+            ):
+                overlay.set_status("")
+
+    def _on_assist_speaking_changed(self, speaking: bool):
+        if self.dashboard:
+            self.dashboard.assist_overlay.set_speaking(speaking)
+
+    def _on_assist_cancel_requested(self):
+        self.assist_controller.cancel()
+        if self.dashboard:
+            self.dashboard.assist_overlay.set_status(t("assist.status.stopped"))
+
+    def _on_assist_new_chat(self):
+        self.assist_controller.cancel()
+        self.assist_controller.reset_conversation()
 
     def _on_assist_overlay_closed(self):
         self.assist_controller.cancel()

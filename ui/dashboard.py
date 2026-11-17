@@ -1121,7 +1121,9 @@ class Dashboard(QWidget):
         target_width = calculate_width(self.ASSIST_WIDTH_COLS)
         compact_height = max(
             self.ASSIST_MIN_HEIGHT,
-            min(self.assist_overlay.measure_target_content_height() + 2 * self.ASSIST_OVERLAY_MARGIN,
+            min(self.assist_overlay.measure_target_content_height(
+                calculate_width(self.ASSIST_WIDTH_COLS) - 2 * self.ASSIST_OVERLAY_MARGIN)
+                + 2 * self.ASSIST_OVERLAY_MARGIN,
                 self._assist_ceiling_height),
         )
 
@@ -1230,7 +1232,9 @@ class Dashboard(QWidget):
             return
         target_height = max(
             self.ASSIST_MIN_HEIGHT,
-            min(self.assist_overlay.measure_target_content_height() + 2 * self.ASSIST_OVERLAY_MARGIN,
+            min(self.assist_overlay.measure_target_content_height(
+                calculate_width(self.ASSIST_WIDTH_COLS) - 2 * self.ASSIST_OVERLAY_MARGIN)
+                + 2 * self.ASSIST_OVERLAY_MARGIN,
                 self._assist_ceiling_height),
         )
         if target_height == self.height():

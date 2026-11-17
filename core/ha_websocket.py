@@ -319,11 +319,31 @@ class HAWebSocket(QObject):
 
         return data.get('result', {})
 
-    async def run_assist_pipeline(self, conversation_id: Optional[str] = None, sample_rate: int = 16000):
-        """Start an Assist pipeline (stt -> tts) and yield its events as they
-        arrive (run-start, stt-start, stt-end, intent-end, tts-end, run-end, error, ...).
-        Stops iterating after a 'run-end' or 'error' event. `sample_rate` must
-        match the rate of the audio actually sent via send_stt_audio."""
+    # No pipeline event for this long means HA (or the connection) has
+    # stalled; HA's own run timeout (default 300s) is far too long to leave
+    # the Assist popup stuck on "Thinking…".
+    PIPELINE_IDLE_TIMEOUT = 90.0
+
+    async def run_assist_pipeline(
+        self,
+        conversation_id: Optional[str] = None,
+        sample_rate: int = 16000,
+        *,
+        text: Optional[str] = None,
+        end_stage: str = "tts",
+        idle_timeout: Optional[float] = None,
+    ):
+        """Start an Assist pipeline and yield its events as they arrive
+        (run-start, stt-*, intent-start, intent-progress, intent-end, tts-*,
+        run-end, error).
+
+        With `text`, the run starts at the intent stage, so typed messages go
+        to the same (preferred) pipeline and conversation agent as voice.
+        Otherwise it starts at STT and `sample_rate` must match the rate of
+        the audio actually sent via send_stt_audio.
+
+        Stops after 'run-end' or 'error'. If no event arrives within
+        `idle_timeout` seconds, yields a synthetic error with code 'timeout'."""
         if not self._ws or self._ws.closed:
             raise ConnectionError("WebSocket is not connected")
 
@@ -334,17 +354,22 @@ class HAWebSocket(QObject):
         payload = {
             "id": msg_id,
             "type": "assist_pipeline/run",
-            "start_stage": "stt",
-            "end_stage": "tts",
-            "input": {"sample_rate": sample_rate},
+            "start_stage": "intent" if text is not None else "stt",
+            "end_stage": end_stage,
+            "input": {"text": text} if text is not None else {"sample_rate": sample_rate},
         }
         if conversation_id:
             payload["conversation_id"] = conversation_id
 
+        idle = self.PIPELINE_IDLE_TIMEOUT if idle_timeout is None else idle_timeout
         try:
             await self._send(payload)
             while True:
-                event = await queue.get()
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=idle)
+                except asyncio.TimeoutError:
+                    yield {'type': 'error', 'data': {'code': 'timeout', 'message': ''}}
+                    break
                 yield event
                 if event.get('type') in ('run-end', 'error'):
                     break
