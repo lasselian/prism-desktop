@@ -154,20 +154,25 @@ class NotificationManager(QObject):
         return None
 
     def _register_windows_app(self) -> None:
-        """Register app with Windows so it appears in notification settings."""
+        """Register the app id with Windows so notifications show Prism's
+        name and icon and the app is listed in notification settings.
+
+        win11toast has no register(), so write the AppUserModelId key
+        under HKCU directly (no admin rights needed)."""
         try:
-            from win11toast import register
-            icon_path = self._get_icon_path()
-            kwargs = {}
-            if icon_path:
-                kwargs['icon'] = icon_path
-            register(self.APP_ID, self.APP_NAME, **kwargs)
-            self._windows_registered = True
+            import winreg
+            key_path = rf"Software\Classes\AppUserModelId\{self.APP_ID}"
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+                winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, self.APP_NAME)
+                icon_path = self._get_icon_path()
+                if icon_path:
+                    winreg.SetValueEx(key, "IconUri", 0, winreg.REG_SZ, icon_path)
             logger.info("[Notify] Registered Prism Desktop with Windows notification system")
         except Exception as e:
-            # Don't retry — toasts work fine without this.
-            self._windows_registered = True
+            # Don't retry; toasts work fine without this.
             logger.warning(f"[Notify] Windows app registration skipped: {e}")
+        finally:
+            self._windows_registered = True
 
     def _show_windows(self, title: str, message: str, image_path: Optional[str] = None,
                       actions: Optional[list] = None, action_data: Optional[dict] = None):
