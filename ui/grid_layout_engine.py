@@ -29,77 +29,44 @@ class GridLayoutEngine:
         """
         occupied = set()
         placements = []
-        self._forbidden_cells = set()  # Track cells blocked by out-of-bounds buttons
+        self._forbidden_cells = set()  # cells blocked by out-of-bounds or colliding buttons
 
-        # Separate configured buttons from empty Add buttons
-        configured_buttons = []
-        empty_buttons = []
+        configured = [b for b in buttons if b.config and is_real_button(b.config)]
+        empty = [b for b in buttons if not (b.config and is_real_button(b.config))]
 
-        for button in buttons:
-            if button.config and (button.config.get('entity_id') or button.config.get('type') == 'pin_window'):
-                configured_buttons.append(button)
-            else:
-                empty_buttons.append(button)
+        # Pass 1: configured buttons at their (row, col), in (row, col) order.
+        configured.sort(key=lambda b: (b.config.get('row', 0), b.config.get('col', 0)))
+        for button in configured:
+            self._place_configured(button, rows, occupied, placements)
 
-        # Sort configured buttons by (row, col) for deterministic placement
-        configured_buttons.sort(key=lambda b: (b.config.get('row', 0), b.config.get('col', 0)))
-
-        # Pass 1: Place configured buttons at their (row, col)
-        for button in configured_buttons:
-            span_x = getattr(button, 'span_x', 1)
-            span_y = getattr(button, 'span_y', 1)
-
-            r = button.config.get('row', 0)
-            c = button.config.get('col', 0)
-
-            # Visibility check: skip if ANY part falls outside current grid
-            if c + span_x > self.cols or r + span_y > rows:
-                # Button is outside visible area — don't place it.
-                # Mark the cells that ARE within the grid as forbidden
-                # so they show a blocked indicator instead of an Add button.
-                for dy in range(span_y):
-                    for dx in range(span_x):
-                        cell_r = r + dy
-                        cell_c = c + dx
-                        if cell_r < rows and cell_c < self.cols:
-                            self._forbidden_cells.add((cell_r, cell_c))
-                            # Do NOT mark as occupied, so Pass 2 fills it with an empty button
-                            # which we then convert to 'forbidden' in the dashboard.
-                continue
-
-            # Check if cells are available
-            if self._can_place(r, c, span_x, span_y, rows, occupied):
-                self._mark_occupied(r, c, span_x, span_y, occupied)
-                placements.append((button, r, c, span_y, span_x))
-            else:
-                # Collision detected!
-                # Mark visible parts of THIS button as forbidden if they aren't occupied
-                for dy in range(span_y):
-                    for dx in range(span_x):
-                        cell_r = r + dy
-                        cell_c = c + dx
-                        # If cell is valid and NOT occupied by a higher-priority button
-                        if cell_r < rows and cell_c < self.cols:
-                            if (cell_r, cell_c) not in occupied:
-                                self._forbidden_cells.add((cell_r, cell_c))
-
-        # Pass 2: Fill empty holes with "Add" buttons
-        empty_idx = 0
-        total_cells = rows * self.cols
-
-        for i in range(total_cells):
-            r = i // self.cols
-            c = i % self.cols
-
-            if (r, c) not in occupied:
-                if empty_idx < len(empty_buttons):
-                    btn = empty_buttons[empty_idx]
-                    empty_idx += 1
-
-                    placements.append((btn, r, c, 1, 1))
-                    occupied.add((r, c))
-
+        # Pass 2: fill the remaining holes with empty "Add" buttons.
+        free_cells = [divmod(i, self.cols) for i in range(rows * self.cols) if divmod(i, self.cols) not in occupied]
+        # Either list may run out first: leftover cells stay empty, leftover buttons unplaced.
+        for button, (r, c) in zip(empty, free_cells, strict=False):
+            placements.append((button, r, c, 1, 1))
+            occupied.add((r, c))
         return placements
+
+    def _place_configured(self, button, rows: int, occupied: set, placements: list) -> None:
+        span_x = getattr(button, 'span_x', 1)
+        span_y = getattr(button, 'span_y', 1)
+        r = button.config.get('row', 0)
+        c = button.config.get('col', 0)
+
+        if c + span_x > self.cols or r + span_y > rows:
+            # Partly outside the visible grid: not placed. Its cells inside the grid
+            # become forbidden but stay unoccupied, so pass 2 fills them with empty
+            # buttons that the dashboard shows as blocked instead of "Add".
+            self._forbid_visible_cells(_cells(r, c, span_x, span_y), rows)
+        elif self._can_place(r, c, span_x, span_y, rows, occupied):
+            self._mark_occupied(r, c, span_x, span_y, occupied)
+            placements.append((button, r, c, span_y, span_x))
+        else:
+            # Collision: its visible cells not taken by an earlier button are forbidden.
+            self._forbid_visible_cells(_cells(r, c, span_x, span_y) - occupied, rows)
+
+    def _forbid_visible_cells(self, cells: set, rows: int) -> None:
+        self._forbidden_cells.update((r, c) for r, c in cells if r < rows and c < self.cols)
 
     def get_forbidden_cells(self) -> set:
         """Return the set of (row, col) cells that are forbidden (blocked by out-of-bounds buttons)."""
@@ -141,81 +108,27 @@ class GridLayoutEngine:
         if not resizing_btn.config:
             return []
 
-        src_r = resizing_btn.config.get('row', 0)
-        src_c = resizing_btn.config.get('col', 0)
-
-        # 1. Compute the footprint of the resized button
-        new_footprint = set()
-        for dy in range(new_span_y):
-            for dx in range(new_span_x):
-                new_footprint.add((src_r + dy, src_c + dx))
-
-        # 2. Identify displaced buttons (configured buttons whose cells overlap)
-        displaced = []
-        for btn in all_buttons:
-            if btn is resizing_btn:
-                continue
-            if not btn.config or not (btn.config.get('entity_id') or btn.config.get('type') == 'pin_window'):
-                continue
-
-            br = btn.config.get('row', 0)
-            bc = btn.config.get('col', 0)
-            bsx = getattr(btn, 'span_x', btn.config.get('span_x', 1))
-            bsy = getattr(btn, 'span_y', btn.config.get('span_y', 1))
-
-            # Check if any cell of this button overlaps the new footprint
-            overlaps = False
-            for dy in range(bsy):
-                for dx in range(bsx):
-                    if (br + dy, bc + dx) in new_footprint:
-                        overlaps = True
-                        break
-                if overlaps:
-                    break
-
-            if overlaps:
-                displaced.append(btn)
-
+        footprint = _cells(resizing_btn.config.get('row', 0), resizing_btn.config.get('col', 0), new_span_x, new_span_y)
+        others = [b for b in all_buttons if b is not resizing_btn and b.config and is_real_button(b.config)]
+        displaced = [b for b in others if _cells_of(b) & footprint]
         if not displaced:
-            return []  # No conflicts
+            return []  # no conflicts
 
-        # 3. Build occupied set from all non-displaced configured buttons + resized button
-        occupied = set()
+        # Everything that stays put, plus the resized button's new footprint.
+        displaced_ids = {id(b) for b in displaced}
+        occupied = set(footprint)
+        for btn in others:
+            if id(btn) not in displaced_ids:
+                occupied |= _cells_of(btn)
 
-        # Mark resized button's new footprint
-        for cell in new_footprint:
-            occupied.add(cell)
-
-        # Mark all other configured buttons that are NOT displaced
-        displaced_set = set(id(b) for b in displaced)
-        for btn in all_buttons:
-            if btn is resizing_btn:
-                continue
-            if not btn.config or not (btn.config.get('entity_id') or btn.config.get('type') == 'pin_window'):
-                continue
-            if id(btn) in displaced_set:
-                continue
-
-            br = btn.config.get('row', 0)
-            bc = btn.config.get('col', 0)
-            bsx = getattr(btn, 'span_x', btn.config.get('span_x', 1))
-            bsy = getattr(btn, 'span_y', btn.config.get('span_y', 1))
-            self._mark_occupied(br, bc, bsx, bsy, occupied)
-
-        # 4. Try to relocate each displaced button
         relocations = []
         for btn in displaced:
-            bsx = getattr(btn, 'span_x', btn.config.get('span_x', 1))
-            bsy = getattr(btn, 'span_y', btn.config.get('span_y', 1))
-
-            new_r, new_c = self._find_first_available(bsx, bsy, rows, occupied)
+            span_x, span_y = _spans(btn)
+            new_r, new_c = self._find_first_available(span_x, span_y, rows, occupied)
             if new_r is None:
-                # No room — block the resize
-                return None
-
-            self._mark_occupied(new_r, new_c, bsx, bsy, occupied)
+                return None  # no room: block the resize
+            self._mark_occupied(new_r, new_c, span_x, span_y, occupied)
             relocations.append((btn, new_r, new_c))
-
         return relocations
 
     # --- Helper Methods ---
@@ -248,8 +161,23 @@ class GridLayoutEngine:
         return None, None
 
 
-def _is_real_button(cfg: dict) -> bool:
+def is_real_button(cfg: dict) -> bool:
+    """A tile bound to an entity, or the local pin-window tile; not an empty slot."""
     return bool(cfg.get('entity_id') or cfg.get('type') == 'pin_window')
+
+
+def _cells(r: int, c: int, span_x: int, span_y: int) -> set:
+    return {(r + dy, c + dx) for dy in range(span_y) for dx in range(span_x)}
+
+
+def _spans(btn) -> tuple:
+    """(span_x, span_y) of a button, preferring its live spans over the config."""
+    return getattr(btn, 'span_x', btn.config.get('span_x', 1)), getattr(btn, 'span_y', btn.config.get('span_y', 1))
+
+
+def _cells_of(btn) -> set:
+    span_x, span_y = _spans(btn)
+    return _cells(btn.config.get('row', 0), btn.config.get('col', 0), span_x, span_y)
 
 
 def plan_move(configs: list, source: dict, target, tgt_row: int, tgt_col: int, cols: int, rows: int):
@@ -270,7 +198,7 @@ def plan_move(configs: list, source: dict, target, tgt_row: int, tgt_col: int, c
     engine = GridLayoutEngine(cols=cols)
     occupied = set()
     for cfg in configs:
-        if id(cfg) in moves or not _is_real_button(cfg):
+        if id(cfg) in moves or not is_real_button(cfg):
             continue
         engine._mark_occupied(
             cfg.get('row', 0), cfg.get('col', 0), cfg.get('span_x', 1), cfg.get('span_y', 1), occupied
