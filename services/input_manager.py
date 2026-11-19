@@ -8,7 +8,8 @@ import sys
 import logging
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from pynput import keyboard, mouse
-import re
+
+from core.shortcuts import format_combo, key_matches, modifier_name, parse_shortcut
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +210,7 @@ class InputManager(QObject):
 
         # VK-based keys like <102> (numpad with modifiers) cannot be reliably matched
         # by GlobalHotKeys on all platforms — use a manual listener instead.
-        if re.search(r'<\d+>', shortcut_str):
+        if parse_shortcut(shortcut_str).vk is not None:
             self._start_vk_keyboard_listener(shortcut_str)
             return
 
@@ -225,54 +226,24 @@ class InputManager(QObject):
         GlobalHotKeys can misidentify these on some Linux/X11 setups because
         modifier keys suppress the character output during recording, yielding a
         VK-only KeyCode that may not round-trip through GlobalHotKeys matching."""
-        required_mods = set()
-        target_vk = None
-
-        for part in shortcut_str.split('+'):
-            part = part.strip()
-            if part == '<ctrl>':
-                required_mods.add('ctrl')
-            elif part == '<alt>':
-                required_mods.add('alt')
-            elif part == '<shift>':
-                required_mods.add('shift')
-            elif part == '<cmd>':
-                required_mods.add('cmd')
-            else:
-                m = re.fullmatch(r'<(\d+)>', part)
-                if m:
-                    target_vk = int(m.group(1))
-
+        shortcut = parse_shortcut(shortcut_str)
+        target_vk = shortcut.vk
         if target_vk is None:
             print(f"InputManager: Could not parse VK from hotkey '{shortcut_str}'")
             return
 
-        print(f"InputManager: VK-based listener — mods={required_mods}, vk={target_vk}")
+        print(f"InputManager: VK-based listener — mods={set(shortcut.mods)}, vk={target_vk}")
         pressed_mods = set()
 
-        def _mod_name(key):
-            name = getattr(key, 'name', None) or ''
-            if name.startswith('ctrl'):
-                return 'ctrl'
-            if name.startswith('alt'):
-                return 'alt'
-            if name.startswith('shift'):
-                return 'shift'
-            if name.startswith('cmd') or name == 'win':
-                return 'cmd'
-            return None
-
         def on_press(key):
-            mod = _mod_name(key)
+            mod = modifier_name(key)
             if mod:
                 pressed_mods.add(mod)
-            else:
-                vk = getattr(key, 'vk', None)
-                if vk == target_vk and pressed_mods >= required_mods:
-                    self._on_trigger()
+            elif getattr(key, 'vk', None) == target_vk and pressed_mods >= shortcut.mods:
+                self._on_trigger()
 
         def on_release(key):
-            mod = _mod_name(key)
+            mod = modifier_name(key)
             if mod:
                 pressed_mods.discard(mod)
 
@@ -305,36 +276,39 @@ class InputManager(QObject):
             return
         if self._is_unsupported_wayland_keyboard_shortcut():
             return
-
         shortcut_type = self._current_shortcut.get('type')
+        if shortcut_type == 'keyboard':
+            self._revive_keyboard_backend()
+        elif shortcut_type == 'mouse':
+            self._revive_mouse_listener()
 
-        if shortcut_type == 'keyboard' and self._keyboard_listener:
+    def _revive_keyboard_backend(self):
+        if self._keyboard_listener:
             if not self._keyboard_listener.is_alive():
                 print("InputManager: Keyboard listener died, restarting...")
                 self._keyboard_listener = None
                 self._start_keyboard_listener()
-        elif shortcut_type == 'keyboard' and self._wayland_shortcut:
-            if not self._wayland_shortcut.is_alive():
-                if getattr(self._wayland_shortcut, 'declined', False):
-                    # The portal said no; restarting would only re-open its dialog every
-                    # 30s. Stay quiet until the shortcut is changed or restored.
-                    return
-                print("InputManager: Wayland shortcut backend died, restarting...")
-                self._wayland_shortcut = None
-                self._start_keyboard_listener()
-        elif shortcut_type == 'mouse' and self._mouse_listener:
-            if not self._mouse_listener.is_alive():
-                print("InputManager: Mouse listener died, restarting...")
-                self._mouse_listener = None
-                self._start_mouse_listener()
-        elif shortcut_type == 'keyboard' and not self._keyboard_listener and not self._wayland_shortcut:
+        elif self._wayland_shortcut:
+            # A declined portal stays down: restarting would only re-open its dialog
+            # every 30s. Stay quiet until the shortcut is changed or restored.
+            if self._wayland_shortcut.is_alive() or getattr(self._wayland_shortcut, 'declined', False):
+                return
+            print("InputManager: Wayland shortcut backend died, restarting...")
+            self._wayland_shortcut = None
+            self._start_keyboard_listener()
+        else:
             print("InputManager: Keyboard listener missing, restarting...")
             self._start_keyboard_listener()
-        elif shortcut_type == 'mouse' and not self._mouse_listener:
-            print("InputManager: Mouse listener missing, restarting...")
-            self._start_mouse_listener()
 
-    # --- Recording Logic ---
+    def _revive_mouse_listener(self):
+        if self._mouse_listener and self._mouse_listener.is_alive():
+            return
+        if self._mouse_listener:
+            print("InputManager: Mouse listener died, restarting...")
+            self._mouse_listener = None
+        else:
+            print("InputManager: Mouse listener missing, restarting...")
+        self._start_mouse_listener()
 
     def _on_record_key_press(self, key):
         """Handle key press during recording."""
@@ -374,90 +348,7 @@ class InputManager(QObject):
 
     def _format_combo(self, keys):
         """Format a set of keys into a pynput hotkey string (e.g., '<ctrl>+<alt>+h')."""
-        mods = []
-        char_key = None
-
-        has_ctrl = any(getattr(k, 'name', '').startswith('ctrl') for k in keys)
-        has_alt = any(getattr(k, 'name', '').startswith('alt') for k in keys)
-        has_shift = any(getattr(k, 'name', '').startswith('shift') for k in keys)
-        has_cmd = any(getattr(k, 'name', '').startswith('cmd') or getattr(k, 'name', '') == 'win' for k in keys)
-
-        if has_ctrl:
-            mods.append('<ctrl>')
-        if has_alt:
-            mods.append('<alt>')
-        if has_shift:
-            mods.append('<shift>')
-        if has_cmd:
-            mods.append('<cmd>')
-
-        potential_chars = []
-
-        for k in keys:
-            if hasattr(k, 'name') and (
-                k.name.startswith('ctrl')
-                or k.name.startswith('alt')
-                or k.name.startswith('shift')
-                or k.name.startswith('cmd')
-                or k.name == 'win'
-            ):
-                continue
-
-            # Found a character or other special key (e.g. F1, esc, space)
-            vk = getattr(k, 'vk', None)
-            char = getattr(k, 'char', None)
-
-            is_standard_vk = vk and ((48 <= vk <= 57) or (65 <= vk <= 90))
-
-            key_str = ""
-            if is_standard_vk:
-                if not char or ord(char) < 32:
-                    key_str = chr(vk).lower()
-                else:
-                    key_str = char.lower()
-            elif char and ord(char) >= 32:
-                # Non-standard VK with a char (e.g. numpad 6 → VK 102, char '6').
-                # Prefer the VK form so the listener matches by VK regardless of
-                # whether modifier keys suppress the char during the trigger press.
-                if vk:
-                    key_str = f'<{vk}>'
-                else:
-                    key_str = char.lower()
-            elif hasattr(k, 'name'):
-                key_str = f"<{k.name}>"
-            else:
-                key_str = str(k)
-
-            potential_chars.append(key_str)
-
-        if not potential_chars and not mods:
-            return None
-
-        # Sort to ensure determinism if multiple keys are pressed
-        potential_chars.sort()
-
-        if potential_chars:
-            char_key = potential_chars[0]
-
-        if not char_key:
-            # Only modifiers? Don't record yet
-            return None
-
-        # Sort mods to be deterministic (already done by append order above)
-        # pynput order convention: <ctrl>+<alt>+<shift>+key
-
-        parts = []
-        if '<ctrl>' in mods:
-            parts.append('<ctrl>')
-        if '<alt>' in mods:
-            parts.append('<alt>')
-        if '<shift>' in mods:
-            parts.append('<shift>')
-        if '<cmd>' in mods:
-            parts.append('<cmd>')
-        parts.append(char_key)
-
-        return '+'.join(parts)
+        return format_combo(keys)
 
     def _should_use_wayland_portal(self) -> bool:
         """Use the portal backend for keyboard shortcuts on Linux Wayland."""
@@ -529,23 +420,10 @@ class ButtonShortcutManager(QObject):
             self._listener = None
         self._pressed_mods.clear()
 
-    @staticmethod
-    def _mod_name(key):
-        name = getattr(key, 'name', None) or ''
-        if name.startswith('ctrl'):
-            return 'ctrl'
-        if name.startswith('alt'):
-            return 'alt'
-        if name.startswith('shift'):
-            return 'shift'
-        if name.startswith('cmd') or name == 'win':
-            return 'cmd'
-        return None
-
     def _on_press(self, key):
         if self._paused:
             return
-        mod = self._mod_name(key)
+        mod = modifier_name(key)
         if mod:
             self._pressed_mods.add(mod)
             return
@@ -555,53 +433,12 @@ class ButtonShortcutManager(QObject):
                 break
 
     def _on_release(self, key):
-        mod = self._mod_name(key)
+        mod = modifier_name(key)
         if mod:
             self._pressed_mods.discard(mod)
 
     def _matches(self, key, shortcut_str: str) -> bool:
-        required_mods = set()
-        target = None
-
-        for part in shortcut_str.split('+'):
-            part = part.strip()
-            if part == '<ctrl>':
-                required_mods.add('ctrl')
-            elif part == '<alt>':
-                required_mods.add('alt')
-            elif part == '<shift>':
-                required_mods.add('shift')
-            elif part == '<cmd>':
-                required_mods.add('cmd')
-            else:
-                target = part
-
-        if required_mods != self._pressed_mods or target is None:
+        shortcut = parse_shortcut(shortcut_str)
+        if shortcut.key is None or shortcut.mods != self._pressed_mods:
             return False
-
-        # VK-based key like <102>
-        m = re.fullmatch(r'<(\d+)>', target)
-        if m:
-            return getattr(key, 'vk', None) == int(m.group(1))
-
-        # Single printable character: 'f', '6', etc.
-        if len(target) == 1:
-            char = getattr(key, 'char', None)
-            if char and char.lower() == target.lower():
-                return True
-            vk = getattr(key, 'vk', None)
-            # Only use chr(vk) for standard letter/digit VKs where it maps correctly.
-            # Numpad VKs (96-105) are in this byte range but chr() gives wrong values.
-            is_standard_vk = vk and ((48 <= vk <= 57) or (65 <= vk <= 90))
-            if is_standard_vk:
-                try:
-                    return chr(vk).lower() == target.lower()
-                except Exception:
-                    pass
-            return False
-
-        # Named special key: <f1>, <space>, <esc>, etc.
-        if target.startswith('<') and target.endswith('>'):
-            return getattr(key, 'name', None) == target[1:-1]
-
-        return False
+        return key_matches(key, shortcut.key)

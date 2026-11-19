@@ -78,6 +78,7 @@ from ui.visuals.dashboard_effects import (
     draw_liquid_mercury_border,
     capture_glass_background,
 )
+from ui.utils.key_events import event_matches_shortcut
 
 logger = logging.getLogger(__name__)
 
@@ -1501,112 +1502,7 @@ class Dashboard(QWidget):
 
     def matches_pynput_shortcut(self, event, shortcut_str: str) -> bool:
         """Check if QKeyEvent matches pynput shortcut string."""
-        if not shortcut_str:
-            return False
-
-        parts = shortcut_str.split('+')
-
-        # Check modifiers
-        has_ctrl = '<ctrl>' in parts
-        has_alt = '<alt>' in parts
-        has_shift = '<shift>' in parts
-        # has_cmd/win ignored for simplicity or added if needed
-
-        modifiers = event.modifiers()
-
-        if has_ctrl != bool(modifiers & Qt.KeyboardModifier.ControlModifier):
-            return False
-        if has_alt != bool(modifiers & Qt.KeyboardModifier.AltModifier):
-            return False
-        if has_shift != bool(modifiers & Qt.KeyboardModifier.ShiftModifier):
-            return False
-
-        # Check key
-        # Extract the non-modifier part
-        target_key = None
-        for p in parts:
-            if p not in ['<ctrl>', '<alt>', '<shift>', '<cmd>']:
-                target_key = p
-                break
-
-        if not target_key:
-            return False  # Modifier only?
-
-        # Normalize target_key (pynput format) vs event
-        # pynput: 'a', '1', '<esc>', '<space>', '<f1>'
-
-        # Handle special keys
-        key = event.key()
-        text = event.text().lower()
-
-        # 1. Single character match (letters, numbers)
-        if len(target_key) == 1:
-            # Prefer text() match for characters to handle layouts,
-            # BUT text() might be empty if modifiers are held (e.g. Ctrl+A might give \x01)
-            # So fallback to Key code mapping if needed.
-
-            # Simple check:
-            if text and text == target_key:
-                return True
-
-            # Fallback: Check key code for letters/digits if text is control char
-            if key >= 32 and key <= 126:  # Ascii range roughly
-                try:
-                    # Qt Key to char
-                    if chr(key).lower() == target_key:
-                        return True
-                except Exception:
-                    pass
-
-            return False
-
-        # 2. Special keys (<esc>, <f1>, etc) and raw VK codes (<102>)
-        if target_key.startswith('<') and target_key.endswith('>'):
-            clean_key = target_key[1:-1].lower()
-
-            # Numeric VK code recorded from a key whose char was suppressed by
-            # modifiers (e.g. numpad keys). Compare against the platform native VK.
-            try:
-                target_vk = int(clean_key)
-                if event.nativeVirtualKey() == target_vk:
-                    return True
-            except ValueError:
-                pass
-
-            # Map common named keys
-            map_special = {
-                'esc': Qt.Key.Key_Escape,
-                'space': Qt.Key.Key_Space,
-                'enter': Qt.Key.Key_Return,
-                'backspace': Qt.Key.Key_Backspace,
-                'tab': Qt.Key.Key_Tab,
-                'up': Qt.Key.Key_Up,
-                'down': Qt.Key.Key_Down,
-                'left': Qt.Key.Key_Left,
-                'right': Qt.Key.Key_Right,
-                'f1': Qt.Key.Key_F1,
-                'f2': Qt.Key.Key_F2,
-                'f3': Qt.Key.Key_F3,
-                'f4': Qt.Key.Key_F4,
-                'f5': Qt.Key.Key_F5,
-                'f6': Qt.Key.Key_F6,
-                'f7': Qt.Key.Key_F7,
-                'f8': Qt.Key.Key_F8,
-                'f9': Qt.Key.Key_F9,
-                'f10': Qt.Key.Key_F10,
-                'f11': Qt.Key.Key_F11,
-                'f12': Qt.Key.Key_F12,
-                'delete': Qt.Key.Key_Delete,
-                'home': Qt.Key.Key_Home,
-                'end': Qt.Key.Key_End,
-                'page_up': Qt.Key.Key_PageUp,
-                'page_down': Qt.Key.Key_PageDown,
-            }
-
-            if map_special.get(clean_key) == key:
-                return True
-
-        return False
+        return event_matches_shortcut(event, shortcut_str)
 
     def set_buttons(self, configs: list[dict], appearance_config: dict | None = None, update_height=True):
         """Set button configurations using (row, col) based positioning."""
