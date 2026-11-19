@@ -296,7 +296,7 @@ class Dashboard(QWidget):
         """Whether moving/swapping `source_btn` onto `target_slot` leaves a valid layout."""
         if not source_btn or not source_btn.config:
             return False
-        target_btn = next((b for b in self.buttons if b.slot == target_slot), None)
+        target_btn = self._button_at(target_slot)
         target_cfg = (
             target_btn.config
             if (
@@ -327,102 +327,51 @@ class Dashboard(QWidget):
         """Track drag movement."""
         if not event.mimeData().hasFormat(MIME_TYPE):
             return
-
-        # Decode source slot to get span
-        data = event.mimeData().data(MIME_TYPE)
-        stream = QDataStream(data, QIODevice.OpenModeFlag.ReadOnly)
+        # The source slot travels in the drag data; its button gives the spans.
+        stream = QDataStream(event.mimeData().data(MIME_TYPE), QIODevice.OpenModeFlag.ReadOnly)
         source_slot = stream.readInt32()
-
-        source_btn = next((b for b in self.buttons if b.slot == source_slot), None)
+        source_btn = self._button_at(source_slot)
         if not source_btn:
             event.ignore()
             return
-
-        # Check target
-        drop_pos = event.position().toPoint()
-        target_slot = -1
-
-        # 1. Check if over a valid button (occupied or empty)
-        for btn in self.buttons:
-            if not btn.isVisible():
-                continue
-            if btn.geometry().contains(drop_pos):
-                target_slot = btn.slot
-                target_btn = btn
-                break
-
-        # 2. If not over a button, check if within grid area (e.g. gap) and map to closest slot?
-        # For now, require being over a slot.
-
-        if target_slot != -1:
-            # Check bounds: Does source button fit at target position?
-            target_row = target_slot // self._cols
-            target_col = target_slot % self._cols
-
-            if target_row + source_btn.span_y > self._rows:
-                event.ignore()
-                return
-            if target_col + source_btn.span_x > self._cols:
-                event.ignore()
-                return
-
-            # Block if target is forbidden
-            target_btn = next((b for b in self.buttons if b.slot == target_slot), None)
-            if target_btn and target_btn.config and target_btn.config.get('type') == 'forbidden':
-                event.ignore()
-                return
-
-            # Block moves that would overlap another tile (spans included)
-            if target_slot != source_slot and not self._drop_allowed(source_btn, target_slot):
-                event.ignore()
-                return
-
+        # Only a drop onto a slot is checked; the gaps between tiles accept for now.
+        target_slot = self._slot_at(event.position().toPoint())
+        if target_slot != -1 and self._drop_rejected(source_slot, source_btn, target_slot):
+            event.ignore()
+            return
         event.acceptProposedAction()
+
+    def _button_at(self, slot: int):
+        return next((b for b in self.buttons if b.slot == slot), None)
+
+    def _slot_at(self, pos) -> int:
+        """Slot of the visible button under pos, or -1."""
+        return next((b.slot for b in self.buttons if b.isVisible() and b.geometry().contains(pos)), -1)
+
+    def _drop_rejected(self, source_slot: int, source_btn, target_slot: int) -> bool:
+        """True if the source can't land on target_slot: off the grid, on a
+        forbidden slot, or (when it moves) on top of another tile."""
+        if source_btn:
+            target_row, target_col = divmod(target_slot, self._cols)
+            if target_row + source_btn.span_y > self._rows or target_col + source_btn.span_x > self._cols:
+                return True
+        target_btn = self._button_at(target_slot)
+        if target_btn and target_btn.config and target_btn.config.get('type') == 'forbidden':
+            return True
+        return target_slot != source_slot and not self._drop_allowed(source_btn, target_slot)
 
     def dropEvent(self, event):
         """Handle button drop."""
         if not event.mimeData().hasFormat(MIME_TYPE):
             return
-
         source_slot = event.source().slot
-
-        # Determine target slot based on drop position
-        drop_pos = event.position().toPoint()
-
-        target_slot = -1
-
-        # Find button under mouse
-        for btn in self.buttons:
-            if not btn.isVisible():
-                continue
-            if btn.geometry().contains(drop_pos):
-                target_slot = btn.slot
-                break
-
-        if target_slot != -1 and target_slot != source_slot:
-            # 1. Bounds Check
-            source_btn = next((b for b in self.buttons if b.slot == source_slot), None)
-
-            if source_btn:
-                target_row = target_slot // self._cols
-                target_col = target_slot % self._cols
-
-                if target_row + source_btn.span_y > self._rows:
-                    return
-                if target_col + source_btn.span_x > self._cols:
-                    return
-
-            # 2. Forbidden Check
-            target_btn = next((b for b in self.buttons if b.slot == target_slot), None)
-            if target_btn and target_btn.config and target_btn.config.get('type') == 'forbidden':
-                return
-
-            # 3. Overlap Check
-            if not self._drop_allowed(source_btn, target_slot):
-                return
-
-            self.on_button_dropped(source_slot, target_slot)
-            event.acceptProposedAction()
+        target_slot = self._slot_at(event.position().toPoint())
+        if target_slot in (-1, source_slot):
+            return
+        if self._drop_rejected(source_slot, self._button_at(source_slot), target_slot):
+            return
+        self.on_button_dropped(source_slot, target_slot)
+        event.acceptProposedAction()
 
     def get_anim_height(self):
         return self.height()
@@ -596,7 +545,7 @@ class Dashboard(QWidget):
         """Handle resize request from a button."""
 
         # Find the button and its config by runtime slot
-        source_btn = next((b for b in self.buttons if b.slot == slot_idx), None)
+        source_btn = self._button_at(slot_idx)
         if not source_btn or not source_btn.config:
             return
 
@@ -714,61 +663,48 @@ class Dashboard(QWidget):
 
     def _on_height_anim_finished(self):
         """Called when height animation finishes. Apply grid changes (Phase 2)."""
-        # Apply pending row update if any
         if self._pending_rows_update is not None:
-            new_rows = self._pending_rows_update
-            self._rows = new_rows
+            self._apply_pending_rows()
 
-            # Ensure button pool matches grid size
-            target_slots = new_rows * self._cols
-            current_slots = len(self.buttons)
-
-            new_buttons = []
-
-            if target_slots > current_slots:
-                for i in range(current_slots, target_slots):
-                    button = self._get_button_from_pool(i)
-                    self.buttons.append(button)
-                    new_buttons.append(button)
-
-            elif target_slots < current_slots:
-                for _ in range(current_slots - 1, target_slots - 1, -1):
-                    btn = self.buttons.pop()
-                    self._recycle_button(btn)
-
-            self.set_buttons(self._all_button_configs, self.config.get('appearance', {}), update_height=False)
-            self.update_style()
-
-            for button in self.buttons:
-                button.set_faded(1.0)
-
-            new_empty_indices = []
-            if new_buttons:
-                for button in new_buttons:
-                    if not (button.config and button.config.get('entity_id')):
-                        button.set_faded(0.0)
-                        new_empty_indices.append(button.slot)
-                if new_empty_indices:
-                    self._fade_in_buttons(new_empty_indices)
-
-            self.rows_changed.emit()
-            self._pending_rows_update = None
-
-            # Lock size to new calculated height
-            self.setFixedSize(self._fixed_width, self._calculate_target_height())
-
-            if self._current_view == 'grid':
-                self._fade_in_footer()
-
-        # Update Config & Persist (Rows)
-        if 'appearance' not in self.config:
-            self.config['appearance'] = {}
-        self.config['appearance']['rows'] = self._rows
+        self.config.setdefault('appearance', {})['rows'] = self._rows
         logger.info(f"Saving rows={self._rows}")
         self.save_config_requested.emit()
 
         # Chain to width resize check
         self._check_pending_resize()
+
+    def _apply_pending_rows(self):
+        self._rows = self._pending_rows_update
+        new_buttons = self._resize_button_pool(self._rows * self._cols)
+        self.set_buttons(self._all_button_configs, self.config.get('appearance', {}), update_height=False)
+        self.update_style()
+
+        for button in self.buttons:
+            button.set_faded(1.0)
+        # New empty slots fade in instead of popping in.
+        new_empty = [b for b in new_buttons if not (b.config and b.config.get('entity_id'))]
+        for button in new_empty:
+            button.set_faded(0.0)
+        if new_empty:
+            self._fade_in_buttons([b.slot for b in new_empty])
+
+        self.rows_changed.emit()
+        self._pending_rows_update = None
+        # Lock size to new calculated height
+        self.setFixedSize(self._fixed_width, self._calculate_target_height())
+        if self._current_view == 'grid':
+            self._fade_in_footer()
+
+    def _resize_button_pool(self, target_slots: int) -> list:
+        """Grow or shrink self.buttons to target_slots; return the buttons added."""
+        new_buttons = []
+        while len(self.buttons) < target_slots:
+            button = self._get_button_from_pool(len(self.buttons))
+            self.buttons.append(button)
+            new_buttons.append(button)
+        while len(self.buttons) > target_slots:
+            self._recycle_button(self.buttons.pop())
+        return new_buttons
 
     def _get_button_from_pool(self, slot: int) -> DashboardButton:
         """Get a button from the pool or create a new one."""
@@ -898,21 +834,10 @@ class Dashboard(QWidget):
         # Suppress repaints during bulk UI changes
         self.setUpdatesEnabled(False)
 
-        # Update button pool size
-        current_slots = len(self.buttons)
-        target_slots = self._rows * self._cols
-        new_buttons = []
-
-        if target_slots > current_slots:
-            for i in range(current_slots, target_slots):
-                button = self._get_button_from_pool(i)
-                button.set_faded(0.0)
-                self.buttons.append(button)
-                new_buttons.append(button)
-        elif target_slots < current_slots:
-            for _ in range(current_slots - 1, target_slots - 1, -1):
-                btn = self.buttons.pop()
-                self._recycle_button(btn)
+        # Update button pool size; new buttons start faded out
+        new_buttons = self._resize_button_pool(self._rows * self._cols)
+        for button in new_buttons:
+            button.set_faded(0.0)
 
         # Re-apply all configs using (row, col) logic
         self.set_buttons(self._all_button_configs, self.config.get('appearance', {}))
@@ -1655,32 +1580,15 @@ class Dashboard(QWidget):
         flashes the opt-in per-tile refresh indicator.
         """
         self._entity_states[entity_id] = state
-
         for button in self.buttons:
-            cfg = button.config
-            if not cfg:
-                continue
-
-            # Standard entity match
-            if cfg.get('entity_id') == entity_id:
+            role = _entity_role(button.config, entity_id) if button.config else None
+            if role == 'state':
                 button.apply_ha_state(state)
                 if live and state:
                     button.flash_refresh_indicator()
-
-            # 3D Printer handles multiple entities
-            elif cfg.get('type') == '3d_printer':
-                if entity_id == cfg.get('printer_state_entity'):
-                    button.apply_ha_state(state)  # Primary state
-                    if live and state:
-                        button.flash_refresh_indicator()
-                elif entity_id in (
-                    cfg.get('printer_camera_entity'),
-                    cfg.get('printer_nozzle_entity'),
-                    cfg.get('printer_bed_entity'),
-                ):
-                    button.update_content()  # Just trigger a redraw, dashboard_button_painter will fetch the latest state from _entity_states
-
-        # Forward to overlay manager
+            elif role == 'redraw':
+                # The painter reads the latest value from _entity_states.
+                button.update_content()
         self.overlay_manager.update_entity_state(entity_id, state)
 
     def update_camera_image(self, entity_id: str, pixmap):
@@ -2227,46 +2135,32 @@ class Dashboard(QWidget):
     def _calculate_view_height(self, view_name: str) -> int:
         """Calculate target height for a given view."""
         if view_name == 'grid':
-            # Use current height if available, or calculate from rows
-            if self._grid_height:
-                return self._grid_height
-            # Fallback
-            return (self._rows * 80) + ((self._rows - 1) * 8)
+            # The height the grid had, else one computed from the rows
+            return self._grid_height or (self._rows * 80) + ((self._rows - 1) * 8)
+        if view_name == 'settings':
+            return self._settings_view_height()
+        if view_name == 'edit_button':
+            return self._edit_view_height()
+        return 400  # unknown views
 
-        elif view_name == 'settings':
-            if self._settings_locked_height is not None:
-                return self._settings_locked_height
-            # Fallback if called before show_settings locks it
-            if self.settings_widget:
-                content_h = self.settings_widget.get_content_height()
-                settings_height = content_h + 30
-                screen = QApplication.primaryScreen()
-                if screen:
-                    max_h = screen.availableGeometry().height() * 0.9
-                    settings_height = max(300, min(settings_height, int(max_h)))
-                else:
-                    settings_height = max(300, min(settings_height, 800))
-                return settings_height
+    def _settings_view_height(self) -> int:
+        if self._settings_locked_height is not None:
+            return self._settings_locked_height
+        if not self.settings_widget:
             return 450
+        # Called before show_settings locked a height: fit the content, within the screen.
+        screen = QApplication.primaryScreen()
+        max_h = int(screen.availableGeometry().height() * 0.9) if screen else 800
+        return max(300, min(self.settings_widget.get_content_height() + 30, max_h))
 
-        elif view_name == 'edit_button':
-            # Calculate dynamic editor height
-            if hasattr(self, 'edit_widget'):
-                content_h = self.edit_widget.get_content_height()
-                # Add small padding for container margins
-                h = content_h + 30
-
-                # Clamp against screen height so it doesn't grow taller than monitor
-                screen = QApplication.primaryScreen()
-                if screen:
-                    max_h = screen.availableGeometry().height() * 0.95
-                    h = min(h, int(max_h))
-
-                return max(300, min(h, 2000))
+    def _edit_view_height(self) -> int:
+        if not hasattr(self, 'edit_widget'):
             return 400
-
-        # Default fallback for unknown views
-        return 400
+        h = self.edit_widget.get_content_height() + 30  # container margins
+        screen = QApplication.primaryScreen()
+        if screen:
+            h = min(h, int(screen.availableGeometry().height() * 0.95))  # never taller than the screen
+        return max(300, min(h, 2000))
 
     def _lock_view_sizes(self, target_view: str, target_height: int):
         """Lock widget sizes before animation to prevent jitter."""
@@ -2304,30 +2198,17 @@ class Dashboard(QWidget):
         if self._current_view == 'grid':
             self._grid_height = self.height()
             self._captured_grid_widget_h = self.grid_widget.height()
-
-        # 1b. Any path back to the grid restores the grid's own width. Settings
-        # widens the window and the button editor inherits that width, so a
-        # save/cancel straight out of the editor would otherwise leave the grid
-        # stuck at the settings width. hide_settings() already did this, so the
-        # guard keeps it a no-op there.
         if view_name == 'grid':
-            self._settings_locked_height = None
-            grid_width = calculate_width(self._cols)
-            if grid_width != self._fixed_width:
-                self._anim_start_width = self.width()
-                self._fixed_width = grid_width
+            self._restore_grid_width()
 
-        # 2. Update view state
+        # 2. Update view state and work out the heights
         self._current_view = view_name
-
-        # 3. Calculate heights (Moved up so we can use it for capture)
         start_height = self.height()
         target_height = self._calculate_view_height(view_name)
+        # The glass background is not re-captured here: capturing while visible would
+        # include the dashboard itself. show_near_tray() captures the full column up front.
 
-        # No longer re-capturing glass background here because capturing while visible
-        # will capture the dashboard UI itself. show_near_tray() captures the full column up front.
-
-        # 4. Prepare Animation
+        # 3. Prepare the animation
         self._anim_start_height = start_height
         self._anim_target_height = target_height
         self._anim_start_time = time.perf_counter()
@@ -2336,39 +2217,41 @@ class Dashboard(QWidget):
         self._anchor_bottom_y = self.geometry().y() + self.height()
         self._anchor_right_x = self.geometry().x() + self.width()
 
-        # 5. Handle Footer Visibility
+        # 4. Footer and button opacity
         if view_name == 'grid':
-            # Footer will be shown/faded-in after animation in _on_transition_done
-            pass
+            # The footer fades back in after the animation (_on_transition_done).
+            for btn in self.buttons:
+                btn.set_opacity(1.0)
         else:
             self.footer_widget.hide()
 
-        # 6. Button Opacity (if leaving grid)
-        if view_name != 'grid':
-            # Optional: fade out buttons
-            pass
-        else:
-            # Returning to grid: restore opacity
-            for btn in self.buttons:
-                btn.set_opacity(1.0)
-
-        # 7. Unlock Window Constraints
+        # 5. Unlock window constraints, switch the stack, lock the content, animate
         self.setMinimumSize(0, 0)
         self.setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
-
-        # 8. Switch Stack & Lock Content
         self._lock_view_sizes(view_name, target_height)
+        self._show_view_widget(view_name)
+        self._animation_timer.start()
 
+    def _restore_grid_width(self):
+        """Any path back to the grid restores the grid's own width.
+
+        Settings widens the window and the button editor inherits that width, so a
+        save/cancel straight out of the editor would otherwise leave the grid stuck
+        at the settings width. hide_settings() already did this, so it is a no-op there.
+        """
+        self._settings_locked_height = None
+        grid_width = calculate_width(self._cols)
+        if grid_width != self._fixed_width:
+            self._anim_start_width = self.width()
+            self._fixed_width = grid_width
+
+    def _show_view_widget(self, view_name: str):
         if view_name == 'settings':
             self.stack_widget.setCurrentWidget(self.settings_scroll)
         elif view_name == 'grid':
             self.stack_widget.setCurrentWidget(self.grid_scroll)
-        elif view_name == 'edit_button':
-            if hasattr(self, 'edit_scroll'):
-                self.stack_widget.setCurrentWidget(self.edit_scroll)
-
-        # 9. Start Animation
-        self._animation_timer.start()
+        elif view_name == 'edit_button' and hasattr(self, 'edit_scroll'):
+            self.stack_widget.setCurrentWidget(self.edit_scroll)
 
     def show_settings(self):
         """Morph from Grid view to Settings view."""
@@ -2664,62 +2547,44 @@ class Dashboard(QWidget):
             self.unsetCursor()
             super().mouseMoveEvent(event)
             return
-
-        x = event.position().x()
-        y = event.position().y()
-        vertical_resize_from_bottom = self._is_top_anchored()
-
         if not self._is_resizing_window:
-            if vertical_resize_from_bottom:
-                if y > self.height() - RESIZE_MARGIN:
-                    self.setCursor(Qt.CursorShape.SizeVerCursor)
-                elif x < RESIZE_MARGIN:
-                    self.setCursor(Qt.CursorShape.SizeHorCursor)
-                else:
-                    self.unsetCursor()
-            elif y < RESIZE_MARGIN:
-                self.setCursor(Qt.CursorShape.SizeVerCursor)
-            elif x < RESIZE_MARGIN:
-                self.setCursor(Qt.CursorShape.SizeHorCursor)
-            else:
-                self.unsetCursor()
+            self._update_resize_cursor(event.position().x(), event.position().y())
             super().mouseMoveEvent(event)
             return
 
-        # Drag Logic
-        delta = event.globalPosition().toPoint() - self._resize_start_pos
-        dx = delta.x()
-        dy = delta.y()
-
-        target_rows = self._resize_start_rows
-        target_cols = self._resize_start_cols
-
-        if 'top' in self._resize_mode:
-            start_h = self._resize_start_geo[3]
-            new_h = start_h - dy
-            target_rows = self._get_rows_at_height(new_h)
-        elif 'bottom' in self._resize_mode:
-            start_h = self._resize_start_geo[3]
-            new_h = start_h + dy
-            target_rows = self._get_rows_at_height(new_h)
-
-        if 'left' in self._resize_mode:
-            start_w = self._resize_start_geo[2]
-            new_w = start_w - dx
-            target_cols = self._get_cols_at_width(new_w)
-
-        # Apply Changes (Snap)
+        target_rows, target_cols = self._resize_drag_target(event.globalPosition().toPoint() - self._resize_start_pos)
+        # Snap to whole rows and columns.
         current_rows = getattr(self, '_pending_rows_update', None)
         if current_rows is None:
             current_rows = self._rows
-
         if target_rows != current_rows:
             self.set_rows(target_rows)
-
         if target_cols != self._cols:
             self.set_cols(target_cols)
-
         event.accept()
+
+    def _update_resize_cursor(self, x: float, y: float):
+        """Resize cursor over the draggable edges: the left edge, and the edge away from the tray."""
+        vertical_edge = y > self.height() - RESIZE_MARGIN if self._is_top_anchored() else y < RESIZE_MARGIN
+        if vertical_edge:
+            self.setCursor(Qt.CursorShape.SizeVerCursor)
+        elif x < RESIZE_MARGIN:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        else:
+            self.unsetCursor()
+
+    def _resize_drag_target(self, delta) -> tuple:
+        """(rows, cols) for the window size the drag has reached."""
+        target_rows = self._resize_start_rows
+        target_cols = self._resize_start_cols
+        start_w, start_h = self._resize_start_geo[2], self._resize_start_geo[3]
+        if 'top' in self._resize_mode:
+            target_rows = self._get_rows_at_height(start_h - delta.y())
+        elif 'bottom' in self._resize_mode:
+            target_rows = self._get_rows_at_height(start_h + delta.y())
+        if 'left' in self._resize_mode:
+            target_cols = self._get_cols_at_width(start_w - delta.x())
+        return target_rows, target_cols
 
     def mouseReleaseEvent(self, event):
         """End resize drag."""
@@ -2777,3 +2642,19 @@ class Dashboard(QWidget):
                 best_cols = c
 
         return best_cols
+
+
+def _entity_role(cfg: dict, entity_id: str) -> str | None:
+    """'state' if the entity drives this tile, 'redraw' if the tile only shows it, else None.
+
+    A 3D printer tile is driven by its state entity and also shows its
+    camera, nozzle and bed entities.
+    """
+    if cfg.get('entity_id') == entity_id:
+        return 'state'
+    if cfg.get('type') != '3d_printer':
+        return None
+    if entity_id == cfg.get('printer_state_entity'):
+        return 'state'
+    shown = (cfg.get('printer_camera_entity'), cfg.get('printer_nozzle_entity'), cfg.get('printer_bed_entity'))
+    return 'redraw' if entity_id in shown else None
