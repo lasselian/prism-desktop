@@ -752,141 +752,65 @@ class ButtonEditWidget(QWidget):
 
     def populate_entities(self):
         """Fill entity dropdown based on the selected button type with high-performance bulk insertion."""
-        # Determine allowed domains based on selected type
         type_idx = self.type_combo.currentIndex()
         current_type = self.TYPE_DEFINITIONS[type_idx][1] if 0 <= type_idx < len(self.TYPE_DEFINITIONS) else None
-        is_printer = current_type == '3d_printer'
-        has_printer_combos = hasattr(self, 'printer_state_combo')
+        printer_combos = self._printer_combos()
+        fill_printer = current_type == '3d_printer' and bool(printer_combos)
 
-        # Save current selections (entity IDs) to restore later
+        # Remember the selections (entity IDs) to restore them afterwards
         current_entity = self._get_combo_entity_id(self.entity_combo)
-        current_printer_ids = {}
-        if has_printer_combos and is_printer:
-            current_printer_ids = {
-                'state': self._get_combo_entity_id(self.printer_state_combo),
-                'progress': self._get_combo_entity_id(self.printer_progress_combo),
-                'camera': self._get_combo_entity_id(self.printer_camera_combo),
-                'nozzle': self._get_combo_entity_id(self.printer_nozzle_combo),
-                'bed': self._get_combo_entity_id(self.printer_bed_combo),
-                'nozzle_target': self._get_combo_entity_id(self.printer_nozzle_target_combo),
-                'bed_target': self._get_combo_entity_id(self.printer_bed_target_combo),
-                'pause': self._get_combo_entity_id(self.printer_pause_combo),
-                'stop': self._get_combo_entity_id(self.printer_stop_combo),
-            }
+        printer_ids = [self._get_combo_entity_id(c) for c in printer_combos] if fill_printer else []
 
-        # Block signals and disable view updates during bulk insertion to avoid UI freeze
-        self.entity_combo.blockSignals(True)
-        self.entity_combo.setUpdatesEnabled(False)
-        self.entity_combo.clear()
-
-        printer_combos = []
-        if has_printer_combos:
-            printer_combos = [
-                self.printer_state_combo,
-                self.printer_progress_combo,
-                self.printer_camera_combo,
-                self.printer_nozzle_combo,
-                self.printer_bed_combo,
-                self.printer_nozzle_target_combo,
-                self.printer_bed_target_combo,
-                self.printer_pause_combo,
-                self.printer_stop_combo,
-            ]
-            for combo in printer_combos:
-                combo.blockSignals(True)
-                combo.setUpdatesEnabled(False)
-                combo.clear()
-
-        if not self.entities:
-            self.entity_combo.setUpdatesEnabled(True)
-            self.entity_combo.blockSignals(False)
-            for combo in printer_combos:
+        # Bulk insertion with signals and repaints off, so a large HA instance doesn't freeze the UI
+        combos = [self.entity_combo, *printer_combos]
+        for combo in combos:
+            combo.blockSignals(True)
+            combo.setUpdatesEnabled(False)
+            combo.clear()
+        try:
+            if not self.entities:
+                return
+            show_friendly = ButtonEditWidget._global_show_friendly_names
+            self._fill_entity_combo(
+                self.entity_combo, self._entity_items(_ENTITY_DOMAINS.get(current_type)), show_friendly
+            )
+            self._restore_combo_selection(self.entity_combo, current_entity)
+            if fill_printer:
+                # Any entity can feed a printer field, so these lists are unfiltered.
+                all_items = self._entity_items(None)
+                for combo, entity_id in zip(printer_combos, printer_ids, strict=True):
+                    self._fill_entity_combo(combo, all_items, show_friendly)
+                    self._restore_combo_selection(combo, entity_id)
+        finally:
+            for combo in combos:
                 combo.setUpdatesEnabled(True)
                 combo.blockSignals(False)
-            return
 
-        domain_map = {
-            'alarm_control_panel': {'alarm_control_panel'},
-            'automation': {'automation'},
-            'switch': {'light', 'switch', 'input_boolean', 'input_button'},
-            'widget': {'sensor', 'binary_sensor', 'number'},
-            'input_number': {'input_number'},
-            'climate': {'climate'},
-            'curtain': {'cover'},
-            'fan': {'fan'},
-            'media_player': {'media_player'},
-            'script': {'script'},
-            'scene': {'scene'},
-            'camera': {'camera', 'image'},
-            'weather': {'weather'},
-            'lock': {'lock'},
-            'lawn_mower': {'lawn_mower'},
-            'vacuum': {'vacuum'},
-            'sun': {'sun'},
-        }
-        allowed_domains = domain_map.get(current_type)
+    def _printer_combos(self) -> list:
+        """The 3D printer entity pickers, in _PRINTER_FIELDS order (none before they exist)."""
+        if not hasattr(self, 'printer_state_combo'):
+            return []
+        return [getattr(self, f'printer_{field}_combo') for field in _PRINTER_FIELDS]
 
-        # Group by domain (filtered for the primary entity combo)
-        domains = {}
-        all_domains = {} if (has_printer_combos and is_printer) else None
-
-        show_friendly = ButtonEditWidget._global_show_friendly_names
-
+    def _entity_items(self, allowed_domains) -> list:
+        """(entity_id, friendly name) of entities in allowed_domains (all if None), by domain then ID."""
+        items = []
         for entity in self.entities:
             eid = entity.get('entity_id', '')
             if not eid:
                 continue
             domain = eid.split('.')[0] if '.' in eid else 'other'
-            friendly = entity.get('attributes', {}).get('friendly_name', eid)
-
             if not allowed_domains or domain in allowed_domains:
-                if domain not in domains:
-                    domains[domain] = []
-                domains[domain].append((eid, friendly))
+                items.append((domain, eid, entity.get('attributes', {}).get('friendly_name', eid)))
+        items.sort(key=lambda item: (item[0], item[1]))
+        return [(eid, friendly) for _, eid, friendly in items]
 
-            if all_domains is not None:
-                if domain not in all_domains:
-                    all_domains[domain] = []
-                all_domains[domain].append((eid, friendly))
-
-        for domain in sorted(domains.keys()):
-            for eid, friendly in sorted(domains[domain], key=lambda x: x[0]):
-                display = friendly if show_friendly else eid
-                tooltip = f"{friendly} ({eid})" if show_friendly else f"{eid} ({friendly})"
-                self.entity_combo.addItem(display, eid)
-                self.entity_combo.setItemData(self.entity_combo.count() - 1, tooltip, Qt.ItemDataRole.ToolTipRole)
-
-        # Populate printer combos ONLY when the current button type is 3D Printer
-        if all_domains is not None and printer_combos:
-            for domain in sorted(all_domains.keys()):
-                for eid, friendly in sorted(all_domains[domain], key=lambda x: x[0]):
-                    display = friendly if show_friendly else eid
-                    tooltip = f"{friendly} ({eid})" if show_friendly else f"{eid} ({friendly})"
-                    for combo in printer_combos:
-                        combo.addItem(display, eid)
-                        combo.setItemData(combo.count() - 1, tooltip, Qt.ItemDataRole.ToolTipRole)
-
-        # Restore previous selections by entity ID
-        self._restore_combo_selection(self.entity_combo, current_entity)
-        if has_printer_combos and is_printer and current_printer_ids:
-            self._restore_combo_selection(self.printer_state_combo, current_printer_ids.get('state', ''))
-            self._restore_combo_selection(self.printer_progress_combo, current_printer_ids.get('progress', ''))
-            self._restore_combo_selection(self.printer_camera_combo, current_printer_ids.get('camera', ''))
-            self._restore_combo_selection(self.printer_nozzle_combo, current_printer_ids.get('nozzle', ''))
-            self._restore_combo_selection(self.printer_bed_combo, current_printer_ids.get('bed', ''))
-            self._restore_combo_selection(
-                self.printer_nozzle_target_combo, current_printer_ids.get('nozzle_target', '')
-            )
-            self._restore_combo_selection(self.printer_bed_target_combo, current_printer_ids.get('bed_target', ''))
-            self._restore_combo_selection(self.printer_pause_combo, current_printer_ids.get('pause', ''))
-            self._restore_combo_selection(self.printer_stop_combo, current_printer_ids.get('stop', ''))
-
-        # Re-enable updates and signals
-        self.entity_combo.setUpdatesEnabled(True)
-        self.entity_combo.blockSignals(False)
-        for combo in printer_combos:
-            combo.setUpdatesEnabled(True)
-            combo.blockSignals(False)
+    @staticmethod
+    def _fill_entity_combo(combo, items: list, show_friendly: bool):
+        for eid, friendly in items:
+            combo.addItem(friendly if show_friendly else eid, eid)
+            tooltip = f"{friendly} ({eid})" if show_friendly else f"{eid} ({friendly})"
+            combo.setItemData(combo.count() - 1, tooltip, Qt.ItemDataRole.ToolTipRole)
 
     def _get_combo_entity_id(self, combo):
         """Get the entity ID from a combo, whether from userData or typed text."""
@@ -1389,104 +1313,89 @@ class ButtonEditWidget(QWidget):
         new_config['label'] = self.label_input.text().strip()
 
         type_idx = self.type_combo.currentIndex()
-        new_config['type'] = (
-            self.TYPE_DEFINITIONS[type_idx][1] if 0 <= type_idx < len(self.TYPE_DEFINITIONS) else 'switch'
-        )
-
+        btn_type = self.TYPE_DEFINITIONS[type_idx][1] if 0 <= type_idx < len(self.TYPE_DEFINITIONS) else 'switch'
+        new_config['type'] = btn_type
         for key, types in self.TYPE_SPECIFIC_KEYS.items():
-            if new_config['type'] not in types:
+            if btn_type not in types:
                 new_config.pop(key, None)
 
         # Get entity_id from combo data (UserRole), fallback to typed text
         new_config['entity_id'] = self._get_combo_entity_id(self.entity_combo)
-
-        if new_config['type'] == 'climate':
-            # Clean up deprecated legacy key for backwards compatibility
-            new_config.pop('advanced_mode', None)
-
-        if new_config['type'] == 'media_player':
-            new_config['show_album_art'] = self.show_album_art_check.isChecked()
-            new_config['animated_bg'] = self.animated_bg_toggle.isChecked()
-
-        if new_config['type'] == 'switch' and '.' in new_config.get('entity_id', ''):
-            new_config['service'] = f"{new_config['entity_id'].split('.')[0]}.{self.service_combo.currentText()}"
-
-        if new_config['type'] == 'widget':
-            new_config['precision'] = self.precision_spin.value()
-            new_config['display_style'] = ['normal', 'gauge', 'bar', 'perimeter'][
-                self.display_style_combo.currentIndex()
-            ]
-            new_config['sensor_min'] = self.sensor_min_spin.value()
-            new_config['sensor_max'] = self.sensor_max_spin.value()
-            new_config['entry_animation'] = self.entry_animation_toggle.isChecked()
-
-        if new_config['type'] == 'sun':
-            new_config['entry_animation'] = self.entry_animation_toggle.isChecked()
-
-        if new_config['type'] == 'camera':
-            new_config['camera_mode'] = 'stream'
-            # Preserve existing size/span if set, otherwise default to 1x1 during creation
-            if 'span_x' not in new_config:
-                new_config['span_x'] = 1
-            if 'span_y' not in new_config:
-                new_config['span_y'] = 1
-            # Sync camera_size to span for compatibility
-            new_config['camera_size'] = new_config['span_x']
-
-        if new_config['type'] == 'script':
-            variables = {}
-            for row in self.script_arg_rows:
-                key = row['key_input'].text().strip()
-                value = row['value_input'].text().strip()
-                if key:
-                    try:
-                        value = int(value)
-                    except ValueError:
-                        try:
-                            value = float(value)
-                        except ValueError:
-                            pass
-                    variables[key] = value
-            if variables:
-                new_config['script_variables'] = variables
-            else:
-                new_config.pop('script_variables', None)
-
-        if new_config['type'] == 'automation':
-            new_config['action'] = 'trigger' if self.automation_action_combo.currentIndex() == 1 else 'toggle'
-
-        if new_config['type'] == 'lock':
-            idx = self.lock_action_combo.currentIndex()
-            if idx == 1:
-                new_config['action'] = 'lock'
-            elif idx == 2:
-                new_config['action'] = 'unlock'
-            else:
-                new_config['action'] = 'toggle'
-
-        if new_config['type'] == '3d_printer':
-            new_config['printer_state_entity'] = self._get_combo_entity_id(self.printer_state_combo)
-            new_config['printer_progress_entity'] = self._get_combo_entity_id(self.printer_progress_combo)
-            new_config['printer_camera_entity'] = self._get_combo_entity_id(self.printer_camera_combo)
-            new_config['printer_nozzle_entity'] = self._get_combo_entity_id(self.printer_nozzle_combo)
-            new_config['printer_nozzle_target_entity'] = self._get_combo_entity_id(self.printer_nozzle_target_combo)
-            new_config['printer_bed_entity'] = self._get_combo_entity_id(self.printer_bed_combo)
-            new_config['printer_bed_target_entity'] = self._get_combo_entity_id(self.printer_bed_target_combo)
-            new_config['printer_pause_entity'] = self._get_combo_entity_id(self.printer_pause_combo)
-            new_config['printer_stop_entity'] = self._get_combo_entity_id(self.printer_stop_combo)
-            # Override standard entity_id with state entity for generic handling if needed
-            new_config['entity_id'] = new_config['printer_state_entity']
+        collect = self._TYPE_FIELD_COLLECTORS.get(btn_type)
+        if collect is not None:
+            collect(self, new_config)
 
         new_config['icon'] = self.icon_input.text().strip()
         new_config['color'] = self.selected_color
-
-        # Save shortcut
         new_config['custom_shortcut'] = {
             'enabled': self.custom_shortcut_check.isChecked(),
             'value': self.shortcut_display.text(),
         }
-
         self.saved.emit(new_config)
+
+    def _collect_climate(self, cfg: dict):
+        cfg.pop('advanced_mode', None)  # deprecated legacy key
+
+    def _collect_media_player(self, cfg: dict):
+        cfg['show_album_art'] = self.show_album_art_check.isChecked()
+        cfg['animated_bg'] = self.animated_bg_toggle.isChecked()
+
+    def _collect_switch(self, cfg: dict):
+        if '.' in cfg.get('entity_id', ''):
+            cfg['service'] = f"{cfg['entity_id'].split('.')[0]}.{self.service_combo.currentText()}"
+
+    def _collect_widget(self, cfg: dict):
+        cfg['precision'] = self.precision_spin.value()
+        cfg['display_style'] = ['normal', 'gauge', 'bar', 'perimeter'][self.display_style_combo.currentIndex()]
+        cfg['sensor_min'] = self.sensor_min_spin.value()
+        cfg['sensor_max'] = self.sensor_max_spin.value()
+        cfg['entry_animation'] = self.entry_animation_toggle.isChecked()
+
+    def _collect_sun(self, cfg: dict):
+        cfg['entry_animation'] = self.entry_animation_toggle.isChecked()
+
+    def _collect_camera(self, cfg: dict):
+        cfg['camera_mode'] = 'stream'
+        # Keep an existing size; a new camera starts at 1x1
+        cfg.setdefault('span_x', 1)
+        cfg.setdefault('span_y', 1)
+        cfg['camera_size'] = cfg['span_x']  # kept in sync with the span for compatibility
+
+    def _collect_script(self, cfg: dict):
+        variables = {}
+        for row in self.script_arg_rows:
+            key = row['key_input'].text().strip()
+            if key:
+                variables[key] = _parse_script_value(row['value_input'].text().strip())
+        if variables:
+            cfg['script_variables'] = variables
+        else:
+            cfg.pop('script_variables', None)
+
+    def _collect_automation(self, cfg: dict):
+        cfg['action'] = 'trigger' if self.automation_action_combo.currentIndex() == 1 else 'toggle'
+
+    def _collect_lock(self, cfg: dict):
+        cfg['action'] = {1: 'lock', 2: 'unlock'}.get(self.lock_action_combo.currentIndex(), 'toggle')
+
+    def _collect_3d_printer(self, cfg: dict):
+        for field in _PRINTER_FIELDS:
+            cfg[f'printer_{field}_entity'] = self._get_combo_entity_id(getattr(self, f'printer_{field}_combo'))
+        # The state entity stands in as the tile's entity_id for generic handling
+        cfg['entity_id'] = cfg['printer_state_entity']
+
+    _TYPE_FIELD_COLLECTORS = {
+        'climate': _collect_climate,
+        'media_player': _collect_media_player,
+        'switch': _collect_switch,
+        'widget': _collect_widget,
+        'sun': _collect_sun,
+        'camera': _collect_camera,
+        'script': _collect_script,
+        'automation': _collect_automation,
+        'lock': _collect_lock,
+        '3d_printer': _collect_3d_printer,
+    }
 
     def on_custom_shortcut_toggled(self, checked):
         self.record_btn.setEnabled(checked)
@@ -1549,3 +1458,38 @@ class ButtonEditWidget(QWidget):
             event.accept()
         else:
             super().keyPressEvent(event)
+
+
+# Entity domains offered for each tile type (types not listed accept any entity)
+_ENTITY_DOMAINS = {
+    'alarm_control_panel': {'alarm_control_panel'},
+    'automation': {'automation'},
+    'switch': {'light', 'switch', 'input_boolean', 'input_button'},
+    'widget': {'sensor', 'binary_sensor', 'number'},
+    'input_number': {'input_number'},
+    'climate': {'climate'},
+    'curtain': {'cover'},
+    'fan': {'fan'},
+    'media_player': {'media_player'},
+    'script': {'script'},
+    'scene': {'scene'},
+    'camera': {'camera', 'image'},
+    'weather': {'weather'},
+    'lock': {'lock'},
+    'lawn_mower': {'lawn_mower'},
+    'vacuum': {'vacuum'},
+    'sun': {'sun'},
+}
+
+# The 3D printer's entity fields: printer_<field>_combo widgets, printer_<field>_entity config keys
+_PRINTER_FIELDS = ('state', 'progress', 'camera', 'nozzle', 'nozzle_target', 'bed', 'bed_target', 'pause', 'stop')
+
+
+def _parse_script_value(text: str):
+    """A script variable typed in the editor: int, else float, else the text itself."""
+    for convert in (int, float):
+        try:
+            return convert(text)
+        except ValueError:
+            pass
+    return text
