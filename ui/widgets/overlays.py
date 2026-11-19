@@ -1370,66 +1370,59 @@ class PrinterOverlay(BaseOverlay):
             )
 
     def _draw_action_buttons(self, painter, x, y, w, h, alpha):
+        """Pause/resume and stop side by side; stop turns red and asks again before acting."""
         btn_w = (w - 8) // 2
         is_paused = self._state.lower() == 'paused'
-        pause_icon = 'play' if is_paused else 'pause'
-        pause_label = t("overlay.printer.resume_btn") if is_paused else t("overlay.printer.pause_btn")
-        stop_label = t("overlay.printer.stop_btn")
-
-        show_text = btn_w >= 80
-        font_text = QFont(SYSTEM_FONT, 10, QFont.Weight.Bold)
-        icon_w = 20  # MDI glyph width at 15pt
-        icon_gap = 6
-        radius = 8
-
-        def _draw_btn(btn_rect, icon_name, label, is_stop):
-            if is_stop and self._confirm_stop_mode:
-                bg = QColor("#C62828")
-                bdr = QColor(255, 110, 110, 220)
-            elif is_stop:
-                hover = self._hover_stop
-                bg = QColor(200, 60, 60, 70 if hover else 45)
-                bdr = QColor(220, 80, 80, 160 if hover else 110)
-            else:
-                hover = self._hover_pause
-                bg = QColor(60, 110, 200, 70 if hover else 45)
-                bdr = QColor(80, 140, 230, 160 if hover else 110)
-
-            painter.setPen(QPen(bdr, 1.5))
-            painter.setBrush(bg)
-            painter.drawRoundedRect(btn_rect, radius, radius)
-            painter.setPen(self._fg_color(alpha))
-
-            if is_stop and self._confirm_stop_mode:
-                painter.setFont(font_text)
-                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, t("overlay.printer.confirm_stop"))
-            elif show_text:
-                painter.setFont(get_mdi_font(15))
-                painter.drawText(
-                    QRect(btn_rect.x() + 8, btn_rect.y(), icon_w, btn_rect.height()),
-                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                    get_icon(icon_name),
-                )
-                painter.setFont(font_text)
-                painter.drawText(
-                    QRect(
-                        btn_rect.x() + 8 + icon_w + icon_gap,
-                        btn_rect.y(),
-                        btn_rect.width() - 8 - icon_w - icon_gap - 4,
-                        btn_rect.height(),
-                    ),
-                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                    label,
-                )
-            else:
-                painter.setFont(get_mdi_font(16))
-                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon(icon_name))
-
         self._btn_pause = QRect(x, y, btn_w, h)
-        _draw_btn(self._btn_pause, pause_icon, pause_label, False)
-
+        pause_label = t("overlay.printer.resume_btn") if is_paused else t("overlay.printer.pause_btn")
+        self._draw_action_button(painter, self._btn_pause, 'play' if is_paused else 'pause', pause_label, False, alpha)
         self._btn_stop = QRect(x + btn_w + 8, y, btn_w, h)
-        _draw_btn(self._btn_stop, 'stop', stop_label, True)
+        self._draw_action_button(painter, self._btn_stop, 'stop', t("overlay.printer.stop_btn"), True, alpha)
+
+    def _action_button_colors(self, is_stop: bool):
+        """(background, border): blue pause, red stop, solid red while confirming a stop; brighter on hover."""
+        if is_stop and self._confirm_stop_mode:
+            return QColor("#C62828"), QColor(255, 110, 110, 220)
+        if is_stop:
+            hover = self._hover_stop
+            return QColor(200, 60, 60, 70 if hover else 45), QColor(220, 80, 80, 160 if hover else 110)
+        hover = self._hover_pause
+        return QColor(60, 110, 200, 70 if hover else 45), QColor(80, 140, 230, 160 if hover else 110)
+
+    def _draw_action_button(self, painter, btn_rect: QRect, icon_name: str, label: str, is_stop: bool, alpha: int):
+        bg, border = self._action_button_colors(is_stop)
+        painter.setPen(QPen(border, 1.5))
+        painter.setBrush(bg)
+        painter.drawRoundedRect(btn_rect, 8, 8)
+        painter.setPen(self._fg_color(alpha))
+
+        font_text = QFont(SYSTEM_FONT, 10, QFont.Weight.Bold)
+        if is_stop and self._confirm_stop_mode:
+            painter.setFont(font_text)
+            painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, t("overlay.printer.confirm_stop"))
+        elif btn_rect.width() >= 80:
+            # Icon and label; the MDI glyph is about 20px wide at 15pt
+            icon_w, icon_gap = 20, 6
+            painter.setFont(get_mdi_font(15))
+            painter.drawText(
+                QRect(btn_rect.x() + 8, btn_rect.y(), icon_w, btn_rect.height()),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                get_icon(icon_name),
+            )
+            painter.setFont(font_text)
+            painter.drawText(
+                QRect(
+                    btn_rect.x() + 8 + icon_w + icon_gap,
+                    btn_rect.y(),
+                    btn_rect.width() - 8 - icon_w - icon_gap - 4,
+                    btn_rect.height(),
+                ),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                label,
+            )
+        else:
+            painter.setFont(get_mdi_font(16))
+            painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon(icon_name))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
