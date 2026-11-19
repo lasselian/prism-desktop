@@ -43,21 +43,23 @@ class GridManager:
         for btn, r, c, span_y, span_x in placements:
             self._place(btn, r, c, span_y, span_x, preview_mode)
 
+        self._finish_placements(placements)
+        if update_height:
+            self._update_height(preview_mode)
+
+    def _finish_placements(self, placements: list):
+        """Mark blocked empty slots forbidden, keep real tiles on top, hide unplaced buttons."""
         forbidden_cells = self.layout_engine.get_forbidden_cells()
         for btn, r, c, _, _ in placements:
             if (r, c) in forbidden_cells and not _is_real(btn):
                 _reset_button(btn, {'type': 'forbidden'})
-
         for btn, *_ in placements:
             if _is_real(btn):
                 btn.raise_()
         placed_buttons = {p[0] for p in placements}
-        for btn in dash.buttons:
+        for btn in self.dashboard.buttons:
             if btn not in placed_buttons:
                 btn.setVisible(False)
-
-        if update_height:
-            self._update_height(preview_mode)
 
     def _place(self, btn, r, c, span_y, span_x, preview_mode):
         dash = self.dashboard

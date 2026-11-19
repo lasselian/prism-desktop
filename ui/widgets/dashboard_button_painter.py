@@ -833,12 +833,7 @@ class DashboardButtonPainter:
         clip_path.addRoundedRect(rect.adjusted(1, 1, -1, -1), 12, 12)
         painter.setClipPath(clip_path)
 
-        theme = getattr(button, 'theme_manager', None)
-        is_light = theme and theme.get_effective_theme() == 'light'
-        text_hex = '#1e1e1e' if is_light else '#ffffff'
-        if theme:
-            text_hex = theme.get_colors().get('text', text_hex)
-        text_color = QColor(text_hex)
+        is_light, text_color = _sun_theme(button)
 
         above = getattr(button, 'sun_state', 'unknown') == 'above_horizon'
         rising_str = getattr(button, 'sun_next_rising', None)
@@ -1270,6 +1265,16 @@ def _draw_song_pill(painter, w: int, h: int, title: str, artist: str, art):
 
 
 # ── Sun tile ──
+
+
+def _sun_theme(button):
+    """(is_light, text colour) for the sun tile."""
+    theme = getattr(button, 'theme_manager', None)
+    is_light = theme and theme.get_effective_theme() == 'light'
+    text_hex = '#1e1e1e' if is_light else '#ffffff'
+    if theme:
+        text_hex = theme.get_colors().get('text', text_hex)
+    return is_light, QColor(text_hex)
 
 
 def _parse_iso(text: str):

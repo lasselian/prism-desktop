@@ -147,7 +147,7 @@ class CameraPipManager:
         """Restart every stream. Call after the HA URL or token changed:
         closing the HTTP session does not wake a reader in the middle of a
         streaming response, so the old streams would hang on their last frame."""
-        for entity_id, win in list(self._windows.items()):
+        for entity_id, win in self._windows.items():
             task = self._tasks.pop(entity_id, None)
             if task is not None:
                 task.cancel()
@@ -163,8 +163,8 @@ class CameraPipManager:
             win.deleteLater()
 
     def close_all(self):
-        for entity_id in list(self._windows):
-            self.close(entity_id)
+        while self._windows:  # close() removes each window
+            self.close(next(iter(self._windows)))
 
     # -- geometry ----------------------------------------------------------------
 
@@ -216,16 +216,8 @@ class CameraPipManager:
     async def _read_loop(self, entity_id: str, win: CameraPipWindow, box: _Latest):
         failures = 0
         while True:
-            attempt = _StreamAttempt()
-            try:
-                await self._pump_stream(entity_id, win, box, attempt)
-            except _STREAM_FAILURES as exc:
-                status, delay = self._failure_status(exc, attempt.got_frame)
-            else:
-                # HA ended the stream (it does when the camera returns no image).
-                status, delay = (None, 1) if attempt.got_frame else (t(STATUS_UNAVAILABLE), None)
-
-            if attempt.got_frame:
+            got_frame, status, delay = await self._stream_once(entity_id, win, box)
+            if got_frame:
                 failures = 0
             if delay is None:
                 delay = BACKOFF[min(failures, len(BACKOFF) - 1)]
@@ -234,6 +226,18 @@ class CameraPipManager:
                 if self._alive(entity_id, win):
                     win.set_status(status)
             await asyncio.sleep(delay)
+
+    async def _stream_once(self, entity_id: str, win: CameraPipWindow, box: _Latest):
+        """Read one stream to its end; return (got a frame, status line or None, retry delay or None)."""
+        attempt = _StreamAttempt()
+        try:
+            await self._pump_stream(entity_id, win, box, attempt)
+        except _STREAM_FAILURES as exc:
+            return (attempt.got_frame, *self._failure_status(exc, attempt.got_frame))
+        # HA ended the stream (it does when the camera returns no image).
+        if attempt.got_frame:
+            return True, None, 1
+        return False, t(STATUS_UNAVAILABLE), None
 
     async def _pump_stream(self, entity_id: str, win: CameraPipWindow, box: _Latest, attempt: _StreamAttempt):
         """Read one stream until it ends, handing the newest frame to the decoder."""

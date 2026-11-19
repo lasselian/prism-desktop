@@ -869,7 +869,7 @@ class ButtonEditWidget(QWidget):
         self.form.setRowVisible(self.sensor_min_spin, needs_range)
         self.form.setRowVisible(self.sensor_max_spin, needs_range)
 
-        needs_anim = is_sensor and style_idx in (1, 3)  # gauge=1, perimeter=3
+        needs_anim = is_sensor and style_idx in (1, 3)  # the gauge and perimeter styles
         self.form.setRowVisible(self.entry_animation_toggle, needs_anim)
 
         # Hide color palette for sensor with Normal display style

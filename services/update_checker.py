@@ -21,7 +21,7 @@ class UpdateCheckerThread(QThread):
         """Extract first version-like pattern (e.g. 1.0, v1.2.3)."""
         if not text:
             return ""
-        match = re.search(r'v?(?<!\d)(\d+(?:\.\d+)+)', text)  # starts at the first digit of a run
+        match = re.search(r'v?(?<!\d)(\d++(?:\.\d++)++)', text)  # possessive: no backtracking
         return match.group(1) if match else text.strip()
 
     def _parse_version(self, ver: str) -> tuple:

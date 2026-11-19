@@ -336,7 +336,7 @@ class WaylandGlobalShortcut:
             self._handler_installed = False
 
         if self._bus:
-            for rule in list(self._match_rules):
+            for rule in self._match_rules.copy():  # _remove_match discards from the set
                 try:
                     await self._remove_match(rule)
                 except Exception:

@@ -159,7 +159,7 @@ async def register_mobile_app(
                     mobile_app_cfg["device_name"] = device_name
                     save_config_fn()
                     logger.info(
-                        f"[MobileApp] Registered successfully as '{device_name}' " f"(webhook_id={webhook_id[:8]}...)"
+                        f"[MobileApp] Registered successfully as '{device_name}' (webhook_id={webhook_id[:8]}...)"
                     )
                     return webhook_id
                 else:
