@@ -1,5 +1,6 @@
 import math
 import zlib
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from PyQt6.QtCore import Qt, QRect, QRectF, QPointF, QPropertyAnimation
 from PyQt6.QtGui import (
@@ -679,371 +680,17 @@ class DashboardButtonPainter:
 
     @staticmethod
     def _paint_3d_printer(button):
+        view = _printer_view(button)
         painter = QPainter(button)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        rect = button.rect()
-        is_huge = button.span_x >= 2 and button.span_y >= 2  # 2x2+
-        is_wide = button.span_x >= 2
-
-        # State Data
-        state = button._state.lower()  # printing, paused, operational, etc.
-        printer_state = state.capitalize()
-
-        # Theme / Colors
-        if button.theme_manager:
-            colors = button.theme_manager.get_colors()
-            text_color = QColor(colors.get('text', '#e0e0e0'))
-            dim_text_color = text_color.darker(150)
+        if button.span_x >= 2 and button.span_y >= 2:
+            _paint_printer_huge(painter, button, view)
+        elif button.span_x >= 2:
+            _paint_printer_wide(painter, button, view)
+        elif button.span_y >= 2:
+            _paint_printer_tall(painter, button, view)
         else:
-            text_color = QColor('#e0e0e0')
-            dim_text_color = QColor('#aaaaaa')
-
-        # Accent color based on state
-        if state in ['printing', 'heating']:
-            accent_color = QColor('#34A853')  # Green
-        elif state == 'paused':
-            accent_color = QColor('#FBBC05')  # Yellow
-        elif 'error' in state or state == 'offline':
-            accent_color = QColor('#EA4335')  # Red
-        else:
-            accent_color = QColor('#4285F4')  # Blue (Idle/Operational)
-
-        # Fetch entities manually since standard button abstraction binds to 1 entity
-        dashboard = button.window()  # Walk up to dashboard
-        camera_pixmap = None
-        nozzle_str = "--"
-        bed_str = "--"
-        progress = 0
-
-        cfg = button.config
-
-        if hasattr(dashboard, '_entity_states'):
-            # Camera image is handled by the standard `_last_camera_pixmap` on button if configured via `set_camera_image`
-            if (
-                hasattr(button, '_cached_display_pixmap')
-                and button._cached_display_pixmap
-                and not button._cached_display_pixmap.isNull()
-            ):
-                camera_pixmap = button._cached_display_pixmap
-            elif hasattr(button, '_last_camera_pixmap') and button._last_camera_pixmap:
-                camera_pixmap = button._last_camera_pixmap
-
-            # Prefer dedicated progress entity if configured
-            state_data = dashboard._entity_states.get(cfg.get('printer_state_entity'), {})
-            attrs = state_data.get('attributes', {})
-            prog_entity = cfg.get('printer_progress_entity')
-            if prog_entity:
-                prog_data = dashboard._entity_states.get(prog_entity, {})
-                progress = prog_data.get('state', 0)
-            else:
-                # Fall back to common progress attributes on state entity
-                progress = attrs.get('progress', attrs.get('job_percentage', 0))
-
-            try:
-                progress = float(progress)
-            except (ValueError, TypeError):
-                progress = 0.0
-
-            # Nozzle
-            nozzle_data = dashboard._entity_states.get(cfg.get('printer_nozzle_entity'), {})
-            nozzle_val = nozzle_data.get('state', '--')
-            nozzle_target_data = dashboard._entity_states.get(cfg.get('printer_nozzle_target_entity'), {})
-            nozzle_target_val = nozzle_target_data.get('state', None)
-            nozzle_attrs = nozzle_data.get('attributes', {})
-            src_unit = nozzle_attrs.get('unit_of_measurement')
-            pref = getattr(button, 'temperature_unit_preference', None)
-            _fmt = lambda v: format_temperature(v, src_unit, pref, precision=0, fallback="--")
-
-            if nozzle_val != '--':
-                try:
-                    n_act = float(nozzle_val)
-                    if button.span_x > 3 and nozzle_target_val and nozzle_target_val != 'unknown':
-                        n_tgt = float(nozzle_target_val)
-                        nozzle_str = f"{_fmt(n_act)}/{_fmt(n_tgt)}"
-                    else:
-                        nozzle_str = _fmt(n_act)
-                except Exception:
-                    nozzle_str = _fmt(nozzle_val)
-
-            # Bed
-            bed_data = dashboard._entity_states.get(cfg.get('printer_bed_entity'), {})
-            bed_val = bed_data.get('state', '--')
-            bed_target_data = dashboard._entity_states.get(cfg.get('printer_bed_target_entity'), {})
-            bed_target_val = bed_target_data.get('state', None)
-            bed_attrs = bed_data.get('attributes', {})
-            bed_src_unit = bed_attrs.get('unit_of_measurement') or src_unit
-            _fmt_bed = lambda v: format_temperature(v, bed_src_unit, pref, precision=0, fallback="--")
-
-            if bed_val != '--':
-                try:
-                    b_act = float(bed_val)
-                    if button.span_x > 3 and bed_target_val and bed_target_val != 'unknown':
-                        b_tgt = float(bed_target_val)
-                        bed_str = f"{_fmt_bed(b_act)}/{_fmt_bed(b_tgt)}"
-                    else:
-                        bed_str = _fmt_bed(b_act)
-                except Exception:
-                    bed_str = _fmt_bed(bed_val)
-
-        icon = Icons.PRINTER_3D  # standard mdi-printer-3d
-
-        # DRAW LOGIC
-        if is_huge:
-            # === 2x2+: Camera Top, Stats Strip Bottom ===
-            w = rect.width()
-            h = rect.height()
-
-            # 1. Camera Feed (fills entire card; footer pills float over it)
-            cam_h = h
-            cam_rect = QRectF(0, 0, w, cam_h)
-
-            path = QPainterPath()
-            path.addRoundedRect(QRectF(rect), 12, 12)
-            painter.setClipPath(path)
-
-            if camera_pixmap and not camera_pixmap.isNull():
-                # Fast direct draw if using cached rounded pixmap
-                if camera_pixmap == getattr(button, '_cached_display_pixmap', None):
-                    painter.drawPixmap(0, 0, camera_pixmap)
-                    bg_pix = camera_pixmap
-                    x_bg = 0
-                    y_bg = 0
-                else:
-                    # Aspect fill the top section
-                    scaled = camera_pixmap.scaled(
-                        int(w),
-                        int(cam_h),
-                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
-                    x_off = (scaled.width() - w) / 2
-                    y_off = (scaled.height() - cam_h) / 2
-                    painter.drawPixmap(0, 0, scaled, int(x_off), int(y_off), int(w), int(cam_h))
-                    bg_pix = scaled
-                    x_bg = int(x_off)
-                    y_bg = int(y_off)
-
-                # Add glass edge effects (shadow + highlight) to the camera feed
-                DashboardButtonPainter.draw_image_edge_effects(painter, cam_rect, is_top_clamped=False)
-
-            else:
-                bg_pix = None
-                x_bg = 0
-                y_bg = 0
-                # Fallback empty camera zone
-                painter.fillRect(cam_rect.toRect(), QColor(0, 0, 0, 100))
-                painter.setFont(get_mdi_font(40))
-                painter.setPen(QColor(255, 255, 255, 100))
-                painter.drawText(cam_rect, Qt.AlignmentFlag.AlignCenter, Icons.VIDEO_OFF)
-
-            # Draw Pill Overlay for Progress %
-            try:
-                prog_val = float(progress)
-            except (ValueError, TypeError):
-                prog_val = 0.0
-
-            if printer_state.lower() not in ["off", "unavailable"]:
-                prog_str = f"{prog_val:.0f}%"
-                DashboardButtonPainter._draw_pill_label(
-                    painter, cam_rect, prog_str, bg_pix, x_bg, y_bg, position='top-right', force_dark=True
-                )
-
-            if button.span_x > 2 or button.span_y > 2:
-                btn_name = button.config.get("label", button.config.get("name", "3D Printer"))
-                DashboardButtonPainter._draw_pill_label(
-                    painter, cam_rect, btn_name, bg_pix, x_bg, y_bg, position='top-left', force_dark=True
-                )
-
-            # 2. Floating frosted pills at the bottom (state left, temps right)
-            from ui.utils.glass_effect import draw_frosted_pill
-
-            pill_h = 28
-            pill_y = h - pill_h - 12
-            pad_x = 12
-            inter_pill = 8
-
-            is_offline = printer_state.lower() in ("off", "unavailable")
-
-            # --- Right pill: nozzle + bed (icons + values) — sized first; takes priority ---
-            icon_font = get_mdi_font(13)
-            val_font = QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold)
-            fm_icon = QFontMetrics(icon_font)
-            fm_val = QFontMetrics(val_font)
-
-            noz_icon = get_icon('printer-3d-nozzle')
-            bed_icon = get_icon('square-medium')
-
-            gap = 6
-            sep = 12
-            temps_content_w = (
-                fm_icon.horizontalAdvance(noz_icon)
-                + gap
-                + fm_val.horizontalAdvance(nozzle_str)
-                + sep
-                + fm_icon.horizontalAdvance(bed_icon)
-                + gap
-                + fm_val.horizontalAdvance(bed_str)
-            )
-            temps_pill_w = 0 if is_offline else min(temps_content_w + 24, w - pad_x * 2)
-
-            # --- Left pill: state — only if there's room left after temps ---
-            state_label = printer_state.capitalize() if printer_state else ""
-            state_font = QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold)
-            fm_state = QFontMetrics(state_font)
-            state_text_w = fm_state.horizontalAdvance(state_label.upper()) if state_label else 0
-            ideal_state_w = max(56, state_text_w + 24) if state_label else 0
-
-            remaining_w = w - pad_x * 2 - (temps_pill_w + inter_pill if temps_pill_w else 0)
-            state_pill_w = min(ideal_state_w, remaining_w) if remaining_w >= 56 else 0
-
-            # Draw state pill
-            if state_pill_w:
-                state_rect = QRectF(pad_x, pill_y, state_pill_w, pill_h)
-                state_text_color = draw_frosted_pill(painter, state_rect, bg_pix, x_bg, y_bg, force_dark=True)
-                elided = fm_state.elidedText(state_label.upper(), Qt.TextElideMode.ElideRight, int(state_pill_w - 16))
-                painter.setFont(state_font)
-                painter.setPen(state_text_color)
-                painter.drawText(state_rect, Qt.AlignmentFlag.AlignCenter, elided)
-
-            # Draw temps pill
-            if temps_pill_w > 0:
-                temps_rect = QRectF(w - temps_pill_w - pad_x, pill_y, temps_pill_w, pill_h)
-                temps_text_color = draw_frosted_pill(painter, temps_rect, bg_pix, x_bg, y_bg, force_dark=True)
-
-                cx = temps_rect.x() + (temps_rect.width() - temps_content_w) / 2
-                painter.setPen(temps_text_color)
-
-                painter.setFont(icon_font)
-                nw = fm_icon.horizontalAdvance(noz_icon)
-                painter.drawText(
-                    QRectF(cx, pill_y, nw, pill_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, noz_icon
-                )
-                cx += nw + gap
-
-                painter.setFont(val_font)
-                nvw = fm_val.horizontalAdvance(nozzle_str)
-                painter.drawText(
-                    QRectF(cx, pill_y, nvw, pill_h),
-                    Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                    nozzle_str,
-                )
-                cx += nvw + sep
-
-                painter.setFont(icon_font)
-                bw = fm_icon.horizontalAdvance(bed_icon)
-                painter.drawText(
-                    QRectF(cx, pill_y, bw, pill_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, bed_icon
-                )
-                cx += bw + gap
-
-                painter.setFont(val_font)
-                bvw = fm_val.horizontalAdvance(bed_str)
-                painter.drawText(
-                    QRectF(cx, pill_y, bvw, pill_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, bed_str
-                )
-
-        elif is_wide:
-            # === 2x1: Wide layout ===
-            # Icon/Ring Left, Stats Right
-            w = rect.width()
-            h = rect.height()
-
-            # Left Icon (with circular progress if printing)
-            icon_size = 40
-            icon_x = 24
-            icon_y = (h - icon_size) // 2
-
-            painter.setFont(get_mdi_font(28))
-            painter.setPen(accent_color)
-            painter.drawText(QRectF(icon_x, icon_y, icon_size, icon_size), Qt.AlignmentFlag.AlignCenter, icon)
-
-            # Text area on the right
-            text_x = icon_x + icon_size + 16
-
-            # State Title
-            state_font = QFont(SYSTEM_FONT, 12, QFont.Weight.Bold)
-            painter.setFont(state_font)
-            painter.setPen(text_color)
-
-            avail_width = w - text_x - 16
-            fm = QFontMetrics(state_font)
-            elided_state = fm.elidedText(printer_state, Qt.TextElideMode.ElideRight, int(avail_width))
-
-            painter.drawText(
-                QRectF(text_x, 16, avail_width, 24),
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom,
-                elided_state,
-            )
-
-            # Sub stats
-            painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.Medium))
-            painter.setPen(dim_text_color)
-            stats_str = f"N: {nozzle_str}  B: {bed_str}"
-            painter.drawText(
-                QRectF(text_x, 44, w - text_x - 16, 24),
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
-                stats_str,
-            )
-
-            # Progress Bar Bottom
-            DashboardButtonPainter.draw_bottom_bar(painter, QRectF(0, 0, w, h), float(progress), 100.0, accent_color)
-
-        elif button.span_y >= 2 and button.span_x == 1:
-            # === 1x2: Tall layout ===
-            w = rect.width()
-            h = rect.height()
-
-            # Icon in the identical spot as a 1x1 (top half)
-            top_half = QRectF(0, 0, w, 80)
-            painter.setFont(get_mdi_font(40))
-            painter.setPen(accent_color)
-            painter.drawText(top_half, Qt.AlignmentFlag.AlignCenter, icon)
-
-            # State Title
-            state_font = QFont(SYSTEM_FONT, 12, QFont.Weight.Bold)
-            painter.setFont(state_font)
-            painter.setPen(text_color)
-
-            fm = QFontMetrics(state_font)
-            elided_state = fm.elidedText(printer_state.capitalize(), Qt.TextElideMode.ElideRight, int(w - 16))
-
-            painter.drawText(QRectF(0, 90, w, 24), Qt.AlignmentFlag.AlignCenter, elided_state)
-
-            # Progress %
-            try:
-                prog_val = float(progress)
-            except Exception:
-                prog_val = 0.0
-
-            if printer_state.lower() not in ["off", "unavailable"]:
-                painter.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.Medium))
-                painter.setPen(dim_text_color)
-                painter.drawText(QRectF(0, 116, w, 20), Qt.AlignmentFlag.AlignCenter, f"{prog_val:.0f}%")
-
-            # Progress Bar Bottom
-            DashboardButtonPainter.draw_bottom_bar(painter, QRectF(0, 0, w, h), prog_val, 100.0, accent_color)
-
-        else:
-            # === 1x1: Compact ===
-            w = rect.width()
-            h = rect.height()
-            # Just the icon centered, color coded
-            painter.setFont(get_mdi_font(40))
-            painter.setPen(accent_color)
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, icon)
-
-            try:
-                prog_val = float(progress)
-            except Exception:
-                prog_val = 0.0
-
-            if prog_val > 0 and prog_val < 100 and printer_state.lower() not in ["off", "unavailable"]:
-                # Small progress indicator text below icon
-                painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.Bold))
-                painter.setPen(text_color)
-                painter.drawText(QRectF(0, h / 2 + 20, w, 20), Qt.AlignmentFlag.AlignCenter, f"{prog_val:.0f}%")
-
+            _paint_printer_compact(painter, button, view)
         painter.end()
 
     @staticmethod
@@ -1688,3 +1335,291 @@ def _cover_crop(pixmap, width: int, height: int):
         width, height, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
     )
     return scaled, (scaled.width() - width) // 2, (scaled.height() - height) // 2
+
+
+# ── 3D printer tile ──
+
+
+@dataclass
+class _PrinterView:
+    """What a 3D printer tile shows, gathered from its several entities."""
+
+    state: str  # lower case: printing, paused, operational, ...
+    text_color: QColor
+    dim_text_color: QColor
+    accent: QColor
+    camera: object = None  # QPixmap or None
+    nozzle: str = "--"
+    bed: str = "--"
+    progress: float = 0.0
+
+    @property
+    def title(self) -> str:
+        return self.state.capitalize()
+
+    @property
+    def offline(self) -> bool:
+        return self.state in ("off", "unavailable")
+
+
+def _printer_accent(state: str) -> QColor:
+    if state in ('printing', 'heating'):
+        return QColor('#34A853')  # green
+    if state == 'paused':
+        return QColor('#FBBC05')  # yellow
+    if 'error' in state or state == 'offline':
+        return QColor('#EA4335')  # red
+    return QColor('#4285F4')  # blue: idle/operational
+
+
+def _printer_view(button) -> _PrinterView:
+    state = button._state.lower()
+    if button.theme_manager:
+        text_color = QColor(button.theme_manager.get_colors().get('text', '#e0e0e0'))
+        dim_text_color = text_color.darker(150)
+    else:
+        text_color, dim_text_color = QColor('#e0e0e0'), QColor('#aaaaaa')
+    view = _PrinterView(state, text_color, dim_text_color, _printer_accent(state))
+
+    # A tile binds one entity, so the printer's other entities come from the dashboard.
+    states = getattr(button.window(), '_entity_states', None)
+    if states is None:
+        return view
+    cached = getattr(button, '_cached_display_pixmap', None)
+    if cached and not cached.isNull():
+        view.camera = cached
+    elif getattr(button, '_last_camera_pixmap', None):
+        view.camera = button._last_camera_pixmap
+
+    cfg = button.config
+    view.progress = _printer_progress(cfg, states)
+    show_targets = button.span_x > 3
+    pref = getattr(button, 'temperature_unit_preference', None)
+    nozzle = states.get(cfg.get('printer_nozzle_entity'), {})
+    nozzle_unit = nozzle.get('attributes', {}).get('unit_of_measurement')
+    view.nozzle = _temperature_pair(
+        nozzle.get('state', '--'),
+        states.get(cfg.get('printer_nozzle_target_entity'), {}).get('state'),
+        nozzle_unit,
+        pref,
+        show_targets,
+    )
+    bed = states.get(cfg.get('printer_bed_entity'), {})
+    view.bed = _temperature_pair(
+        bed.get('state', '--'),
+        states.get(cfg.get('printer_bed_target_entity'), {}).get('state'),
+        bed.get('attributes', {}).get('unit_of_measurement') or nozzle_unit,
+        pref,
+        show_targets,
+    )
+    return view
+
+
+def _printer_progress(cfg: dict, states: dict) -> float:
+    """Percent done: the dedicated progress entity, else common attributes on the state entity."""
+    prog_entity = cfg.get('printer_progress_entity')
+    if prog_entity:
+        progress = states.get(prog_entity, {}).get('state', 0)
+    else:
+        attrs = states.get(cfg.get('printer_state_entity'), {}).get('attributes', {})
+        progress = attrs.get('progress', attrs.get('job_percentage', 0))
+    try:
+        return float(progress)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _temperature_pair(actual, target, unit, pref, show_target: bool) -> str:
+    """'215°' or, when there is room and a target, '215°/220°'."""
+
+    def fmt(value):
+        return format_temperature(value, unit, pref, precision=0, fallback="--")
+
+    if actual == '--':
+        return "--"
+    try:
+        value = float(actual)
+        if show_target and target and target != 'unknown':
+            return f"{fmt(value)}/{fmt(float(target))}"
+        return fmt(value)
+    except Exception:
+        return fmt(actual)
+
+
+def _paint_printer_huge(painter, button, view: _PrinterView):
+    """2x2+: the camera feed fills the card; pills float over it."""
+    rect = button.rect()
+    w, h = rect.width(), rect.height()
+    cam_rect = QRectF(0, 0, w, h)
+    path = QPainterPath()
+    path.addRoundedRect(QRectF(rect), 12, 12)
+    painter.setClipPath(path)
+
+    bg = _draw_printer_camera(painter, button, view.camera, cam_rect)
+    if not view.offline:
+        DashboardButtonPainter._draw_pill_label(
+            painter, cam_rect, f"{view.progress:.0f}%", *bg, position='top-right', force_dark=True
+        )
+    if button.span_x > 2 or button.span_y > 2:
+        name = button.config.get("label", button.config.get("name", "3D Printer"))
+        DashboardButtonPainter._draw_pill_label(painter, cam_rect, name, *bg, position='top-left', force_dark=True)
+    _draw_printer_footer(painter, view, w, h, bg)
+
+
+def _draw_printer_camera(painter, button, camera, cam_rect: QRectF):
+    """Draw the feed (or a placeholder); return (pixmap, x, y) for the frosted pills to blur."""
+    w, h = cam_rect.width(), cam_rect.height()
+    if not camera or camera.isNull():
+        painter.fillRect(cam_rect.toRect(), QColor(0, 0, 0, 100))
+        painter.setFont(get_mdi_font(40))
+        painter.setPen(QColor(255, 255, 255, 100))
+        painter.drawText(cam_rect, Qt.AlignmentFlag.AlignCenter, Icons.VIDEO_OFF)
+        return None, 0, 0
+    if camera == getattr(button, '_cached_display_pixmap', None):
+        painter.drawPixmap(0, 0, camera)  # already rounded and sized
+        bg = (camera, 0, 0)
+    else:
+        scaled = camera.scaled(
+            int(w), int(h), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
+        )
+        x_off = int((scaled.width() - w) / 2)
+        y_off = int((scaled.height() - h) / 2)
+        painter.drawPixmap(0, 0, scaled, x_off, y_off, int(w), int(h))
+        bg = (scaled, x_off, y_off)
+    DashboardButtonPainter.draw_image_edge_effects(painter, cam_rect, is_top_clamped=False)
+    return bg
+
+
+class _TemperatureStrip:
+    """Nozzle and bed icons with their values, laid out in one row."""
+
+    def __init__(self, nozzle: str, bed: str):
+        self.icon_font = get_mdi_font(13)
+        self.value_font = QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold)
+        self.icon_metrics = QFontMetrics(self.icon_font)
+        self.value_metrics = QFontMetrics(self.value_font)
+        # (text, is_icon, gap after it)
+        self.parts = [
+            (get_icon('printer-3d-nozzle'), True, 6),
+            (nozzle, False, 12),
+            (get_icon('square-medium'), True, 6),
+            (bed, False, 0),
+        ]
+        self.width = sum(self._advance(text, is_icon) + gap for text, is_icon, gap in self.parts)
+
+    def _advance(self, text: str, is_icon: bool) -> int:
+        return (self.icon_metrics if is_icon else self.value_metrics).horizontalAdvance(text)
+
+    def draw(self, painter, rect: QRectF, color: QColor):
+        x = rect.x() + (rect.width() - self.width) / 2
+        painter.setPen(color)
+        for text, is_icon, gap in self.parts:
+            painter.setFont(self.icon_font if is_icon else self.value_font)
+            advance = self._advance(text, is_icon)
+            painter.drawText(
+                QRectF(x, rect.y(), advance, rect.height()),
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                text,
+            )
+            x += advance + gap
+
+
+def _draw_printer_footer(painter, view: _PrinterView, w: int, h: int, bg):
+    """Frosted pills at the bottom: state on the left, temperatures on the right.
+
+    The temperatures are sized first and take priority; the state pill only
+    appears if at least 56px remain.
+    """
+    from ui.utils.glass_effect import draw_frosted_pill
+
+    pill_h = 28
+    pill_y = h - pill_h - 12
+    pad_x = 12
+    temps = _TemperatureStrip(view.nozzle, view.bed)
+    temps_pill_w = 0 if view.offline else min(temps.width + 24, w - pad_x * 2)
+
+    state_label = view.title.upper()
+    state_font = QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold)
+    fm_state = QFontMetrics(state_font)
+    ideal_state_w = max(56, fm_state.horizontalAdvance(state_label) + 24) if state_label else 0
+    remaining_w = w - pad_x * 2 - (temps_pill_w + 8 if temps_pill_w else 0)
+    state_pill_w = min(ideal_state_w, remaining_w) if remaining_w >= 56 else 0
+
+    if state_pill_w:
+        state_rect = QRectF(pad_x, pill_y, state_pill_w, pill_h)
+        text_color = draw_frosted_pill(painter, state_rect, *bg, force_dark=True)
+        painter.setFont(state_font)
+        painter.setPen(text_color)
+        painter.drawText(
+            state_rect,
+            Qt.AlignmentFlag.AlignCenter,
+            fm_state.elidedText(state_label, Qt.TextElideMode.ElideRight, int(state_pill_w - 16)),
+        )
+    if temps_pill_w > 0:
+        temps_rect = QRectF(w - temps_pill_w - pad_x, pill_y, temps_pill_w, pill_h)
+        temps.draw(painter, temps_rect, draw_frosted_pill(painter, temps_rect, *bg, force_dark=True))
+
+
+def _paint_printer_wide(painter, button, view: _PrinterView):
+    """2x1: icon on the left, state and temperatures on the right, progress bar along the bottom."""
+    w, h = button.rect().width(), button.rect().height()
+    icon_size, icon_x = 40, 24
+    painter.setFont(get_mdi_font(28))
+    painter.setPen(view.accent)
+    painter.drawText(
+        QRectF(icon_x, (h - icon_size) // 2, icon_size, icon_size), Qt.AlignmentFlag.AlignCenter, Icons.PRINTER_3D
+    )
+
+    text_x = icon_x + icon_size + 16
+    avail_width = w - text_x - 16
+    state_font = QFont(SYSTEM_FONT, 12, QFont.Weight.Bold)
+    painter.setFont(state_font)
+    painter.setPen(view.text_color)
+    painter.drawText(
+        QRectF(text_x, 16, avail_width, 24),
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom,
+        QFontMetrics(state_font).elidedText(view.title, Qt.TextElideMode.ElideRight, int(avail_width)),
+    )
+    painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.Medium))
+    painter.setPen(view.dim_text_color)
+    painter.drawText(
+        QRectF(text_x, 44, w - text_x - 16, 24),
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+        f"N: {view.nozzle}  B: {view.bed}",
+    )
+    DashboardButtonPainter.draw_bottom_bar(painter, QRectF(0, 0, w, h), view.progress, 100.0, view.accent)
+
+
+def _paint_printer_tall(painter, button, view: _PrinterView):
+    """1x2: the icon where a 1x1 has it, then state, percent and a progress bar."""
+    w, h = button.rect().width(), button.rect().height()
+    painter.setFont(get_mdi_font(40))
+    painter.setPen(view.accent)
+    painter.drawText(QRectF(0, 0, w, 80), Qt.AlignmentFlag.AlignCenter, Icons.PRINTER_3D)
+
+    state_font = QFont(SYSTEM_FONT, 12, QFont.Weight.Bold)
+    painter.setFont(state_font)
+    painter.setPen(view.text_color)
+    painter.drawText(
+        QRectF(0, 90, w, 24),
+        Qt.AlignmentFlag.AlignCenter,
+        QFontMetrics(state_font).elidedText(view.title, Qt.TextElideMode.ElideRight, int(w - 16)),
+    )
+    if not view.offline:
+        painter.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.Medium))
+        painter.setPen(view.dim_text_color)
+        painter.drawText(QRectF(0, 116, w, 20), Qt.AlignmentFlag.AlignCenter, f"{view.progress:.0f}%")
+    DashboardButtonPainter.draw_bottom_bar(painter, QRectF(0, 0, w, h), view.progress, 100.0, view.accent)
+
+
+def _paint_printer_compact(painter, button, view: _PrinterView):
+    """1x1: the icon in the state's colour, with the percent below while printing."""
+    rect = button.rect()
+    w, h = rect.width(), rect.height()
+    painter.setFont(get_mdi_font(40))
+    painter.setPen(view.accent)
+    painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, Icons.PRINTER_3D)
+    if 0 < view.progress < 100 and not view.offline:
+        painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.Bold))
+        painter.setPen(view.text_color)
+        painter.drawText(QRectF(0, h / 2 + 20, w, 20), Qt.AlignmentFlag.AlignCenter, f"{view.progress:.0f}%")
