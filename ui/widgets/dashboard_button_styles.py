@@ -22,87 +22,72 @@ class DashboardButtonStyleManager:
     @staticmethod
     def apply_style(button):
         """Update visual style based on state and theme."""
-        if button.theme_manager:
-            colors = button.theme_manager.get_colors()
-        else:
-            colors = {
-                'base': '#2d2d2d',
-                'accent': '#0078d4',
-                'text': '#ffffff',
-                'border': '#555555',
-                'alternate_base': '#353535',
-                'subtext': '#888888',
-            }
-
-        # Use cleaner, Apple-style typography
-        # Main Value: Large, Thin/Light
-        # Label: Small, Uppercase, Tracking
-
-        font_weight_val = Typography.WEIGHT_MEDIUM
-        font_size_val = Typography.SIZE_BUTTON_VALUE
-
-        font_label = Typography.FONT_FAMILY_MAIN
-        font_size_label = Typography.SIZE_BUTTON_LABEL
-        font_weight_label = Typography.WEIGHT_SEMIBOLD
-
+        colors = button.theme_manager.get_colors() if button.theme_manager else _DEFAULT_COLORS
         is_gradient = getattr(button, 'button_style', 'Gradient') == 'Gradient'
+        button.setStyleSheet(DashboardButtonStyleManager._stylesheet_for(button, colors, is_gradient))
 
+    @staticmethod
+    def _stylesheet_for(button, colors: dict, is_gradient: bool) -> str:
+        cls = DashboardButtonStyleManager
         if not button.config:
-            # Empty
-            if is_gradient:
-                bg_style = DashboardButtonStyleManager._get_gradient(colors['alternate_base'], 105)
-            else:
-                bg_style = f"background-color: {colors['alternate_base']};"
+            return cls._muted_style(colors, is_gradient)  # empty slot
+        btn_type = button.config.get('type')
+        if btn_type == 'sun':
+            return cls._plain_style(colors, is_gradient)
+        if btn_type == 'forbidden':
+            # Forbidden slot: visually muted, no hover, no interaction
+            return cls._muted_style(colors, is_gradient, label_extra=" opacity: 0.5;")
+        if btn_type == 'lock' and button._state == 'jammed':
+            return cls._jammed_style(is_gradient)
+        if cls._is_active(button):
+            return cls._active_style(button, colors, is_gradient)
+        return cls._off_style(colors, is_gradient)
 
-            button.setStyleSheet(f"""
+    @staticmethod
+    def _background(color: str, is_gradient: bool, lighten_factor: int) -> str:
+        if is_gradient:
+            return DashboardButtonStyleManager._get_gradient(color, lighten_factor)
+        return f"background-color: {color};"
+
+    @staticmethod
+    def _is_active(button) -> bool:
+        """On, open, running and the like: drawn in the button's colour."""
+        cfg = button.config or {}
+        return (
+            button._state in _ACTIVE_STATES
+            or cfg.get('type') == 'script'
+            or (cfg.get('type') == 'input_number' and bool(cfg.get('color')))
+        )
+
+    @staticmethod
+    def _muted_style(colors: dict, is_gradient: bool, label_extra: str = "") -> str:
+        bg_style = DashboardButtonStyleManager._background(colors['alternate_base'], is_gradient, 105)
+        return f"""
                 DashboardButton {{
                     {bg_style}
                     border-radius: {Dimensions.RADIUS_XLARGE};
                 }}
-                QLabel {{ color: {colors['border']}; background: transparent; }}
-            """)
-            return
-        if button.config and button.config.get('type') == 'sun':
-            if is_gradient:
-                bg_style = DashboardButtonStyleManager._get_gradient(colors['base'], 115)
-                bg_hover_style = DashboardButtonStyleManager._get_gradient(colors['alternate_base'], 115)
-            else:
-                bg_style = f"background-color: {colors['base']};"
-                bg_hover_style = f"background-color: {colors['alternate_base']};"
-            button.setStyleSheet(f"""
+                QLabel {{ color: {colors['border']}; background: transparent;{label_extra} }}
+            """
+
+    @staticmethod
+    def _plain_style(colors: dict, is_gradient: bool) -> str:
+        background = DashboardButtonStyleManager._background
+        return f"""
                 DashboardButton {{
-                    {bg_style}
+                    {background(colors['base'], is_gradient, 115)}
                     border-radius: 12px;
                 }}
                 DashboardButton:hover {{
-                    {bg_hover_style}
+                    {background(colors['alternate_base'], is_gradient, 115)}
                 }}
-            """)
-            return
-        if button.config and button.config.get('type') == 'forbidden':
-            # Forbidden slot: visually muted, no hover, no interaction
-            if is_gradient:
-                bg_style = DashboardButtonStyleManager._get_gradient(colors['alternate_base'], 105)
-            else:
-                bg_style = f"background-color: {colors['alternate_base']};"
+            """
 
-            button.setStyleSheet(f"""
-                DashboardButton {{
-                    {bg_style}
-                    border-radius: {Dimensions.RADIUS_XLARGE};
-                }}
-                QLabel {{ color: {colors['border']}; background: transparent; opacity: 0.5; }}
-            """)
-            return
-        if button.config and button.config.get('type') == 'lock' and button._state == 'jammed':
-            # Jammed lock: unmissable alert red, independent of the button's configured color
-            alert_color = '#EA4335'
-            if is_gradient:
-                bg_style = DashboardButtonStyleManager._get_gradient(alert_color, 115)
-            else:
-                bg_style = f"background-color: {alert_color};"
-
-            button.setStyleSheet(f"""
+    @staticmethod
+    def _jammed_style(is_gradient: bool) -> str:
+        # Jammed lock: unmissable alert red, independent of the button's configured color
+        bg_style = DashboardButtonStyleManager._background('#EA4335', is_gradient, 115)
+        return f"""
                 DashboardButton {{
                     {bg_style}
                     border-radius: {Dimensions.RADIUS_XLARGE};
@@ -116,63 +101,39 @@ class DashboardButtonStyleManager:
                 QLabel#nameLabel {{
                     color: rgba(255, 255, 255, 0.95);
                     background: transparent;
-                    font-family: "{font_label}"; font-size: {font_size_label}; font-weight: {font_weight_label}; text-transform: uppercase;
+                    {_NAME_LABEL_FONT}
                 }}
-            """)
-            return
-        if (
-            button._state == "on"
-            or button._state == "open"
-            or button._state == "locked"
-            or button._state == "mowing"
-            or button._state == "returning"
-            or button._state == "cleaning"
-            or (button.config and button.config.get('type') == 'script')
-            or (button.config and button.config.get('type') == 'input_number' and button.config.get('color'))
-        ):
-            # On - Use button's custom color if set, otherwise theme accent
-            button_color = button.config.get('color', colors['accent'])
+            """
 
-            # GLOBAL Dynamic Color Logic (Applies to ALL buttons using #3c3c3c)
-            is_dynamic_gray = str(button_color).lower() == "#3c3c3c"
+    @staticmethod
+    def _active_color(button, colors: dict) -> str:
+        """The button's colour (or the accent), adapted to the theme and dimmed by brightness."""
+        button_color = button.config.get('color', colors['accent'])
+        # #3c3c3c is the "dynamic" sensor colour: white in light mode, gray in dark mode.
+        if str(button_color).lower() == "#3c3c3c":
+            light = button.theme_manager and button.theme_manager.get_effective_theme() == 'light'
+            button_color = "#ffffff" if light else "#3c3c3c"
 
-            if is_dynamic_gray:
-                # Dynamic Sensor Color: White in Light Mode, Gray in Dark Mode
-                if button.theme_manager and button.theme_manager.get_effective_theme() == 'light':
-                    button_color = "#ffffff"
-                else:
-                    button_color = "#3c3c3c"
+        # Dimming: brightness 0-255 maps to alpha 60-255, so the tile never disappears.
+        if getattr(button, '_show_dimming', False) and getattr(button, '_brightness', None) is not None:
+            bri = int(getattr(button, '_brightness', 255))
+            if bri < 255:
+                c = QColor(button_color)
+                c.setAlpha(int(60 + (bri / 255.0) * 195))
+                button_color = f"rgba({c.red()}, {c.green()}, {c.blue()}, {c.alpha() / 255.0:.2f})"
+        return button_color
 
-            # Apply Dimming Logic (if enabled)
-            if getattr(button, '_show_dimming', False) and getattr(button, '_brightness', None) is not None:
-                # Only applies if we have a brightness value
-                # Map brightness 0-255 to Alpha 60-255 (so it's never invisible)
-                bri = int(getattr(button, '_brightness', 255))
-                if bri < 255:
-                    alpha = int(60 + (bri / 255.0) * 195)
-                    c = QColor(button_color)
-                    c.setAlpha(alpha)
-                    # Convert back to rgba string for stylesheet
-                    button_color = f"rgba({c.red()}, {c.green()}, {c.blue()}, {c.alpha() / 255.0:.2f})"
-
-            # Determine text contrast based on background brightness
-            # Simple heuristic: if background is White (#ffffff), use dark text
-            is_light_bg = str(button_color).lower() == "#ffffff"
-
-            if is_light_bg:
-                icon_color = "rgba(0, 0, 0, 0.65)"
-                text_color = "rgba(30, 30, 30, 1.0)"
-            else:
-                icon_color = "rgba(255, 255, 255, 0.65)"
-                text_color = "rgba(255, 255, 255, 1.0)"
-
-            # QColor can't parse CSS rgba() strings, so skip gradient when dimming is active
-            if is_gradient and not str(button_color).startswith('rgba'):
-                bg_style = DashboardButtonStyleManager._get_gradient(button_color, 115)
-            else:
-                bg_style = f"background-color: {button_color};"
-
-            button.setStyleSheet(f"""
+    @staticmethod
+    def _active_style(button, colors: dict, is_gradient: bool) -> str:
+        button_color = DashboardButtonStyleManager._active_color(button, colors)
+        if str(button_color).lower() == "#ffffff":  # light tile: dark text
+            icon_color, text_color = "rgba(0, 0, 0, 0.65)", "rgba(30, 30, 30, 1.0)"
+        else:
+            icon_color, text_color = "rgba(255, 255, 255, 0.65)", "rgba(255, 255, 255, 1.0)"
+        # QColor can't parse CSS rgba() strings, so no gradient while dimmed.
+        use_gradient = is_gradient and not str(button_color).startswith('rgba')
+        bg_style = DashboardButtonStyleManager._background(button_color, use_gradient, 115)
+        return f"""
                 DashboardButton {{
                     {bg_style}
                     border-radius: {Dimensions.RADIUS_XLARGE};
@@ -180,7 +141,7 @@ class DashboardButtonStyleManager:
                 QLabel#valueLabel {{ 
                     color: {icon_color}; 
                     background: transparent; 
-                    font-size: {font_size_val}; font-weight: {font_weight_val};
+                    font-size: {Typography.SIZE_BUTTON_VALUE}; font-weight: {Typography.WEIGHT_MEDIUM};
                 }}
                 /* Beefier font for Icons (Switch/Light/Script) */
                 DashboardButton[type="switch"] QLabel#valueLabel,
@@ -219,30 +180,25 @@ class DashboardButtonStyleManager:
                     color: {text_color}; 
                     background: transparent;
                     opacity: 0.9;
-                    font-family: "{font_label}"; font-size: {font_size_label}; font-weight: {font_weight_label}; text-transform: uppercase;
+                    {_NAME_LABEL_FONT}
                 }}
-            """)
-        else:
-            # Off / Widget (Default dark state)
-            if is_gradient:
-                bg_style = DashboardButtonStyleManager._get_gradient(colors['base'], 115)
-                bg_hover_style = DashboardButtonStyleManager._get_gradient(colors['alternate_base'], 115)
-            else:
-                bg_style = f"background-color: {colors['base']};"
-                bg_hover_style = f"background-color: {colors['alternate_base']};"
+            """
 
-            button.setStyleSheet(f"""
+    @staticmethod
+    def _off_style(colors: dict, is_gradient: bool) -> str:
+        background = DashboardButtonStyleManager._background
+        return f"""
                 DashboardButton {{
-                    {bg_style}
+                    {background(colors['base'], is_gradient, 115)}
                     border-radius: 12px;
                 }}
                 DashboardButton:hover {{
-                    {bg_hover_style}
+                    {background(colors['alternate_base'], is_gradient, 115)}
                 }}
                 QLabel#valueLabel {{ 
                     color: {colors['text']}; 
                     background: transparent;
-                    font-size: {font_size_val}; font-weight: {font_weight_val};
+                    font-size: {Typography.SIZE_BUTTON_VALUE}; font-weight: {Typography.WEIGHT_MEDIUM};
                 }}
                 DashboardButton[type="switch"] QLabel#valueLabel,
                 DashboardButton[type="script"] QLabel#valueLabel,
@@ -262,6 +218,24 @@ class DashboardButtonStyleManager:
                 QLabel#nameLabel {{ 
                     color: {colors.get('subtext', '#888888')}; 
                     background: transparent;
-                    font-family: "{font_label}"; font-size: {font_size_label}; font-weight: {font_weight_label}; text-transform: uppercase;
+                    {_NAME_LABEL_FONT}
                 }}
-            """)
+            """
+
+
+_DEFAULT_COLORS = {
+    'base': '#2d2d2d',
+    'accent': '#0078d4',
+    'text': '#ffffff',
+    'border': '#555555',
+    'alternate_base': '#353535',
+    'subtext': '#888888',
+}
+
+_ACTIVE_STATES = frozenset({"on", "open", "locked", "mowing", "returning", "cleaning"})
+
+# Tile labels: small, semibold, uppercase.
+_NAME_LABEL_FONT = (
+    f'font-family: "{Typography.FONT_FAMILY_MAIN}"; font-size: {Typography.SIZE_BUTTON_LABEL}; '
+    f'font-weight: {Typography.WEIGHT_SEMIBOLD}; text-transform: uppercase;'
+)
