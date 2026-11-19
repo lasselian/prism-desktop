@@ -86,19 +86,18 @@ class OverlayManager(QObject):
         self.alarm_overlay.keypad_toggled.connect(self.on_alarm_keypad_toggled)
 
         # Per-overlay state: siblings faded by the overlay, and the source button it morphed from
-        self._overlay_state = {
-            overlay: {'siblings': [], 'source': None}
-            for overlay in (
-                self.dimmer_overlay,
-                self.climate_overlay,
-                self.printer_overlay,
-                self.weather_overlay,
-                self.camera_overlay,
-                self.mower_overlay,
-                self.vacuum_overlay,
-                self.alarm_overlay,
-            )
+        # Every overlay, with the name of the handler that cleans up after it closes.
+        self._overlay_finishers = {
+            self.dimmer_overlay: 'on_dimmer_finished',
+            self.climate_overlay: 'on_climate_finished',
+            self.printer_overlay: 'on_printer_finished',
+            self.weather_overlay: 'on_weather_finished',
+            self.camera_overlay: 'on_camera_finished',
+            self.mower_overlay: 'on_mower_finished',
+            self.vacuum_overlay: 'on_vacuum_finished',
+            self.alarm_overlay: 'on_alarm_finished',
         }
+        self._overlay_state = {overlay: {'siblings': [], 'source': None} for overlay in self._overlay_finishers}
 
         # State Tracking
         self._active_dimmer_entity = None
@@ -151,35 +150,13 @@ class OverlayManager(QObject):
 
     def any_overlay_open(self) -> bool:
         """Return True if any overlay is currently visible."""
-        return (
-            self.dimmer_overlay.isVisible()
-            or self.climate_overlay.isVisible()
-            or self.printer_overlay.isVisible()
-            or self.weather_overlay.isVisible()
-            or self.camera_overlay.isVisible()
-            or self.mower_overlay.isVisible()
-            or self.vacuum_overlay.isVisible()
-            or self.alarm_overlay.isVisible()
-        )
+        return any(overlay.isVisible() for overlay in self._overlay_finishers)
 
     def close_all_overlays_animated(self):
         """Trigger close_morph on all visible overlays instead of instant hide."""
-        if self.dimmer_overlay.isVisible() and not getattr(self.dimmer_overlay, '_is_closing', False):
-            self.dimmer_overlay.close_morph()
-        if self.climate_overlay.isVisible() and not getattr(self.climate_overlay, '_is_closing', False):
-            self.climate_overlay.close_morph()
-        if self.printer_overlay.isVisible() and not getattr(self.printer_overlay, '_is_closing', False):
-            self.printer_overlay.close_morph()
-        if self.weather_overlay.isVisible() and not getattr(self.weather_overlay, '_is_closing', False):
-            self.weather_overlay.close_morph()
-        if self.camera_overlay.isVisible() and not getattr(self.camera_overlay, '_is_closing', False):
-            self.camera_overlay.close_morph()
-        if self.mower_overlay.isVisible() and not getattr(self.mower_overlay, '_is_closing', False):
-            self.mower_overlay.close_morph()
-        if self.vacuum_overlay.isVisible() and not getattr(self.vacuum_overlay, '_is_closing', False):
-            self.vacuum_overlay.close_morph()
-        if self.alarm_overlay.isVisible() and not getattr(self.alarm_overlay, '_is_closing', False):
-            self.alarm_overlay.close_morph()
+        for overlay in self._overlay_finishers:
+            if overlay.isVisible() and not getattr(overlay, '_is_closing', False):
+                overlay.close_morph()
 
     def _queue_or_start_overlay(self, method, slot, *args):
         """
@@ -213,30 +190,10 @@ class OverlayManager(QObject):
 
     def close_all_overlays(self):
         """Instantly hide any active overlay. Called before navigating away from grid."""
-        if self.dimmer_overlay.isVisible():
-            self.dimmer_overlay.hide()
-            self.on_dimmer_finished()
-        if self.climate_overlay.isVisible():
-            self.climate_overlay.hide()
-            self.on_climate_finished()
-        if self.printer_overlay.isVisible():
-            self.printer_overlay.hide()
-            self.on_printer_finished()
-        if self.weather_overlay.isVisible():
-            self.weather_overlay.hide()
-            self.on_weather_finished()
-        if self.camera_overlay.isVisible():
-            self.camera_overlay.hide()
-            self.on_camera_finished()
-        if self.mower_overlay.isVisible():
-            self.mower_overlay.hide()
-            self.on_mower_finished()
-        if self.vacuum_overlay.isVisible():
-            self.vacuum_overlay.hide()
-            self.on_vacuum_finished()
-        if self.alarm_overlay.isVisible():
-            self.alarm_overlay.hide()
-            self.on_alarm_finished()
+        for overlay, finisher in self._overlay_finishers.items():
+            if overlay.isVisible():
+                overlay.hide()
+                getattr(self, finisher)()
 
     def update_buttons(self, buttons: list):
         """Update reference to buttons."""
@@ -367,6 +324,44 @@ class OverlayManager(QObject):
     # Dimmer / Volume Logic
     # ==========================
 
+    # ── Shared helpers for the start_* methods ──
+
+    def _button_at(self, slot: int):
+        return next((b for b in self.buttons if b.slot == slot), None)
+
+    def _base_color(self) -> QColor:
+        colors = self.theme_manager.get_colors() if self.theme_manager else {}
+        return QColor(colors.get('base', '#2d2d2d'))
+
+    def _overlay_colors(self, config: dict, default_accent: str) -> tuple[QColor, QColor]:
+        """(base, accent): the theme's base colour, and the tile's colour, else the theme accent."""
+        colors = self.theme_manager.get_colors() if self.theme_manager else {}
+        button_color = config.get('color')
+        accent = QColor(button_color) if button_color else QColor(colors.get('accent', default_accent))
+        return QColor(colors.get('base', '#2d2d2d')), accent
+
+    def _local_rect(self, global_rect: QRect) -> QRect:
+        """A global rect in the dashboard's coordinates."""
+        return QRect(self.parent_widget.mapFromGlobal(global_rect.topLeft()), global_rect.size())
+
+    def _grow_to_min_height(self, target_rect: QRect, source_btn, min_height: int) -> bool:
+        """Make target_rect at least min_height tall; True if it had to grow.
+
+        If the taller rect would run into the footer (about 40px), it grows
+        upwards instead, its bottom aligned with the source button's.
+        """
+        if target_rect.height() >= min_height:
+            return False
+        target_rect.setHeight(min_height)
+        safe_bottom = self.parent_widget.height() - 40
+        if target_rect.bottom() > safe_bottom:
+            if source_btn:
+                src_pos = source_btn.mapTo(self.parent_widget, QPoint(0, 0))
+                target_rect.moveBottom(src_pos.y() + source_btn.height())
+            else:
+                target_rect.moveTop(target_rect.top() - (target_rect.bottom() - safe_bottom))
+        return True
+
     def start_dimmer(self, slot: int, global_rect: QRect, config: dict):
         """Start the dimmer morph sequence."""
         if self._queue_or_start_overlay(self.start_dimmer, slot, global_rect, config):
@@ -382,41 +377,14 @@ class OverlayManager(QObject):
         self._active_dimmer_entity = entity_id
         self._active_dimmer_type = config.get('type', 'switch')
 
-        # Calculate Start Value
-        source_btn = next((b for b in self.buttons if b.slot == slot), None)
-        current_val = 0
-
-        state_obj = self._entity_states.get(entity_id, {})
-        attrs = state_obj.get('attributes', {})
-
-        if self._active_dimmer_type == 'curtain':
-            pos = attrs.get('current_position')
-            if pos is not None:
-                current_val = int(pos)
-            elif source_btn:
-                current_val = 100 if source_btn._state == "open" else 0
-        else:
-            bri = attrs.get('brightness')
-            if bri is not None:
-                current_val = int((bri / 255.0) * 100)
-            elif source_btn and hasattr(source_btn, '_state'):
-                current_val = 100 if source_btn._state == "on" else 0
+        source_btn = self._button_at(slot)
+        current_val = self._dimmer_start_value(self._active_dimmer_type, entity_id, source_btn)
 
         # Colors
-        if self.theme_manager:
-            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
-        else:
-            base_color = QColor("#2d2d2d")
-        button_color = config.get('color')
-        accent_color = QColor(button_color) if button_color else QColor("#FFD700")
-
-        if self.theme_manager and not button_color:
-            cols = self.theme_manager.get_colors()
-            accent_color = QColor(cols.get('accent', '#FFD700'))
+        base_color, accent_color = self._overlay_colors(config, "#FFD700")
 
         # Geometries
-        start_rect = self.parent_widget.mapFromGlobal(global_rect.topLeft())
-        start_rect = QRect(start_rect, global_rect.size())
+        start_rect = self._local_rect(global_rect)
 
         target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='dimmer')
 
@@ -430,6 +398,21 @@ class OverlayManager(QObject):
         )
         self.dimmer_timer.start()
 
+    def _dimmer_start_value(self, dimmer_type: str, entity_id: str, source_btn) -> int:
+        """0-100: a cover's position or a light's brightness, else the tile's on/off state."""
+        attrs = self._entity_states.get(entity_id, {}).get('attributes', {})
+        if dimmer_type == 'curtain':
+            pos = attrs.get('current_position')
+            if pos is not None:
+                return int(pos)
+            on_state, has_state = "open", bool(source_btn)
+        else:
+            bri = attrs.get('brightness')
+            if bri is not None:
+                return int((bri / 255.0) * 100)
+            on_state, has_state = "on", bool(source_btn) and hasattr(source_btn, '_state')
+        return 100 if has_state and source_btn._state == on_state else 0
+
     def start_volume(self, slot: int, global_rect: QRect, config: dict):
         """Start volume slider using dimmer overlay."""
         if self._queue_or_start_overlay(self.start_volume, slot, global_rect, config):
@@ -441,7 +424,7 @@ class OverlayManager(QObject):
         if not entity_id:
             return
 
-        source_btn = next((b for b in self.buttons if b.slot == slot), None)
+        source_btn = self._button_at(slot)
         if not source_btn:
             return
 
@@ -524,26 +507,28 @@ class OverlayManager(QObject):
         return 1.0
 
     def _calculate_target_rect_and_siblings(self, source_btn, slot, overlay_type='dimmer'):
+        """Rect an overlay opens into: the source button's row (at most six columns
+        wide), one button tall. Buttons it covers are faded and remembered."""
         if not source_btn:
             return QRect()
-
         src_pos = source_btn.mapTo(self.parent_widget, QPoint(0, 0))
+        row_buttons = self._row_buttons(source_btn)
 
-        # Slot-based row detection — avoids pixel-overlap false positives for span_y>1 buttons
-        cols = getattr(self.parent_widget, '_cols', 4)
-        src_row = source_btn.slot // cols
+        state = self._overlay_state[self._overlay_for(overlay_type)]
+        state['source'] = source_btn
+        state['siblings'] = []
+        source_btn.set_opacity(0.0)
+        if not row_buttons:
+            return QRect(src_pos, source_btn.size())
 
-        row_buttons = []
-        for btn in self.buttons:
-            if not btn.isVisible():
-                continue
-            btn_row = btn.slot // cols
-            btn_row_end = btn_row + getattr(btn, 'span_y', 1)
-            if btn_row < src_row + 1 and btn_row_end > src_row:
-                btn_pos = btn.mapTo(self.parent_widget, QPoint(0, 0))
-                row_buttons.append((btn, btn_pos))
+        target_x, target_width = self._row_extent(row_buttons, source_btn, src_pos)
+        # Single-row height — overlays that need more vertical space expand via their own loops
+        final_rect = QRect(int(target_x), src_pos.y(), int(target_width), BUTTON_HEIGHT)
+        state['siblings'] = self._fade_row_siblings(row_buttons, source_btn, final_rect)
+        return final_rect
 
-        _overlay_map = {
+    def _overlay_for(self, overlay_type: str):
+        overlays = {
             'dimmer': self.dimmer_overlay,
             'climate': self.climate_overlay,
             'printer': self.printer_overlay,
@@ -553,60 +538,53 @@ class OverlayManager(QObject):
             'vacuum': self.vacuum_overlay,
             'alarm': self.alarm_overlay,
         }
-        _overlay = _overlay_map.get(overlay_type, self.dimmer_overlay)
-        _state = self._overlay_state[_overlay]
-        _state['source'] = source_btn
-        _state['siblings'] = []
-        source_btn.set_opacity(0.0)
+        return overlays.get(overlay_type, self.dimmer_overlay)
 
-        # Calculate Rect
-        if row_buttons:
-            row_buttons.sort(key=lambda x: x[1].x())
-            _, first_pos = row_buttons[0]
-            last_btn, last_pos = row_buttons[-1]
+    def _row_buttons(self, source_btn) -> list:
+        """Visible buttons sharing a grid row with source_btn, with their positions, left to right.
 
-            target_x = first_pos.x()
-            target_width = (last_pos.x() + last_btn.width()) - first_pos.x()
+        Rows come from slots, not pixels, so taller (span_y > 1) buttons don't
+        produce false overlaps.
+        """
+        cols = getattr(self.parent_widget, '_cols', 4)
+        src_row = source_btn.slot // cols
+        row_buttons = []
+        for btn in self.buttons:
+            btn_row = btn.slot // cols
+            if btn.isVisible() and btn_row <= src_row < btn_row + getattr(btn, 'span_y', 1):
+                row_buttons.append((btn, btn.mapTo(self.parent_widget, QPoint(0, 0))))
+        row_buttons.sort(key=lambda x: x[1].x())
+        return row_buttons
 
-            max_6_col_width = (6 * BUTTON_WIDTH) + (5 * BUTTON_SPACING)
+    def _row_extent(self, row_buttons: list, source_btn, src_pos: QPoint) -> tuple:
+        """(x, width) across the row, capped at six columns kept on the source's side, and on screen."""
+        _, first_pos = row_buttons[0]
+        last_btn, last_pos = row_buttons[-1]
+        target_x = first_pos.x()
+        target_width = (last_pos.x() + last_btn.width()) - first_pos.x()
 
-            if target_width > max_6_col_width:
-                row_width = (last_pos.x() + last_btn.width()) - first_pos.x()
-                src_center = src_pos.x() + (source_btn.width() / 2)
-                row_center = first_pos.x() + (row_width / 2)
-                if src_center > row_center:
-                    right_edge = target_x + target_width
-                    target_width = max_6_col_width
-                    target_x = right_edge - target_width
-                else:
-                    target_width = max_6_col_width
+        max_6_col_width = (6 * BUTTON_WIDTH) + (5 * BUTTON_SPACING)
+        if target_width > max_6_col_width:
+            src_center = src_pos.x() + (source_btn.width() / 2)
+            row_center = first_pos.x() + (target_width / 2)
+            if src_center > row_center:
+                target_x = target_x + target_width - max_6_col_width  # keep the right edge
+            target_width = max_6_col_width
 
-            max_w = self.parent_widget.width()
-            if target_x + target_width > max_w:
-                target_width = max_w - target_x
-            if target_x < 0:
-                target_x = 0
+        target_width = min(target_width, self.parent_widget.width() - target_x)
+        return max(target_x, 0), target_width
 
-            # Single-row height — overlays that need more vertical space expand via their own loops
-            final_rect = QRect(int(target_x), src_pos.y(), int(target_width), BUTTON_HEIGHT)
-
-            filtered_siblings = []
-            for btn, btn_pos in row_buttons:
-                if btn == source_btn:
-                    continue
-                btn_rect = QRect(btn_pos, btn.size())
-                opacity = self._fade_opacity_for_coverage(final_rect, btn_rect)
-                if opacity < 1.0:
-                    filtered_siblings.append(btn)
-                    btn.set_opacity(opacity)
-                else:
-                    btn.set_opacity(1.0)
-
-            _state['siblings'] = filtered_siblings
-
-            return final_rect
-        else:
-            return QRect(src_pos, source_btn.size())
+    def _fade_row_siblings(self, row_buttons: list, source_btn, final_rect: QRect) -> list:
+        """Fade the row's buttons by how much final_rect covers them; return the covered ones."""
+        covered = []
+        for btn, btn_pos in row_buttons:
+            if btn == source_btn:
+                continue
+            opacity = self._fade_opacity_for_coverage(final_rect, QRect(btn_pos, btn.size()))
+            btn.set_opacity(opacity if opacity < 1.0 else 1.0)
+            if opacity < 1.0:
+                covered.append(btn)
+        return covered
 
     def on_dimmer_value_changed(self, value):
         self._pending_dimmer_val = value
@@ -704,76 +682,26 @@ class OverlayManager(QObject):
 
         self._active_climate_entity = entity_id
 
-        source_btn = next((b for b in self.buttons if b.slot == slot), None)
-        curr_temp = 20.0
-        if source_btn and hasattr(source_btn, '_value'):
-            try:
-                temp_str = str(source_btn._value).replace('°', '').strip()
-                curr_temp = float(temp_str)
-            except Exception:
-                pass
+        source_btn = self._button_at(slot)
 
         # Colors
-        if self.theme_manager:
-            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
-        else:
-            base_color = QColor("#2d2d2d")
-        button_color = config.get('color')
-        accent_color = QColor(button_color) if button_color else QColor("#EA4335")
+        base_color, accent_color = self._overlay_colors(config, "#EA4335")
 
-        if self.theme_manager and not button_color:
-            cols = self.theme_manager.get_colors()
-            accent_color = QColor(cols.get('accent', '#EA4335'))
-
-        start_rect = self.parent_widget.mapFromGlobal(global_rect.topLeft())
-        start_rect = QRect(start_rect, global_rect.size())
+        start_rect = self._local_rect(global_rect)
 
         target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='climate')
 
-        # Enforce Minimum Height (2 Rows) for Climate Overlay
-        min_height = TWO_ROW_MIN_HEIGHT
-        if target_rect.height() < min_height:
-            target_rect.setHeight(min_height)
-
-            # Check if it goes off-screen (bottom)
-            # Use parent widget height minus footer area (approx 40px) as safe zone
-            safe_bottom = self.parent_widget.height() - 40
-
-            if target_rect.bottom() > safe_bottom:
-                # Shift up so the BOTTOM of the overlay aligns with the BOTTOM of the source button
-                # This makes it expand UPWARDS from the button
-                if source_btn:
-                    src_pos = source_btn.mapTo(self.parent_widget, QPoint(0, 0))
-                    src_bottom = src_pos.y() + source_btn.height()
-                    target_rect.moveBottom(src_bottom)
-                else:
-                    # Fallback: Just shift it on screen
-                    diff = target_rect.bottom() - safe_bottom
-                    target_rect.moveTop(target_rect.top() - diff)
-
+        if self._grow_to_min_height(target_rect, source_btn, TWO_ROW_MIN_HEIGHT):
             self._add_covered_siblings(self.climate_overlay, source_btn, target_rect)
 
         current_state = self._entity_states.get(entity_id, {})
         attrs = current_state.get('attributes', {})
         source_unit = attrs.get('temperature_unit')
         display_unit = preference_to_unit(self._temperature_unit_preference, fallback=source_unit)
-        current_temp = attrs.get('temperature', curr_temp)
-        converted_temp = convert_temperature(current_temp, source_unit, display_unit)
-        if converted_temp is not None:
-            curr_temp = converted_temp
-
-        min_temp = attrs.get('min_temp', 5.0)
-        max_temp = attrs.get('max_temp', 35.0)
-        temp_step = attrs.get('target_temp_step', 0.5)
-        converted_min = convert_temperature(min_temp, source_unit, display_unit)
-        converted_max = convert_temperature(max_temp, source_unit, display_unit)
-        converted_step = convert_temperature_delta(temp_step, source_unit, display_unit)
-        self.climate_overlay.configure_temperature_range(
-            converted_min if converted_min is not None else 5.0,
-            converted_max if converted_max is not None else 35.0,
-            converted_step if converted_step is not None else 0.5,
-            normalize_temperature_unit(display_unit),
-        )
+        tile_temp = _tile_temperature(source_btn)
+        converted_temp = convert_temperature(attrs.get('temperature', tile_temp), source_unit, display_unit)
+        curr_temp = converted_temp if converted_temp is not None else tile_temp
+        self._configure_climate_range(attrs, source_unit, display_unit)
 
         self.climate_overlay.set_border_effect(self._border_effect)
         self.climate_overlay.start_morph(
@@ -786,6 +714,19 @@ class OverlayManager(QObject):
             current_state=current_state,
         )
         self.climate_timer.start()
+
+    def _configure_climate_range(self, attrs: dict, source_unit, display_unit):
+        """Min, max and step of the target temperature, in the unit shown."""
+
+        def or_default(value, default):
+            return value if value is not None else default
+
+        self.climate_overlay.configure_temperature_range(
+            or_default(convert_temperature(attrs.get('min_temp', 5.0), source_unit, display_unit), 5.0),
+            or_default(convert_temperature(attrs.get('max_temp', 35.0), source_unit, display_unit), 35.0),
+            or_default(convert_temperature_delta(attrs.get('target_temp_step', 0.5), source_unit, display_unit), 0.5),
+            normalize_temperature_unit(display_unit),
+        )
 
     def on_climate_value_changed(self, value):
         self._pending_climate_val = value
@@ -880,7 +821,7 @@ class OverlayManager(QObject):
         self._active_printer_entity = entity_id
         self._active_printer_config = config
 
-        source_btn = next((b for b in self.buttons if b.slot == slot), None)
+        source_btn = self._button_at(slot)
         self._overlay_state[self.printer_overlay]['source'] = source_btn
 
         # Push initial camera if available on button
@@ -888,38 +829,14 @@ class OverlayManager(QObject):
             self.printer_overlay.set_camera_pixmap(source_btn._last_camera_pixmap)
 
         # Colors
-        if self.theme_manager:
-            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
-        else:
-            base_color = QColor("#2d2d2d")
-        button_color = config.get('color')
-        accent_color = QColor(button_color) if button_color else QColor("#FF6D00")
+        base_color, accent_color = self._overlay_colors(config, "#FF6D00")
 
-        if self.theme_manager and not button_color:
-            cols = self.theme_manager.get_colors()
-            accent_color = QColor(cols.get('accent', '#FF6D00'))
-
-        start_rect = self.parent_widget.mapFromGlobal(global_rect.topLeft())
-        start_rect = QRect(start_rect, global_rect.size())
+        start_rect = self._local_rect(global_rect)
 
         # Use existing shared logic but with 'printer' overlay_type
         target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='printer')
 
-        # We want the printer overlay to be as big as possible (at least 2x4 usually)
-        min_height = TWO_ROW_MIN_HEIGHT
-        if target_rect.height() < min_height:
-            target_rect.setHeight(min_height)
-
-            safe_bottom = self.parent_widget.height() - 40
-            if target_rect.bottom() > safe_bottom:
-                if source_btn:
-                    src_pos = source_btn.mapTo(self.parent_widget, QPoint(0, 0))
-                    src_bottom = src_pos.y() + source_btn.height()
-                    target_rect.moveBottom(src_bottom)
-                else:
-                    diff = target_rect.bottom() - safe_bottom
-                    target_rect.moveTop(target_rect.top() - diff)
-
+        if self._grow_to_min_height(target_rect, source_btn, TWO_ROW_MIN_HEIGHT):
             self._add_covered_siblings(self.printer_overlay, source_btn, target_rect)
 
         # Consolidate entities into a virtual state for the printer overlay
@@ -963,7 +880,7 @@ class OverlayManager(QObject):
         if self._queue_or_start_overlay(self.start_mower, slot, global_rect):
             return
 
-        source_btn = next((b for b in self.buttons if b.slot == slot), None)
+        source_btn = self._button_at(slot)
         if not source_btn or not source_btn.config:
             return
         config = source_btn.config
@@ -974,35 +891,13 @@ class OverlayManager(QObject):
         self._active_mower_entity = entity_id
 
         # Colors
-        if self.theme_manager:
-            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
-        else:
-            base_color = QColor("#2d2d2d")
-        button_color = config.get('color')
-        accent_color = QColor(button_color) if button_color else QColor("#4CAF50")
-        if self.theme_manager and not button_color:
-            accent_color = QColor(self.theme_manager.get_colors().get('accent', '#4CAF50'))
+        base_color, accent_color = self._overlay_colors(config, "#4CAF50")
 
-        start_rect = self.parent_widget.mapFromGlobal(global_rect.topLeft())
-        start_rect = QRect(start_rect, global_rect.size())
+        start_rect = self._local_rect(global_rect)
 
         target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='mower')
 
-        # Enforce 2-row minimum height
-        min_height = TWO_ROW_MIN_HEIGHT
-        if target_rect.height() < min_height:
-            target_rect.setHeight(min_height)
-
-            safe_bottom = self.parent_widget.height() - 40
-            if target_rect.bottom() > safe_bottom:
-                if source_btn:
-                    src_pos = source_btn.mapTo(self.parent_widget, QPoint(0, 0))
-                    src_bottom = src_pos.y() + source_btn.height()
-                    target_rect.moveBottom(src_bottom)
-                else:
-                    diff = target_rect.bottom() - safe_bottom
-                    target_rect.moveTop(target_rect.top() - diff)
-
+        if self._grow_to_min_height(target_rect, source_btn, TWO_ROW_MIN_HEIGHT):
             self._add_covered_siblings(self.mower_overlay, source_btn, target_rect)
 
         current_state = self._entity_states.get(entity_id, {})
@@ -1036,7 +931,7 @@ class OverlayManager(QObject):
         if self._queue_or_start_overlay(self.start_vacuum, slot, global_rect):
             return
 
-        source_btn = next((b for b in self.buttons if b.slot == slot), None)
+        source_btn = self._button_at(slot)
         if not source_btn or not source_btn.config:
             return
         config = source_btn.config
@@ -1047,35 +942,13 @@ class OverlayManager(QObject):
         self._active_vacuum_entity = entity_id
 
         # Colors
-        if self.theme_manager:
-            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
-        else:
-            base_color = QColor("#2d2d2d")
-        button_color = config.get('color')
-        accent_color = QColor(button_color) if button_color else QColor("#4CAF50")
-        if self.theme_manager and not button_color:
-            accent_color = QColor(self.theme_manager.get_colors().get('accent', '#4CAF50'))
+        base_color, accent_color = self._overlay_colors(config, "#4CAF50")
 
-        start_rect = self.parent_widget.mapFromGlobal(global_rect.topLeft())
-        start_rect = QRect(start_rect, global_rect.size())
+        start_rect = self._local_rect(global_rect)
 
         target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='vacuum')
 
-        # Enforce 2-row minimum height
-        min_height = TWO_ROW_MIN_HEIGHT
-        if target_rect.height() < min_height:
-            target_rect.setHeight(min_height)
-
-            safe_bottom = self.parent_widget.height() - 40
-            if target_rect.bottom() > safe_bottom:
-                if source_btn:
-                    src_pos = source_btn.mapTo(self.parent_widget, QPoint(0, 0))
-                    src_bottom = src_pos.y() + source_btn.height()
-                    target_rect.moveBottom(src_bottom)
-                else:
-                    diff = target_rect.bottom() - safe_bottom
-                    target_rect.moveTop(target_rect.top() - diff)
-
+        if self._grow_to_min_height(target_rect, source_btn, TWO_ROW_MIN_HEIGHT):
             self._add_covered_siblings(self.vacuum_overlay, source_btn, target_rect)
 
         current_state = self._entity_states.get(entity_id, {})
@@ -1125,21 +998,12 @@ class OverlayManager(QObject):
             return
 
         self._active_alarm_entity = entity_id
-        source_btn = next((b for b in self.buttons if b.slot == slot), None)
+        source_btn = self._button_at(slot)
 
         # Colors
-        if self.theme_manager:
-            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
-        else:
-            base_color = QColor("#2d2d2d")
-        button_color = config.get('color')
-        accent_color = QColor(button_color) if button_color else QColor("#4285F4")
-        if self.theme_manager and not button_color:
-            cols = self.theme_manager.get_colors()
-            accent_color = QColor(cols.get('accent', '#4285F4'))
+        base_color, accent_color = self._overlay_colors(config, "#4285F4")
 
-        start_rect = self.parent_widget.mapFromGlobal(global_rect.topLeft())
-        start_rect = QRect(start_rect, global_rect.size())
+        start_rect = self._local_rect(global_rect)
 
         target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='alarm')
 
@@ -1195,20 +1059,7 @@ class OverlayManager(QObject):
             new_x = target_rect.right() - self.ALARM_MAX_WIDTH + 1 if src_center > row_center else target_rect.x()
             target_rect = QRect(int(new_x), target_rect.y(), int(self.ALARM_MAX_WIDTH), target_rect.height())
 
-        min_height = (BUTTON_HEIGHT * rows) + (BUTTON_SPACING * (rows - 1))
-        if target_rect.height() < min_height:
-            target_rect.setHeight(min_height)
-
-            safe_bottom = self.parent_widget.height() - 40
-            if target_rect.bottom() > safe_bottom:
-                if source_btn:
-                    src_pos = source_btn.mapTo(self.parent_widget, QPoint(0, 0))
-                    src_bottom = src_pos.y() + source_btn.height()
-                    target_rect.moveBottom(src_bottom)
-                else:
-                    diff = target_rect.bottom() - safe_bottom
-                    target_rect.moveTop(target_rect.top() - diff)
-
+        self._grow_to_min_height(target_rect, source_btn, (BUTTON_HEIGHT * rows) + (BUTTON_SPACING * (rows - 1)))
         self._add_covered_siblings(self.alarm_overlay, source_btn, target_rect)
         return target_rect
 
@@ -1258,39 +1109,15 @@ class OverlayManager(QObject):
             return
 
         self._active_weather_entity = entity_id
-        source_btn = next((b for b in self.buttons if b.slot == slot), None)
+        source_btn = self._button_at(slot)
 
-        if self.theme_manager:
-            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
-        else:
-            base_color = QColor("#2d2d2d")
-        button_color = config.get('color')
-        accent_color = QColor(button_color) if button_color else QColor("#4285F4")
+        base_color, accent_color = self._overlay_colors(config, "#4285F4")
 
-        if self.theme_manager and not button_color:
-            cols = self.theme_manager.get_colors()
-            accent_color = QColor(cols.get('accent', '#4285F4'))
-
-        start_rect = self.parent_widget.mapFromGlobal(global_rect.topLeft())
-        start_rect = QRect(start_rect, global_rect.size())
+        start_rect = self._local_rect(global_rect)
 
         target_rect = self._calculate_target_rect_and_siblings(source_btn, slot, overlay_type='weather')
 
-        # Enforce Minimum Height (2 Rows) for Weather Overlay
-        min_height = TWO_ROW_MIN_HEIGHT
-        if target_rect.height() < min_height:
-            target_rect.setHeight(min_height)
-
-            safe_bottom = self.parent_widget.height() - 40
-            if target_rect.bottom() > safe_bottom:
-                if source_btn:
-                    src_pos = source_btn.mapTo(self.parent_widget, QPoint(0, 0))
-                    src_bottom = src_pos.y() + source_btn.height()
-                    target_rect.moveBottom(src_bottom)
-                else:
-                    diff = target_rect.bottom() - safe_bottom
-                    target_rect.moveTop(target_rect.top() - diff)
-
+        if self._grow_to_min_height(target_rect, source_btn, TWO_ROW_MIN_HEIGHT):
             self._add_covered_siblings(self.weather_overlay, source_btn, target_rect)
 
         current_state = self._entity_states.get(entity_id, {})
@@ -1319,89 +1146,48 @@ class OverlayManager(QObject):
     def start_camera(self, slot: int, global_rect: QRect, config: dict):
         if self._queue_or_start_overlay(self.start_camera, slot, global_rect, config):
             return
-
-        if not config:
-            return
-        entity_id = config.get('entity_id')
+        entity_id = config.get('entity_id') if config else None
         if not entity_id:
             return
 
         self._active_camera_entity = entity_id
-
-        source_btn = next((b for b in self.buttons if b.slot == slot), None)
+        source_btn = self._button_at(slot)
         self._overlay_state[self.camera_overlay]['source'] = source_btn
-
-        if source_btn and hasattr(source_btn, '_last_camera_pixmap') and source_btn._last_camera_pixmap:
+        if source_btn and getattr(source_btn, '_last_camera_pixmap', None):
             self.camera_overlay.set_camera_pixmap(source_btn._last_camera_pixmap)
 
-        if self.theme_manager:
-            base_color = QColor(self.theme_manager.get_colors().get('base', '#2d2d2d'))
-        else:
-            base_color = QColor("#2d2d2d")
-
-        start_rect = self.parent_widget.mapFromGlobal(global_rect.topLeft())
-        start_rect = QRect(start_rect, global_rect.size())
-
-        # Calculate max boundaries of the actual grid layout
-        visible_rects = []
-        for btn in self.buttons:
-            if btn.isVisible():
-                pos = btn.mapTo(self.parent_widget, QPoint(0, 0))
-                visible_rects.append(QRect(pos, btn.size()))
-
-        if visible_rects:
-            grid_min_x = min(r.left() for r in visible_rects)
-            grid_max_x = max(r.right() for r in visible_rects)
-            grid_min_y = min(r.top() for r in visible_rects)
-            grid_max_y = max(r.bottom() for r in visible_rects)
-        else:
-            # Fallback if no layout calculated
-            grid_min_x = start_rect.left()
-            grid_max_x = start_rect.right()
-            grid_min_y = start_rect.top()
-            grid_max_y = start_rect.bottom()
-
-        avail_w = grid_max_x - grid_min_x + 1
-        avail_h = grid_max_y - grid_min_y + 1
-
-        max_cols = 4
-        max_rows = 4
-
-        ideal_w = (BUTTON_WIDTH * max_cols) + (BUTTON_SPACING * (max_cols - 1))
-        ideal_h = (BUTTON_HEIGHT * max_rows) + (BUTTON_SPACING * (max_rows - 1))
-
-        target_w = min(ideal_w, avail_w)
-        target_h = min(ideal_h, avail_h)
-
-        # Start at top-left of source button
-        target_x = start_rect.left()
-        target_y = start_rect.top()
-
-        # Shift left if hanging over the right edge
-        if target_x + target_w > grid_max_x + 1:
-            target_x = grid_max_x - target_w + 1
-            if target_x < grid_min_x:
-                target_x = grid_min_x
-
-        # Shift up if hanging over the bottom edge
-        if target_y + target_h > grid_max_y + 1:
-            target_y = grid_max_y - target_h + 1
-            if target_y < grid_min_y:
-                target_y = grid_min_y
-
-        target_rect = QRect(target_x, target_y, target_w, target_h)
-
+        start_rect = self._local_rect(global_rect)
+        target_rect = self._camera_target_rect(start_rect)
         self._add_covered_siblings(self.camera_overlay, source_btn, target_rect)
 
         self.camera_overlay.set_border_effect(self._border_effect)
-        label = config.get('label', 'Camera')
         self.camera_overlay.start_morph(
             start_rect,
             target_rect,
-            label,
-            base_color=base_color,
+            config.get('label', 'Camera'),
+            base_color=self._base_color(),
             pip_available=entity_id.startswith('camera.'),
         )
+
+    def _grid_bounds(self, fallback: QRect) -> QRect:
+        """Bounding rect of the visible buttons, or fallback when none are laid out."""
+        bounds = QRect()
+        for btn in self.buttons:
+            if btn.isVisible():
+                bounds = bounds.united(QRect(btn.mapTo(self.parent_widget, QPoint(0, 0)), btn.size()))
+        return bounds if bounds.isValid() else fallback
+
+    def _camera_target_rect(self, start_rect: QRect) -> QRect:
+        """Up to 4x4 buttons from the source's top-left, shifted back inside the grid."""
+        grid = self._grid_bounds(start_rect)
+        ideal_w = (BUTTON_WIDTH * 4) + (BUTTON_SPACING * 3)
+        ideal_h = (BUTTON_HEIGHT * 4) + (BUTTON_SPACING * 3)
+        target_w = min(ideal_w, grid.width())
+        target_h = min(ideal_h, grid.height())
+        # Start at the source's top-left; shift left/up where it would hang over the grid.
+        target_x = max(min(start_rect.left(), grid.right() - target_w + 1), grid.left())
+        target_y = max(min(start_rect.top(), grid.bottom() - target_h + 1), grid.top())
+        return QRect(target_x, target_y, target_w, target_h)
 
     def on_camera_pip_requested(self):
         """Pop the open camera out into picture-in-picture and close the overlay."""
@@ -1416,3 +1202,11 @@ class OverlayManager(QObject):
         self._restore_overlay_state(self.camera_overlay)
         self.parent_widget.activateWindow()
         self._check_pending_actions()
+
+
+def _tile_temperature(source_btn) -> float:
+    """The temperature a climate tile shows (e.g. "21.5°"), or 20 when it shows none."""
+    try:
+        return float(str(source_btn._value).replace('°', '').strip())
+    except Exception:
+        return 20.0
