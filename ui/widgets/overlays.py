@@ -257,6 +257,26 @@ class BaseOverlay(QWidget):
         painter.drawRoundedRect(QRectF(rect).adjusted(1, 1, -1, -1), OVERLAY_CORNER_RADIUS, OVERLAY_CORNER_RADIUS)
 
 
+_HVAC_MODE_ICONS = {
+    'cool': 'snowflake',
+    'heat': 'fire',
+    'off': 'power',
+    'auto': 'thermostat-auto',
+    'dry': 'water-percent',
+    'fan_only': 'fan',
+    'heat_cool': 'sun-snowflake-variant',
+}
+_FAN_SPEED_TEXT = {'low': '1', 'medium': '2', 'high': '3', 'mid': '2', 'middle': '2', 'min': '1', 'max': 'Max'}
+
+
+def _icon_row_layout(count: int, avail_width: float, spacing: float):
+    """(start_x, spacing) for count 32px icons right of an 80px label: centred, or squeezed to fit."""
+    total = count * 32 + (count - 1) * spacing
+    if total > avail_width:
+        return 80, (avail_width - count * 32) / (count - 1) if count > 1 else 0
+    return 80 + (avail_width - total) / 2, spacing
+
+
 class PressableOverlay(BaseOverlay):
     """BaseOverlay plus shrink-and-bounce feedback for tapped buttons.
 
@@ -726,98 +746,58 @@ class ClimateOverlay(PressableOverlay):
                     )
 
     def _draw_advanced_controls(self, painter, rect, alpha, start_y=78):
+        """Two rows of round buttons: HVAC modes, then fan modes."""
         self._mode_btns = []
         self._fan_btns = []
-
         modes = self._hvac_modes or ['off', 'heat', 'cool']
         fan_modes = self._fan_modes or ['auto', 'low', 'high']
-
-        mode_icons = {
-            'cool': 'snowflake',
-            'heat': 'fire',
-            'off': 'power',
-            'auto': 'thermostat-auto',
-            'dry': 'water-percent',
-            'fan_only': 'fan',
-            'heat_cool': 'sun-snowflake-variant',
-        }
-
         icon_size = 32
-        spacing = 12
-        y_pos_1 = start_y
-        label_width = 80
-        avail_width = rect.width() - label_width - 20
+        avail_width = rect.width() - 80 - 20  # right of the 80px row labels
 
-        painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
-        painter.setPen(self._fg_color(int(alpha * 0.4)))
-        painter.drawText(
-            QRect(20, y_pos_1, 60, icon_size),
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            t("overlay.climate.mode_label"),
-        )
-
-        total_items = len(modes)
-        total_icon_width = (total_items * icon_size) + ((total_items - 1) * spacing)
-
-        if total_icon_width > avail_width:
-            spacing = (avail_width - (total_items * icon_size)) / (total_items - 1) if total_items > 1 else 0
-            start_x = label_width
-        else:
-            start_x = label_width + (avail_width - total_icon_width) / 2
-
+        self._draw_row_label(painter, start_y, t("overlay.climate.mode_label"), alpha)
+        start_x, spacing = _icon_row_layout(len(modes), avail_width, 12)
         painter.setFont(get_mdi_font(20))
         for i, mode in enumerate(modes):
-            x = int(start_x + (i * (icon_size + spacing)))
-            btn_rect = QRect(x, y_pos_1, icon_size, icon_size)
+            btn_rect = QRect(int(start_x + i * (icon_size + spacing)), start_y, icon_size, icon_size)
             self._mode_btns.append((btn_rect, mode))
-            is_active = mode == self._current_hvac_mode
-            with self._press_feedback(painter, btn_rect):
-                self._draw_icon_pill(painter, btn_rect, is_active, alpha)
-                painter.setPen(self._fg_color(alpha if is_active else int(alpha * 0.5)))
-                painter.setFont(get_mdi_font(20))
-                painter.drawText(
-                    btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon(mode_icons.get(mode, 'help-circle-outline'))
-                )
+            self._draw_mode_button(painter, btn_rect, mode, mode == self._current_hvac_mode, alpha)
 
-        y_pos_2 = y_pos_1 + icon_size + 12
-        fan_map = {'low': '1', 'medium': '2', 'high': '3', 'mid': '2', 'middle': '2', 'min': '1', 'max': 'Max'}
+        fan_y = start_y + icon_size + 12
+        self._draw_row_label(painter, fan_y, t("overlay.climate.fan_label"), alpha)
+        # The fan row starts from the mode row's spacing, which may already be squeezed.
+        start_x, fan_spacing = _icon_row_layout(len(fan_modes), avail_width, spacing)
+        for i, mode in enumerate(fan_modes):
+            btn_rect = QRect(int(start_x + i * (icon_size + fan_spacing)), fan_y, icon_size, icon_size)
+            self._fan_btns.append((btn_rect, mode))
+            self._draw_fan_button(painter, btn_rect, mode, mode == self._current_fan_mode, alpha)
 
+    def _draw_row_label(self, painter, y: int, text: str, alpha: int):
         painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
         painter.setPen(self._fg_color(int(alpha * 0.4)))
-        painter.drawText(
-            QRect(20, y_pos_2, 60, icon_size),
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            t("overlay.climate.fan_label"),
-        )
+        painter.drawText(QRect(20, y, 60, 32), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
 
-        total_items = len(fan_modes)
-        total_icon_width = (total_items * icon_size) + ((total_items - 1) * spacing)
+    def _draw_mode_button(self, painter, btn_rect: QRect, mode: str, is_active: bool, alpha: int):
+        with self._press_feedback(painter, btn_rect):
+            self._draw_icon_pill(painter, btn_rect, is_active, alpha)
+            painter.setPen(self._fg_color(alpha if is_active else int(alpha * 0.5)))
+            painter.setFont(get_mdi_font(20))
+            painter.drawText(
+                btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon(_HVAC_MODE_ICONS.get(mode, 'help-circle-outline'))
+            )
 
-        if total_icon_width > avail_width:
-            spacing_fan = (avail_width - (total_items * icon_size)) / (total_items - 1) if total_items > 1 else 0
-            start_x = label_width
-        else:
-            spacing_fan = spacing
-            start_x = label_width + (avail_width - total_icon_width) / 2
-
-        for i, mode in enumerate(fan_modes):
-            x = int(start_x + (i * (icon_size + spacing_fan)))
-            btn_rect = QRect(x, y_pos_2, icon_size, icon_size)
-            self._fan_btns.append((btn_rect, mode))
-            is_active = mode == self._current_fan_mode
-            with self._press_feedback(painter, btn_rect):
-                self._draw_icon_pill(painter, btn_rect, is_active, alpha)
-                painter.setPen(self._fg_color(alpha if is_active else int(alpha * 0.5)))
-                mode_lower = mode.lower()
-                if mode_lower == 'auto':
-                    painter.setFont(get_mdi_font(20))
-                    painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon('fan-auto'))
-                else:
-                    text = fan_map.get(mode_lower)
-                    if not text:
-                        text = mode_lower.capitalize() if len(mode) > 3 else mode.upper()
-                    painter.setFont(QFont(SYSTEM_FONT, 12, QFont.Weight.DemiBold))
-                    painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, text)
+    def _draw_fan_button(self, painter, btn_rect: QRect, mode: str, is_active: bool, alpha: int):
+        """'auto' as an icon; speeds as 1/2/3/Max, other names as short text."""
+        with self._press_feedback(painter, btn_rect):
+            self._draw_icon_pill(painter, btn_rect, is_active, alpha)
+            painter.setPen(self._fg_color(alpha if is_active else int(alpha * 0.5)))
+            mode_lower = mode.lower()
+            if mode_lower == 'auto':
+                painter.setFont(get_mdi_font(20))
+                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon('fan-auto'))
+                return
+            text = _FAN_SPEED_TEXT.get(mode_lower) or (mode_lower.capitalize() if len(mode) > 3 else mode.upper())
+            painter.setFont(QFont(SYSTEM_FONT, 12, QFont.Weight.DemiBold))
+            painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, text)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
