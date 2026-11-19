@@ -2167,11 +2167,10 @@ class AlarmOverlay(PressableOverlay):
                     else:
                         # Nothing to erase — treat as "back" out of the keypad.
                         self._set_pending_action(None)
-                elif kind == 'submit':
-                    if self._entered_code:
-                        self.action_requested.emit(self._pending_action, self._entered_code)
-                        self._entered_code = ''
-                        self._set_pending_action(None)
+                elif kind == 'submit' and self._entered_code:
+                    self.action_requested.emit(self._pending_action, self._entered_code)
+                    self._entered_code = ''
+                    self._set_pending_action(None)
                 return
             return
 

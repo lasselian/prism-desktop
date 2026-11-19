@@ -23,6 +23,11 @@ from ui.widgets.toggle_switch import ToggleSwitch
 from core.localization_manager import t
 from ui.styles import Typography, Dimensions
 
+# The record button's dot (idle); a rounded square while recording
+RECORD_ICON_IDLE_STYLE = 'background-color: white; border-radius: 6px;'
+
+SHORTCUT_RECORDING_KEY = 'settings.shortcut.recording'
+
 
 class HueSlider(QWidget):
     hue_changed = pyqtSignal(int)
@@ -1161,7 +1166,7 @@ class ButtonEditWidget(QWidget):
     def set_custom_colors(self, colors: list):
         self._editing_custom_hex = None
         self.custom_colors = list(colors)
-        stale = set(id(b) for b in self._custom_swatch_btns)
+        stale = {id(b) for b in self._custom_swatch_btns}
         self.color_buttons = [(b, c) for b, c in self.color_buttons if id(b) not in stale]
         for btn in self._custom_swatch_btns:
             self.color_button_row.removeWidget(btn)
@@ -1490,7 +1495,7 @@ class ButtonEditWidget(QWidget):
             self.record_btn.setChecked(False)
             if self.input_manager:
                 self.input_manager.restore_shortcut()
-                self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+                self.record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
 
     def toggle_recording(self, checked):
         if not self.input_manager:
@@ -1500,14 +1505,14 @@ class ButtonEditWidget(QWidget):
         if checked:
             # Stop State (Square)
             self.record_icon.setStyleSheet("background-color: white; border-radius: 2px;")
-            self.shortcut_display.setText(t("settings.shortcut.recording"))
+            self.shortcut_display.setText(t(SHORTCUT_RECORDING_KEY))
             self.input_manager.start_recording()
         else:
             # Record State (Circle)
-            self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+            self.record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
             self.input_manager.restore_shortcut()
             # Restore if empty
-            if self.shortcut_display.text() == t("settings.shortcut.recording"):
+            if self.shortcut_display.text() == t(SHORTCUT_RECORDING_KEY):
                 sc = self.config.get('custom_shortcut', {}) if self.config else {}
                 self.shortcut_display.setText(sc.get('value', ''))
 
@@ -1517,7 +1522,7 @@ class ButtonEditWidget(QWidget):
             return  # Ignore if we aren't recording
 
         self.record_btn.setChecked(False)
-        self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+        self.record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
         self.shortcut_display.setText(shortcut.get('value', ''))
         # Recording stopped the global listeners; bring the dashboard hotkey back.
         if self.input_manager:
@@ -1528,10 +1533,10 @@ class ButtonEditWidget(QWidget):
         if not self.record_btn.isChecked():
             return
         self.record_btn.setChecked(False)
-        self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+        self.record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
         if self.input_manager:
             self.input_manager.restore_shortcut()
-        if self.shortcut_display.text() == t("settings.shortcut.recording"):
+        if self.shortcut_display.text() == t(SHORTCUT_RECORDING_KEY):
             sc = self.config.get('custom_shortcut', {}) if self.config else {}
             self.shortcut_display.setText(sc.get('value', ''))
 

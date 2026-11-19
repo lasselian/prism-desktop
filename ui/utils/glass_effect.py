@@ -1,11 +1,10 @@
-import typing
 from PyQt6.QtCore import Qt, QRect, QRectF
 from PyQt6.QtGui import QPainter, QPainterPath, QPixmap, QColor, QPen
 
 
 def draw_frosted_pill(
     painter: QPainter,
-    pill_rect: typing.Union[QRect, QRectF],
+    pill_rect: QRect | QRectF,
     background_pixmap: QPixmap = None,
     bg_x_offset: float = 0,
     bg_y_offset: float = 0,

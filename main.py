@@ -712,8 +712,8 @@ class PrismDesktopApp(QObject):
                     if entity_ids:
                         await asyncio.gather(*(self._fetch_camera_image(eid) for eid in entity_ids))
                 await asyncio.sleep(self._camera_refresh_interval)
-            except Exception as e:
-                logger.error(f"Camera loop error: {e}")
+            except Exception:
+                logger.exception("Camera loop error")
                 await asyncio.sleep(10)
 
     def _visible_camera_entities(self) -> list[str]:

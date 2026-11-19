@@ -47,8 +47,8 @@ class _LocalizationManager:
         except FileNotFoundError:
             logger.warning(f"[i18n] Translation file not found: {path}")
             return {}
-        except json.JSONDecodeError as exc:
-            logger.error(f"[i18n] Malformed translation file {path}: {exc}")
+        except json.JSONDecodeError:
+            logger.exception(f"[i18n] Malformed translation file {path}")
             return {}
 
     def translate(self, key: str, **kwargs) -> str:

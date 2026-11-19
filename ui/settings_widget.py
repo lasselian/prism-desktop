@@ -51,6 +51,15 @@ from services.location_manager import (
     get_geoclue2_install_hint,
 )
 
+# The record button's dot (idle); a rounded square while recording
+RECORD_ICON_IDLE_STYLE = 'background-color: white; border-radius: 6px;'
+
+HINT_LABEL_STYLE = 'color: #aaa; font-size: 11px;'
+
+SHORTCUT_DISABLED_KEY = 'settings.shortcut.disabled'
+
+SHORTCUT_RECORDING_KEY = 'settings.shortcut.recording'
+
 try:
     from services.wayland_global_shortcut import (
         is_kde_wayland_session,
@@ -749,7 +758,7 @@ class SettingsWidget(QWidget):
         lang_form.addRow(_lang_lbl, self.language_combo)
 
         self._language_restart_note = QLabel(t("settings.appearance.language_restart_note"))
-        self._language_restart_note.setStyleSheet("color: #aaa; font-size: 11px;")
+        self._language_restart_note.setStyleSheet(HINT_LABEL_STYLE)
         self._language_restart_note.hide()
         lang_form.addRow("", self._language_restart_note)
         self.language_combo.currentIndexChanged.connect(self._on_language_changed)
@@ -892,7 +901,7 @@ class SettingsWidget(QWidget):
 
         self.shortcut_hint = QLabel("")
         self.shortcut_hint.setWordWrap(True)
-        self.shortcut_hint.setStyleSheet("color: #aaa; font-size: 11px;")
+        self.shortcut_hint.setStyleSheet(HINT_LABEL_STYLE)
         self.shortcut_hint.hide()
         shortcut_aux_layout.addWidget(self.shortcut_hint)
 
@@ -950,7 +959,7 @@ class SettingsWidget(QWidget):
 
         self.assist_shortcut_hint = QLabel("")
         self.assist_shortcut_hint.setWordWrap(True)
-        self.assist_shortcut_hint.setStyleSheet("color: #aaa; font-size: 11px;")
+        self.assist_shortcut_hint.setStyleSheet(HINT_LABEL_STYLE)
         self.assist_shortcut_hint.hide()
         assist_shortcut_aux_layout.addWidget(self.assist_shortcut_hint)
 
@@ -1200,7 +1209,7 @@ class SettingsWidget(QWidget):
 
         if not assigned:
             hint = QLabel(t("settings.shortcut.no_button_shortcuts"))
-            hint.setStyleSheet("color: #aaa; font-size: 11px;")
+            hint.setStyleSheet(HINT_LABEL_STYLE)
             layout.addWidget(hint)
             return
 
@@ -1528,13 +1537,13 @@ class SettingsWidget(QWidget):
 
         if checked:
             self.record_icon.setStyleSheet("background-color: white; border-radius: 2px;")
-            self.shortcut_display.setText(t("settings.shortcut.recording"))
+            self.shortcut_display.setText(t(SHORTCUT_RECORDING_KEY))
             self.input_manager.start_recording()
         else:
-            self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+            self.record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
             self.input_manager.restore_shortcut()
             sc = self.config.get('shortcut', {})
-            if self.shortcut_display.text() == t("settings.shortcut.recording"):
+            if self.shortcut_display.text() == t(SHORTCUT_RECORDING_KEY):
                 self.shortcut_display.setText(sc.get('value', ''))
 
     @pyqtSlot(dict)
@@ -1543,7 +1552,7 @@ class SettingsWidget(QWidget):
             return
 
         self.record_btn.setChecked(False)
-        self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+        self.record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
         self.shortcut_display.setText(shortcut.get('value', ''))
         if 'shortcut' not in self.config:
             self.config['shortcut'] = {}
@@ -1566,13 +1575,13 @@ class SettingsWidget(QWidget):
 
         if checked:
             self.assist_record_icon.setStyleSheet("background-color: white; border-radius: 2px;")
-            self.assist_shortcut_display.setText(t("settings.shortcut.recording"))
+            self.assist_shortcut_display.setText(t(SHORTCUT_RECORDING_KEY))
             self.assist_input_manager.start_recording()
         else:
-            self.assist_record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+            self.assist_record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
             self.assist_input_manager.restore_shortcut()
             sc = self.config.get('assist_shortcut', {})
-            if self.assist_shortcut_display.text() == t("settings.shortcut.recording"):
+            if self.assist_shortcut_display.text() == t(SHORTCUT_RECORDING_KEY):
                 self.assist_shortcut_display.setText(sc.get('value', ''))
 
     @pyqtSlot(dict)
@@ -1581,7 +1590,7 @@ class SettingsWidget(QWidget):
             return
 
         self.assist_record_btn.setChecked(False)
-        self.assist_record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+        self.assist_record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
         self.assist_shortcut_display.setText(shortcut.get('value', ''))
         self.config['assist_shortcut'] = shortcut
 
@@ -1595,7 +1604,7 @@ class SettingsWidget(QWidget):
             self.assist_record_btn.hide()
             self.assist_shortcut_display.setEnabled(False)
             self.assist_shortcut_display.setProperty("locked", True)
-            self.assist_shortcut_display.setText(t("settings.shortcut.disabled"))
+            self.assist_shortcut_display.setText(t(SHORTCUT_DISABLED_KEY))
             self.assist_shortcut_display.setToolTip("")
             self.assist_shortcut_hint.setText(t("settings.assist_shortcut.kde_hint"))
             self.assist_shortcut_aux.show()
@@ -1607,7 +1616,7 @@ class SettingsWidget(QWidget):
             self.assist_record_btn.hide()
             self.assist_shortcut_display.setEnabled(False)
             self.assist_shortcut_display.setProperty("locked", True)
-            self.assist_shortcut_display.setText(t("settings.shortcut.disabled"))
+            self.assist_shortcut_display.setText(t(SHORTCUT_DISABLED_KEY))
             self.assist_shortcut_display.setToolTip("")
             self.assist_shortcut_hint.setText(t("settings.assist_shortcut.wayland_hint"))
             self.assist_shortcut_aux.show()
@@ -1644,7 +1653,7 @@ class SettingsWidget(QWidget):
             self.record_btn.hide()
             self.shortcut_display.setEnabled(False)
             self.shortcut_display.setProperty("locked", True)
-            self.shortcut_display.setText(t("settings.shortcut.disabled"))
+            self.shortcut_display.setText(t(SHORTCUT_DISABLED_KEY))
             self.shortcut_display.setToolTip("")
             self.shortcut_hint.setText(t("settings.shortcut.kde_hint"))
             self.shortcut_aux.show()
@@ -1656,7 +1665,7 @@ class SettingsWidget(QWidget):
             self.record_btn.hide()
             self.shortcut_display.setEnabled(False)
             self.shortcut_display.setProperty("locked", True)
-            self.shortcut_display.setText(t("settings.shortcut.disabled"))
+            self.shortcut_display.setText(t(SHORTCUT_DISABLED_KEY))
             self.shortcut_display.setToolTip("")
             self.shortcut_hint.setText(t("settings.shortcut.wayland_hint"))
             self.shortcut_aux.show()
@@ -1815,7 +1824,7 @@ class SettingsWidget(QWidget):
 
         self.update_btn.setEnabled(False)
         self.update_label.setText(t("settings.support.updating"))
-        self.update_label.setStyleSheet("color: #aaa; font-size: 11px;")
+        self.update_label.setStyleSheet(HINT_LABEL_STYLE)
 
         self._auto_update_thread = AutoUpdateThread()
         self._auto_update_thread.progress.connect(lambda msg: self.update_label.setText(msg))

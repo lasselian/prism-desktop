@@ -9,6 +9,8 @@ from yarl import URL
 
 from core.utils import keep_task
 
+SERVICE_CALL_TIMEOUT = 10  # seconds
+
 # Characters Home Assistant allows in a camera entity id. Checked before the id
 # goes into a URL path, so a hand-edited config cannot point the authenticated
 # request at another endpoint.
@@ -127,14 +129,16 @@ class HAClient:
         try:
             # One-off session so the test always uses the currently configured
             # URL/token rather than a pooled session built from old headers.
-            async with aiohttp.ClientSession(headers=self.headers) as session:
-                async with session.get(f"{self.url}/api/", timeout=5) as response:
-                    if response.status == 200:
-                        return True, "Connected"
-                    elif response.status == 401:
-                        return False, "Invalid access token"
-                    else:
-                        return False, f"HTTP {response.status}"
+            async with (
+                aiohttp.ClientSession(headers=self.headers) as session,
+                session.get(f"{self.url}/api/", timeout=5) as response,
+            ):
+                if response.status == 200:
+                    return True, "Connected"
+                elif response.status == 401:
+                    return False, "Invalid access token"
+                else:
+                    return False, f"HTTP {response.status}"
         except asyncio.TimeoutError:
             self.logger.error("Connection test timed out")
             return False, "Connection timed out"
@@ -203,7 +207,7 @@ class HAClient:
             return []
 
     async def call_service(
-        self, domain: str, service: str, entity_id: Optional[str] = None, data: Optional[dict] = None, timeout: int = 10
+        self, domain: str, service: str, entity_id: Optional[str] = None, data: Optional[dict] = None
     ) -> bool:
         """Call a service."""
         try:
@@ -213,7 +217,7 @@ class HAClient:
 
             session = self._get_session()
             async with session.post(
-                f"{self.url}/api/services/{domain}/{service}", json=payload, timeout=timeout
+                f"{self.url}/api/services/{domain}/{service}", json=payload, timeout=SERVICE_CALL_TIMEOUT
             ) as response:
                 return response.status == 200
         except Exception as e:

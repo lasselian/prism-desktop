@@ -26,8 +26,8 @@ class MjpegParser:
     MAX_HEADER = 16 * 1024
 
     def __init__(self, max_frame: int = MAX_FRAME, max_header: int = MAX_HEADER):
-        self.max_frame = max_frame
-        self.max_header = max_header
+        self._max_frame = max_frame
+        self._max_header = max_header
         self._buf = bytearray()
         self._delim: bytes | None = None  # e.g. b"--frameboundary"
         self._in_body = False
@@ -67,10 +67,10 @@ class MjpegParser:
 
         end, sep = _find_header_end(buf)
         if end < 0:
-            if len(buf) > self.max_header:
+            if len(buf) > self._max_header:
                 raise MjpegError("part headers too long")
             return False
-        if end > self.max_header:
+        if end > self._max_header:
             raise MjpegError("part headers too long")
 
         length = self._parse_headers(bytes(buf[:end]))
@@ -131,7 +131,7 @@ class MjpegParser:
         if not value.isdigit():
             raise MjpegError("bad Content-Length")
         length = int(value)
-        if length > self.max_frame:
+        if length > self._max_frame:
             raise MjpegError("frame too large")
         return length
 
@@ -163,7 +163,7 @@ class MjpegParser:
                 self._in_body = False
                 return frame
 
-        if len(buf) > self.max_frame:
+        if len(buf) > self._max_frame:
             raise MjpegError("frame too large")
         return None
 

@@ -13,6 +13,12 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+GEOCLUE_CLIENT_INTERFACE = 'org.freedesktop.GeoClue2.Client'
+
+GEOCLUE_MANAGER_PATH = '/org/freedesktop/GeoClue2/Manager'
+
+GEOCLUE_BUS_NAME = 'org.freedesktop.GeoClue2'
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -74,8 +80,8 @@ async def is_geoclue2_available() -> bool:
     try:
         bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
         await bus.introspect(
-            'org.freedesktop.GeoClue2',
-            '/org/freedesktop/GeoClue2/Manager',
+            GEOCLUE_BUS_NAME,
+            GEOCLUE_MANAGER_PATH,
         )
         bus.disconnect()
         return True
@@ -207,9 +213,7 @@ async def _get_windows_location() -> Optional[dict]:
 async def _get_linux_location() -> Optional[dict]:
     """Fetch location via GeoClue2 over the system D-Bus."""
     if not _DBUS_NEXT_AVAILABLE:
-        logger.warning(
-            "[Location] dbus-next not installed — location unavailable. Install with: pip install dbus-next"
-        )
+        logger.warning("[Location] dbus-next not installed — location unavailable. Install with: pip install dbus-next")
         return None
 
     try:
@@ -233,12 +237,12 @@ async def _geoclue2_get_position() -> Optional[dict]:
     try:
         # --- Manager proxy ---
         manager_introspection = await bus.introspect(
-            'org.freedesktop.GeoClue2',
-            '/org/freedesktop/GeoClue2/Manager',
+            GEOCLUE_BUS_NAME,
+            GEOCLUE_MANAGER_PATH,
         )
         manager_proxy = bus.get_proxy_object(
-            'org.freedesktop.GeoClue2',
-            '/org/freedesktop/GeoClue2/Manager',
+            GEOCLUE_BUS_NAME,
+            GEOCLUE_MANAGER_PATH,
             manager_introspection,
         )
         manager = manager_proxy.get_interface('org.freedesktop.GeoClue2.Manager')
@@ -247,27 +251,27 @@ async def _geoclue2_get_position() -> Optional[dict]:
         client_path = await manager.call_get_client()
 
         client_introspection = await bus.introspect(
-            'org.freedesktop.GeoClue2',
+            GEOCLUE_BUS_NAME,
             client_path,
         )
         client_proxy = bus.get_proxy_object(
-            'org.freedesktop.GeoClue2',
+            GEOCLUE_BUS_NAME,
             client_path,
             client_introspection,
         )
-        client = client_proxy.get_interface('org.freedesktop.GeoClue2.Client')
+        client = client_proxy.get_interface(GEOCLUE_CLIENT_INTERFACE)
         client_props = client_proxy.get_interface('org.freedesktop.DBus.Properties')
 
         # --- Configure client ---
         # DesktopId must match the .desktop filename (without .desktop extension)
         await client_props.call_set(
-            'org.freedesktop.GeoClue2.Client',
+            GEOCLUE_CLIENT_INTERFACE,
             'DesktopId',
             Variant('s', 'prism-desktop'),
         )
         # RequestedAccuracyLevel: 8 = EXACT (GPS-level / best available)
         await client_props.call_set(
-            'org.freedesktop.GeoClue2.Client',
+            GEOCLUE_CLIENT_INTERFACE,
             'RequestedAccuracyLevel',
             Variant('u', 8),
         )
@@ -287,11 +291,11 @@ async def _geoclue2_get_position() -> Optional[dict]:
 
         # --- Read location properties ---
         loc_introspection = await bus.introspect(
-            'org.freedesktop.GeoClue2',
+            GEOCLUE_BUS_NAME,
             new_location_path,
         )
         loc_proxy = bus.get_proxy_object(
-            'org.freedesktop.GeoClue2',
+            GEOCLUE_BUS_NAME,
             new_location_path,
             loc_introspection,
         )

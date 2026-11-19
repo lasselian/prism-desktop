@@ -29,9 +29,30 @@ import sys
 # Custom MIME type for drag and drop
 MIME_TYPE = "application/x-hatray-slot"
 
-# A number optionally followed by a unit. The unit may not start with a character that
-# would make the number just the front of something else ("12:34", "2024-05-01", "1.2.3").
-_SENSOR_VALUE_RE = re.compile(r"([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)(\s*[^\s\d:.\-/+].*|\s*)$")
+_MANTISSA_RE = re.compile(r"[+-]?(?:\d+\.?\d*|\.\d+)")
+_EXPONENT_RE = re.compile(r"[eE][+-]?\d+")
+# A unit may not start with a character that would make the number just the
+# front of something else ("12:34", "2024-05-01", "1.2.3").
+_NOT_A_UNIT_START = frozenset("0123456789:.-/+")
+
+
+def _split_number_and_unit(text: str):
+    """(number, unit) text of a 'NUMBER [UNIT]' string, or None if it isn't one.
+
+    An exponent belongs to the number unless that leaves an invalid unit, in
+    which case it is read as the start of the unit ("6e1 +%" is 6 "e1 +%").
+    """
+    mantissa = _MANTISSA_RE.match(text)
+    if not mantissa:
+        return None
+    exponent = _EXPONENT_RE.match(text, mantissa.end())
+    cuts = (exponent.end(), mantissa.end()) if exponent else (mantissa.end(),)
+    for cut in cuts:
+        unit = text[cut:]
+        rest = unit.lstrip()
+        if not rest or rest[0] not in _NOT_A_UNIT_START:
+            return text[:cut], unit
+    return None
 
 
 def _parse_sensor_value(raw, precision=1):
@@ -42,14 +63,14 @@ def _parse_sensor_value(raw, precision=1):
     if raw is None:
         return None, '', '--'
     text = str(raw)
-    match = _SENSOR_VALUE_RE.match(text)
-    if not match:
+    parts = _split_number_and_unit(text)
+    if parts is None:
         return None, '', text
     try:
-        num = float(match.group(1))
+        num = float(parts[0])
     except (ValueError, TypeError):
         return None, '', text
-    unit = match.group(2)
+    unit = parts[1]
     if precision == 0:
         formatted_num = f"{num:.0f}"
     else:

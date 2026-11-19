@@ -80,6 +80,8 @@ from ui.visuals.dashboard_effects import (
 )
 from ui.utils.key_events import event_matches_shortcut
 
+FOOTER_BUTTON_STYLE = 'background: rgba(255,255,255,0.1); border: none; border-radius: 4px; color: #888;'
+
 logger = logging.getLogger(__name__)
 
 QWIDGETSIZE_MAX = 16777215
@@ -1007,7 +1009,7 @@ class Dashboard(QWidget):
         self.btn_left.setIcon(QIcon(ha_pixmap))
         self.btn_left.setIconSize(QSize(15, 15))  # Slightly smaller than button height (26)
 
-        self.btn_left.setStyleSheet("background: rgba(255,255,255,0.1); border: none; border-radius: 4px; color: #888;")
+        self.btn_left.setStyleSheet(FOOTER_BUTTON_STYLE)
         footer_layout.addWidget(self.btn_left, 1)
 
         # Page Indicator (center)
@@ -1025,9 +1027,7 @@ class Dashboard(QWidget):
         self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_settings.clicked.connect(self.show_settings)
         # Style handled in update_style or inline for now
-        self.btn_settings.setStyleSheet(
-            "background: rgba(255,255,255,0.1); border: none; border-radius: 4px; color: #888;"
-        )
+        self.btn_settings.setStyleSheet(FOOTER_BUTTON_STYLE)
         footer_layout.addWidget(self.btn_settings, 1)
 
         self.btn_assist = FooterButton("")
@@ -1038,9 +1038,7 @@ class Dashboard(QWidget):
         self.btn_assist.setToolTip(t("dashboard.footer.assist"))
         # lambda avoids clicked(bool) landing in open_assist_overlay's instant param
         self.btn_assist.clicked.connect(lambda: self.open_assist_overlay())
-        self.btn_assist.setStyleSheet(
-            "background: rgba(255,255,255,0.1); border: none; border-radius: 4px; color: #888;"
-        )
+        self.btn_assist.setStyleSheet(FOOTER_BUTTON_STYLE)
         footer_layout.addWidget(self.btn_assist, 0)
 
         self.content_layout.addWidget(self.footer_widget)
@@ -1598,9 +1596,10 @@ class Dashboard(QWidget):
             if not cfg:
                 continue
 
-            if cfg.get('entity_id') == entity_id and cfg.get('type') == 'camera':
-                button.set_camera_image(pixmap)
-            elif cfg.get('type') == '3d_printer' and cfg.get('printer_camera_entity') == entity_id:
+            shows_camera = (cfg.get('type') == 'camera' and cfg.get('entity_id') == entity_id) or (
+                cfg.get('type') == '3d_printer' and cfg.get('printer_camera_entity') == entity_id
+            )
+            if shows_camera:
                 button.set_camera_image(pixmap)
 
         # Forward to overlay manager

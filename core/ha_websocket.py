@@ -12,6 +12,8 @@ from PyQt6.QtCore import QObject, pyqtSignal
 import threading
 import logging
 
+DEFAULT_NOTIFICATION_TITLE = 'Home Assistant'
+
 
 class AuthenticationError(Exception):
     """Home Assistant rejected the access token."""
@@ -103,7 +105,7 @@ class HAWebSocket(QObject):
             # while HA itself never answers, which would hang the reconnect loop)
             msg = await asyncio.wait_for(self._ws.receive_json(), timeout=10)
             if msg.get('type') != 'auth_required':
-                raise Exception("Unexpected message type")
+                raise ConnectionError("Unexpected message type")
 
             await self._send({"type": "auth", "access_token": current_token})
 
@@ -230,7 +232,7 @@ class HAWebSocket(QObject):
         message_text = event.get('message', '')
         if not message_text:
             return
-        payload = {'title': event.get('title', 'Home Assistant'), 'message': message_text}
+        payload = {'title': event.get('title', DEFAULT_NOTIFICATION_TITLE), 'message': message_text}
         extra = event.get('data', {})
         if isinstance(extra, dict):
             payload = {**payload, **extra}
@@ -247,7 +249,7 @@ class HAWebSocket(QObject):
             # New notification created
             attrs = new_state.get('attributes', {})
             self._emit_notification(
-                attrs.get('title', 'Home Assistant'), attrs.get('message', new_state.get('state', ''))
+                attrs.get('title', DEFAULT_NOTIFICATION_TITLE), attrs.get('message', new_state.get('state', ''))
             )
 
         # Only emit state changes for subscribed entities or all if none specified
@@ -258,7 +260,9 @@ class HAWebSocket(QObject):
         # persistent_notification.create calls show up as notifications too.
         if event_data.get('domain', '') == 'persistent_notification' and event_data.get('service', '') == 'create':
             service_data = event_data.get('service_data', {})
-            self._emit_notification(service_data.get('title', 'Home Assistant'), service_data.get('message', ''))
+            self._emit_notification(
+                service_data.get('title', DEFAULT_NOTIFICATION_TITLE), service_data.get('message', '')
+            )
 
     def _emit_notification(self, title: str, message: str):
         if message:

@@ -348,7 +348,7 @@ class AssistController(QObject):
             if self._run_token is token:
                 self.error.emit(t("assist.error.timeout"))
         except Exception as e:
-            logger.error(f"Assist request failed: {e}")
+            logger.exception("Assist request failed")
             if self._run_token is token:
                 self.error.emit(str(e) or t("assist.error.generic"))
         finally:
@@ -484,8 +484,8 @@ class AssistController(QObject):
                     break
                 await ws.send_stt_audio(handler_id, chunk)
             await ws.end_stt_audio(handler_id)
-        except Exception as e:
-            logger.error(f"Failed to stream Assist audio: {e}")
+        except Exception:
+            logger.exception("Failed to stream Assist audio")
 
     async def _play_tts(self, url: str):
         """Fetch the TTS reply and play it back.

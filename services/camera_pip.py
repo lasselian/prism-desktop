@@ -27,6 +27,9 @@ from core.ha_client import CAMERA_ENTITY_RE, HAClient
 from core.localization_manager import t
 from ui.widgets.camera_pip import CameraPipWindow
 
+# Translation key of the status line shown while a feed can't be read
+STATUS_UNAVAILABLE = 'camera_pip.unavailable'
+
 logger = logging.getLogger(__name__)
 
 CONFIG_KEY = "camera_pip"
@@ -206,7 +209,7 @@ class CameraPipManager:
         except Exception:
             logger.exception("Camera PiP feed stopped")
             if self._alive(entity_id, win):
-                win.set_status(t("camera_pip.unavailable"))
+                win.set_status(t(STATUS_UNAVAILABLE))
         finally:
             decoder.cancel()
 
@@ -220,7 +223,7 @@ class CameraPipManager:
                 status, delay = self._failure_status(exc, attempt.got_frame)
             else:
                 # HA ended the stream (it does when the camera returns no image).
-                status, delay = (None, 1) if attempt.got_frame else (t("camera_pip.unavailable"), None)
+                status, delay = (None, 1) if attempt.got_frame else (t(STATUS_UNAVAILABLE), None)
 
             if attempt.got_frame:
                 failures = 0
@@ -257,7 +260,7 @@ class CameraPipManager:
                 return t("camera_pip.unauthorized"), 30
             if exc.status == 404:
                 return t("camera_pip.not_found"), 60
-            return t("camera_pip.unavailable"), None
+            return t(STATUS_UNAVAILABLE), None
         if isinstance(exc, aiohttp.ConnectionTimeoutError):
             return t("camera_pip.no_connection"), None
         if isinstance(exc, TimeoutError):
@@ -268,7 +271,7 @@ class CameraPipManager:
             return t("camera_pip.not_configured"), 30
         if isinstance(exc, MjpegError):
             logger.info("Camera PiP: %s", exc)
-            return t("camera_pip.unavailable"), None
+            return t(STATUS_UNAVAILABLE), None
         # aiohttp.ClientError or OSError. Never log the URL; only the kind of failure.
         logger.info("Camera PiP: connection failed (%s)", type(exc).__name__)
         return t("camera_pip.no_connection"), None

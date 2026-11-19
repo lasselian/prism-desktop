@@ -27,8 +27,8 @@ class ConfigManager:
                 self._apply_stored_token(config.get('home_assistant', {}))
                 self._migrate_buttons(config)
                 return config
-            except Exception as e:
-                logger.error(f"Error loading config: {e}")
+            except Exception:
+                logger.exception("Error loading config")
                 self._backup_corrupt_config()
         return self._default_config()
 
@@ -91,8 +91,8 @@ class ConfigManager:
         try:
             os.replace(self.config_path, backup_path)
             logger.warning(f"Corrupt config backed up to {backup_path}")
-        except OSError as e:
-            logger.error(f"Could not back up corrupt config: {e}")
+        except OSError:
+            logger.exception("Could not back up corrupt config")
 
     def save_raw_config(self, config_to_save: dict):
         """Save a specific config dict without modifying self.config."""
@@ -107,8 +107,8 @@ class ConfigManager:
             except BaseException:
                 os.unlink(tmp_path)
                 raise
-        except Exception as e:
-            logger.error(f"Error saving raw config: {e}")
+        except Exception:
+            logger.exception("Error saving raw config")
 
     def save_config(self):
         """Save current configuration to file."""
@@ -123,5 +123,5 @@ class ConfigManager:
                 ha_config['token'] = ''  # Always scrub from config.json
 
             self.save_raw_config(config_to_save)
-        except Exception as e:
-            logger.error(f"Error saving config: {e}")
+        except Exception:
+            logger.exception("Error saving config")

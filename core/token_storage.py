@@ -265,8 +265,8 @@ def _enc_load() -> str:
         key = _derive_key(salt)
         f = Fernet(key)
         return f.decrypt(enc_path.read_bytes()).decode("utf-8")
-    except (InvalidToken, Exception) as e:
-        logger.error(f"[TokenStorage] Failed to decrypt token file: {e}")
+    except (InvalidToken, Exception):
+        logger.exception("[TokenStorage] Failed to decrypt token file")
         return ""
 
 

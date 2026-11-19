@@ -15,6 +15,8 @@ from typing import Optional
 from core.build_info import APP_VERSION
 from services import system_sensors
 
+APP_DISPLAY_NAME = 'Prism Desktop'
+
 psutil.cpu_percent(interval=None)  # prime baseline; first real call always returns 0.0 otherwise
 
 logger = logging.getLogger(__name__)
@@ -62,9 +64,9 @@ def get_system_metrics() -> dict:
     }
 
 
-APP_NAME = "Prism Desktop"
+APP_NAME = APP_DISPLAY_NAME
 MANUFACTURER = "lasselian"
-MODEL = "Prism Desktop"
+MODEL = APP_DISPLAY_NAME
 OS_VERSION = platform.version()
 
 
@@ -73,7 +75,7 @@ def _get_device_name() -> str:
     try:
         return socket.gethostname()
     except Exception:
-        return "Prism Desktop"
+        return APP_DISPLAY_NAME
 
 
 def _get_or_create_device_id(config: dict) -> str:
@@ -144,43 +146,44 @@ async def register_mobile_app(
     url = ha_url.rstrip("/") + "/api/mobile_app/registrations"
 
     try:
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.post(url, json=payload, timeout=10) as response:
-                if response.status in (200, 201):
-                    data = await response.json()
-                    webhook_id = data.get("webhook_id", "")
-                    if webhook_id:
-                        mobile_app_cfg["webhook_id"] = webhook_id
-                        mobile_app_cfg["device_id"] = device_id
-                        mobile_app_cfg["device_name"] = device_name
-                        save_config_fn()
-                        logger.info(
-                            f"[MobileApp] Registered successfully as '{device_name}' "
-                            f"(webhook_id={webhook_id[:8]}...)"
-                        )
-                        return webhook_id
-                    else:
-                        logger.error("[MobileApp] Registration response missing webhook_id")
-                        return None
-                elif response.status == 409:
-                    # Already registered — HA returned conflict
-                    # We lost our local webhook_id. Reset and re-register on next start.
-                    logger.warning(
-                        "[MobileApp] HA reports device already registered (409). "
-                        "Clearing local registration and will retry on next startup."
-                    )
-                    mobile_app_cfg.pop("webhook_id", None)
+        async with (
+            aiohttp.ClientSession(headers=headers) as session,
+            session.post(url, json=payload, timeout=10) as response,
+        ):
+            if response.status in (200, 201):
+                data = await response.json()
+                webhook_id = data.get("webhook_id", "")
+                if webhook_id:
+                    mobile_app_cfg["webhook_id"] = webhook_id
+                    mobile_app_cfg["device_id"] = device_id
+                    mobile_app_cfg["device_name"] = device_name
                     save_config_fn()
-                    return None
+                    logger.info(
+                        f"[MobileApp] Registered successfully as '{device_name}' " f"(webhook_id={webhook_id[:8]}...)"
+                    )
+                    return webhook_id
                 else:
-                    text = await response.text()
-                    logger.error(f"[MobileApp] Registration failed: HTTP {response.status} — {text}")
+                    logger.error("[MobileApp] Registration response missing webhook_id")
                     return None
+            elif response.status == 409:
+                # Already registered — HA returned conflict
+                # We lost our local webhook_id. Reset and re-register on next start.
+                logger.warning(
+                    "[MobileApp] HA reports device already registered (409). "
+                    "Clearing local registration and will retry on next startup."
+                )
+                mobile_app_cfg.pop("webhook_id", None)
+                save_config_fn()
+                return None
+            else:
+                text = await response.text()
+                logger.error(f"[MobileApp] Registration failed: HTTP {response.status} — {text}")
+                return None
     except asyncio.TimeoutError:
         logger.error("[MobileApp] Registration timed out")
         return None
-    except Exception as e:
-        logger.error(f"[MobileApp] Registration error: {e}")
+    except Exception:
+        logger.exception("[MobileApp] Registration error")
         return None
 
 
@@ -195,14 +198,13 @@ async def send_location_update(ha_url: str, webhook_id: str, location: dict) -> 
     url = ha_url.rstrip("/") + f"/api/webhook/{webhook_id}"
     payload = {"type": "update_location", "data": location}
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=10) as response:
-                if response.status in (200, 201):
-                    logger.info("[MobileApp] Location update sent successfully")
-                    return True
-                else:
-                    logger.warning(f"[MobileApp] Location update returned HTTP {response.status}")
-                    return False
+        async with aiohttp.ClientSession() as session, session.post(url, json=payload, timeout=10) as response:
+            if response.status in (200, 201):
+                logger.info("[MobileApp] Location update sent successfully")
+                return True
+            else:
+                logger.warning(f"[MobileApp] Location update returned HTTP {response.status}")
+                return False
     except asyncio.TimeoutError:
         logger.warning("[MobileApp] Location update timed out")
         return False
@@ -249,14 +251,13 @@ async def fire_notification_action_event(ha_url: str, webhook_id: str, event_dat
         },
     }
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=10) as response:
-                if response.status in (200, 201):
-                    logger.info(f"[MobileApp] Notification action '{event_data.get('action')}' sent")
-                    return True
-                else:
-                    logger.warning(f"[MobileApp] Notification action returned HTTP {response.status}")
-                    return False
+        async with aiohttp.ClientSession() as session, session.post(url, json=payload, timeout=10) as response:
+            if response.status in (200, 201):
+                logger.info(f"[MobileApp] Notification action '{event_data.get('action')}' sent")
+                return True
+            else:
+                logger.warning(f"[MobileApp] Notification action returned HTTP {response.status}")
+                return False
     except asyncio.TimeoutError:
         logger.warning("[MobileApp] Notification action event timed out")
         return False
@@ -321,14 +322,13 @@ async def update_sensor_states(ha_url: str, webhook_id: str, states: dict) -> bo
     url = ha_url.rstrip("/") + f"/api/webhook/{webhook_id}"
     payload = {"type": "update_sensor_states", "data": data}
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=10) as resp:
-                if resp.status in (200, 201):
-                    logger.debug(f"[MobileApp] Sensor states updated: {states}")
-                    return True
-                else:
-                    logger.warning(f"[MobileApp] Sensor state update returned HTTP {resp.status}")
-                    return False
+        async with aiohttp.ClientSession() as session, session.post(url, json=payload, timeout=10) as resp:
+            if resp.status in (200, 201):
+                logger.debug(f"[MobileApp] Sensor states updated: {states}")
+                return True
+            else:
+                logger.warning(f"[MobileApp] Sensor state update returned HTTP {resp.status}")
+                return False
     except Exception as e:
         logger.warning(f"[MobileApp] Sensor state update error: {e}")
         return False
@@ -357,18 +357,17 @@ async def _update_registration(ha_url: str, webhook_id: str) -> bool:
         },
     }
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=10) as response:
-                if response.status in (200, 201):
-                    logger.info("[MobileApp] Registration updated (push_websocket_channel=True)")
-                    return True
-                elif response.status in (404, 410):
-                    logger.warning(f"[MobileApp] Webhook gone (HTTP {response.status})")
-                    return False
-                else:
-                    # Other errors (e.g. 500) — assume still valid, don't wipe registration
-                    logger.warning(f"[MobileApp] Registration update returned HTTP {response.status}")
-                    return True
+        async with aiohttp.ClientSession() as session, session.post(url, json=payload, timeout=10) as response:
+            if response.status in (200, 201):
+                logger.info("[MobileApp] Registration updated (push_websocket_channel=True)")
+                return True
+            elif response.status in (404, 410):
+                logger.warning(f"[MobileApp] Webhook gone (HTTP {response.status})")
+                return False
+            else:
+                # Other errors (e.g. 500) — assume still valid, don't wipe registration
+                logger.warning(f"[MobileApp] Registration update returned HTTP {response.status}")
+                return True
     except Exception as e:
         # Network error — don't assume the registration is lost
         logger.warning(f"[MobileApp] Registration update error (non-critical): {e}")

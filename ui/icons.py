@@ -11,6 +11,8 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QFontDatabase, QFont
 from core.utils import get_resource_path, get_config_path
 
+MDI_MAPPING_FILE = 'mdi_mapping.json'
+
 # Icon font name (after loading)
 MDI_FONT_FAMILY = "Material Design Icons"
 
@@ -214,7 +216,7 @@ def fetch_mdi_mapping_worker():
             mapping[name] = chr(int(hex_val, 16))
 
         # Save to file
-        mapping_file = get_config_path("mdi_mapping.json")
+        mapping_file = get_config_path(MDI_MAPPING_FILE)
         with open(mapping_file, 'w', encoding='utf-8') as f:
             json.dump(mapping, f)
 
@@ -253,10 +255,10 @@ def _read_mapping(path) -> dict | None:
 def _load_saved_mapping() -> bool:
     """Fill the cache from the bundled mapping, else from one fetched earlier."""
     global _mdi_cache
-    bundled_file = get_resource_path("mdi_mapping.json")  # read-only in the exe
+    bundled_file = get_resource_path(MDI_MAPPING_FILE)  # read-only in the exe
     mapping = _read_mapping(bundled_file) if bundled_file.exists() else None
     if mapping is None:
-        cached_file = get_config_path("mdi_mapping.json")
+        cached_file = get_config_path(MDI_MAPPING_FILE)
         if cached_file.exists() and cached_file != bundled_file:
             mapping = _read_mapping(cached_file)
     if mapping:

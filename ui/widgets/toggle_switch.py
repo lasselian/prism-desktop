@@ -24,7 +24,7 @@ class ToggleSwitch(QAbstractButton):
         self.setCheckable(True)
         self._accent = QColor(accent_color)
         self._text_color = QColor("#e0e0e0")
-        self._pos = 0.0  # 0.0 = off, 1.0 = on
+        self._pos = 0.0  # 0.0 is off, 1.0 is on
 
         self._anim = QPropertyAnimation(self, b"_slide_pos")
         self._anim.setDuration(160)
