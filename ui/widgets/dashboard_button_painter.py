@@ -344,154 +344,29 @@ class DashboardButtonPainter:
         style = button.config.get('display_style')
         if style not in ('gauge', 'bar', 'perimeter'):
             return
-
         painter = QPainter(button)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
         rect = button.rect()
-
         clip_path = QPainterPath()
         clip_path.addRoundedRect(QRectF(rect).adjusted(1, 1, -1, -1), 12, 12)
         painter.setClipPath(clip_path)
 
-        # Resolve colors
-        accent_hex = '#4285F4'
-        text_hex = '#ffffff'
-        if button.theme_manager:
-            colors = button.theme_manager.get_colors()
-            accent_hex = colors.get('accent', accent_hex)
-            text_hex = colors.get('text', text_hex)
-
-        # User-picked color (from edit menu) drives the gauge/bar fill; fall back to theme accent.
-        custom_color = button.config.get('color')
-        # "#3c3c3c" is the sentinel for "default sensor color" — treat as unset.
-        if custom_color and custom_color.lower() != _DEFAULT_SENSOR_COLOR:
-            fill_color = QColor(custom_color)
-        else:
-            fill_color = QColor(accent_hex)
-        text_color = QColor(text_hex)
-        track_color = QColor(text_hex)
-        track_color.setAlpha(40)
-
+        colors = _sensor_colors(button)
         fraction = getattr(button, '_sensor_fraction', None)
-        gauge_fraction = getattr(button, '_gauge_fraction', fraction)
         text = getattr(button, '_sensor_text', '') or ''
-
-        has_label = bool(button.config.get('label'))
-        label_reserve = 24 if has_label else 0
-
         if style == 'bar':
-            # Upper area holds the pill; lower area (if label exists) is left for the QLabel.
-            top_pad = 8
-            available_h = rect.height() - label_reserve - top_pad
-            pill_h = int(max(12, min(available_h * 0.60, 24)))
-            margin_x = 18
-            pill_y = rect.y() + top_pad + (available_h - pill_h) / 2
-            pill_rect = QRectF(
-                rect.x() + margin_x,
-                pill_y,
-                rect.width() - 2 * margin_x,
-                pill_h,
-            )
-            is_1x1 = button.span_x == 1 and button.span_y == 1
-            font_size = max(6, min(9, int(pill_h * 0.4))) if is_1x1 else max(7, min(12, int(pill_h * 0.5)))
-            DashboardButtonPainter.draw_horizontal_bar_pill(
-                painter,
-                pill_rect,
-                fraction=fraction,
-                fill_color=fill_color,
-                track_color=track_color,
-                text=text,
-                font=QFont(SYSTEM_FONT, font_size, QFont.Weight.Bold if is_1x1 else QFont.Weight.Normal),
-                text_color=text_color,
-            )
+            _paint_sensor_bar(painter, button, rect, fraction, text, colors)
         elif style == 'gauge':
-            is_1x1 = button.span_x == 1 and button.span_y == 1
-            is_tall_1col = button.span_x == 1 and button.span_y >= 2
-            if is_tall_1col:
-                # Tall single-column: arc centered in upper half, value + label below.
-                label_text = button.config.get('label', '')
-                top_pad = 16
-                arc_size = int(min(rect.width() - 16, (rect.height() * 0.55)))
-                arc_x = rect.x() + (rect.width() - arc_size) / 2
-                arc_y = rect.y() + top_pad
-                arc_rect = QRectF(arc_x, arc_y, arc_size, arc_size)
-                DashboardButtonPainter.draw_gauge_arc(
-                    painter,
-                    arc_rect,
-                    fraction=gauge_fraction,
-                    fill_color=fill_color,
-                    track_color=track_color,
-                )
-                baseline_y = arc_y + arc_size / 2
-                remaining_h = rect.y() + rect.height() - baseline_y
-                value_h = remaining_h * 0.5 if label_text else remaining_h
-                value_rect = QRectF(rect.x(), baseline_y, rect.width(), value_h)
-                painter.setPen(text_color)
-                painter.setFont(QFont(SYSTEM_FONT, 13, QFont.Weight.Bold))
-                painter.drawText(value_rect, Qt.AlignmentFlag.AlignCenter, text)
-                if label_text:
-                    label_rect = QRectF(rect.x(), baseline_y + value_h, rect.width(), remaining_h * 0.5)
-                    label_color = QColor(text_color)
-                    label_color.setAlpha(160)
-                    painter.setPen(label_color)
-                    painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.DemiBold))
-                    painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, label_text.upper())
-            elif is_1x1:
-                # 1x1 gauge: arc fills upper portion; value text drawn below the arc.
-                value_strip_h = 20
-                max_arc_w = int((rect.width() - 8) * 0.72)
-                arc_size = max(min(max_arc_w, int((rect.width() - 8) * 0.72)), 24)
-                # Center the arc+text block vertically with the arc sitting just above mid
-                content_h = arc_size // 2 + value_strip_h + 4
-                top_pad = max(6, (rect.height() - content_h) // 2)
-                arc_x = rect.x() + (rect.width() - arc_size) / 2
-                arc_y = rect.y() + top_pad
-                arc_rect = QRectF(arc_x, arc_y, arc_size, arc_size)
-                DashboardButtonPainter.draw_gauge_arc(
-                    painter,
-                    arc_rect,
-                    fraction=gauge_fraction,
-                    fill_color=fill_color,
-                    track_color=track_color,
-                )
-                # Value text right under the arc's flat baseline (= vertical center of arc_rect).
-                baseline_y = arc_y + arc_size / 2
-                text_rect = QRectF(
-                    rect.x(),
-                    baseline_y,
-                    rect.width(),
-                    rect.y() + rect.height() - baseline_y,
-                )
-                painter.setPen(text_color)
-                painter.setFont(QFont(SYSTEM_FONT, 11))
-                painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, text)
-            else:
-                # 2x1+: arc on the left, QLabels on the right. Position arc_rect so that
-                # the VISIBLE arc (top half of arc_rect) is vertically centered in the button.
-                arc_size = min(rect.height() - 12, rect.width() // 2 - 10)
-                arc_size = max(arc_size, 32)
-                arc_x = rect.x() + 13
-                # Visible arc spans [arc_y, arc_y + arc_size/2]; center its midpoint on rect center.
-                arc_y = rect.y() + rect.height() / 2 - arc_size / 4
-                arc_rect = QRectF(arc_x, arc_y, arc_size, arc_size)
-                DashboardButtonPainter.draw_gauge_arc(
-                    painter,
-                    arc_rect,
-                    fraction=gauge_fraction,
-                    fill_color=fill_color,
-                    track_color=track_color,
-                )
-
-        if style == 'perimeter':
+            _paint_sensor_gauge(painter, button, rect, getattr(button, '_gauge_fraction', fraction), text, colors)
+        else:
+            fill, _, track = colors
             DashboardButtonPainter.draw_perimeter_progress(
                 painter,
                 QRectF(rect),
                 fraction=getattr(button, '_perimeter_fraction', fraction),
-                fill_color=fill_color,
-                track_color=track_color,
+                fill_color=fill,
+                track_color=track,
             )
-
         painter.end()
 
     @staticmethod
@@ -1528,3 +1403,90 @@ def _draw_sun_countdown_beside(painter, rect: QRectF, text_x: float, time_str: s
     painter.setFont(ctx_font)
     painter.setPen(ctx_color)
     painter.drawText(QRectF(text_x, block_y + time_h + gap, right_w, ctx_h), Qt.AlignmentFlag.AlignCenter, context)
+
+
+# ── Sensor widget (bar / gauge / perimeter) ──
+
+
+def _sensor_colors(button):
+    """(fill, text, track): the tile's colour fills (else the theme accent); the track is faint text colour."""
+    accent_hex, text_hex = '#4285F4', '#ffffff'
+    if button.theme_manager:
+        colors = button.theme_manager.get_colors()
+        accent_hex = colors.get('accent', accent_hex)
+        text_hex = colors.get('text', text_hex)
+    custom = button.config.get('color')
+    # _DEFAULT_SENSOR_COLOR is the "default sensor colour" sentinel, so it counts as unset.
+    fill = QColor(custom) if custom and custom.lower() != _DEFAULT_SENSOR_COLOR else QColor(accent_hex)
+    track = QColor(text_hex)
+    track.setAlpha(40)
+    return fill, QColor(text_hex), track
+
+
+def _paint_sensor_bar(painter, button, rect, fraction, text: str, colors):
+    """A pill in the upper area; the name label (a QLabel) keeps the bottom 24px when there is one."""
+    fill, text_color, track = colors
+    top_pad = 8
+    available_h = rect.height() - (24 if button.config.get('label') else 0) - top_pad
+    pill_h = int(max(12, min(available_h * 0.60, 24)))
+    margin_x = 18
+    pill_rect = QRectF(
+        rect.x() + margin_x, rect.y() + top_pad + (available_h - pill_h) / 2, rect.width() - 2 * margin_x, pill_h
+    )
+    if button.span_x == 1 and button.span_y == 1:
+        font = QFont(SYSTEM_FONT, max(6, min(9, int(pill_h * 0.4))), QFont.Weight.Bold)
+    else:
+        font = QFont(SYSTEM_FONT, max(7, min(12, int(pill_h * 0.5))), QFont.Weight.Normal)
+    DashboardButtonPainter.draw_horizontal_bar_pill(
+        painter,
+        pill_rect,
+        fraction=fraction,
+        fill_color=fill,
+        track_color=track,
+        text=text,
+        font=font,
+        text_color=text_color,
+    )
+
+
+def _paint_sensor_gauge(painter, button, rect, fraction, text: str, colors):
+    fill, text_color, track = colors
+    w, h = rect.width(), rect.height()
+    if button.span_x == 1 and button.span_y >= 2:
+        # Tall single column: arc in the upper half, value and label below
+        arc_size = int(min(w - 16, h * 0.55))
+        arc_rect = QRectF(rect.x() + (w - arc_size) / 2, rect.y() + 16, arc_size, arc_size)
+    elif button.span_x == 1:
+        # 1x1: the arc and the value under it, centred as one block
+        arc_size = max(int((w - 8) * 0.72), 24)
+        top_pad = max(6, (h - (arc_size // 2 + 24)) // 2)
+        arc_rect = QRectF(rect.x() + (w - arc_size) / 2, rect.y() + top_pad, arc_size, arc_size)
+    else:
+        # 2x1+: arc on the left, the QLabels on the right. Only the top half of
+        # arc_rect is visible, so that half is centred vertically.
+        arc_size = max(min(h - 12, w // 2 - 10), 32)
+        arc_rect = QRectF(rect.x() + 13, rect.y() + h / 2 - arc_size / 4, arc_size, arc_size)
+    DashboardButtonPainter.draw_gauge_arc(painter, arc_rect, fraction=fraction, fill_color=fill, track_color=track)
+    if button.span_x != 1:
+        return
+
+    # The value (and on tall tiles the label) sits under the arc's flat baseline.
+    baseline_y = arc_rect.y() + arc_size / 2
+    below = QRectF(rect.x(), baseline_y, w, rect.y() + h - baseline_y)
+    painter.setPen(text_color)
+    if button.span_y == 1:
+        painter.setFont(QFont(SYSTEM_FONT, 11))
+        painter.drawText(below, Qt.AlignmentFlag.AlignCenter, text)
+        return
+    label = button.config.get('label', '')
+    value_h = below.height() * 0.5 if label else below.height()
+    painter.setFont(QFont(SYSTEM_FONT, 13, QFont.Weight.Bold))
+    painter.drawText(QRectF(rect.x(), baseline_y, w, value_h), Qt.AlignmentFlag.AlignCenter, text)
+    if label:
+        label_color = QColor(text_color)
+        label_color.setAlpha(160)
+        painter.setPen(label_color)
+        painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.DemiBold))
+        painter.drawText(
+            QRectF(rect.x(), baseline_y + value_h, w, below.height() * 0.5), Qt.AlignmentFlag.AlignCenter, label.upper()
+        )
