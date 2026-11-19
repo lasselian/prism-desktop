@@ -637,7 +637,7 @@ class SettingsWidget(QWidget):
     # -------------------------------------------------------------------------
 
     _SECTION_HEADER_STYLE = (
-        "font-size: 11px; font-weight: 600; color: #8e8e93; " "letter-spacing: 0.5px; margin-bottom: 4px;"
+        "font-size: 11px; font-weight: 600; color: #8e8e93; letter-spacing: 0.5px; margin-bottom: 4px;"
     )
 
     def _make_pill_panel(self):

@@ -259,7 +259,7 @@ class AssistController(QObject):
         )
         if actual_fmt.channelCount() != 1 or not self._capture_is_int16:
             logger.warning(
-                "Assist: mic capture format isn't mono Int16 — HA will likely " "fail to transcribe this stream"
+                "Assist: mic capture format isn't mono Int16 — HA will likely fail to transcribe this stream"
             )
 
         if self._audio_device is not None:

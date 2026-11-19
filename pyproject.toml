@@ -21,6 +21,12 @@ select = [
     "C90",             # complexity
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Deliberate import order: main.py configures SSL and serves --toggle/--assist
+# before importing Qt; build_macos.py puts the project root on sys.path first.
+"main.py" = ["E402"]
+"build_macos.py" = ["E402"]
+
 [tool.ruff.lint.mccabe]
 max-complexity = 15
 

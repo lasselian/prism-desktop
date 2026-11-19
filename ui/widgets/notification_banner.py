@@ -180,10 +180,10 @@ class NotificationBanner(QWidget):
             if glass_is_light:
                 # Slightly desaturated for light backgrounds
                 if use_gradient:
-                    yes_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1," "stop:0 rgb(68,160,68),stop:1 rgb(48,135,48))"
-                    yes_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1," "stop:0 rgb(80,180,80),stop:1 rgb(60,155,60))"
-                    no_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1," "stop:0 rgb(185,58,58),stop:1 rgb(155,42,42))"
-                    no_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1," "stop:0 rgb(210,68,68),stop:1 rgb(178,50,50))"
+                    yes_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(68,160,68),stop:1 rgb(48,135,48))"
+                    yes_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(80,180,80),stop:1 rgb(60,155,60))"
+                    no_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(185,58,58),stop:1 rgb(155,42,42))"
+                    no_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(210,68,68),stop:1 rgb(178,50,50))"
                 else:
                     yes_bg = "rgb(52,148,52)"
                     yes_bg_hover = "rgb(65,170,65)"
@@ -191,10 +191,10 @@ class NotificationBanner(QWidget):
                     no_bg_hover = "rgb(195,62,62)"
             else:
                 if use_gradient:
-                    yes_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1," "stop:0 rgb(75,175,75),stop:1 rgb(50,145,50))"
-                    yes_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1," "stop:0 rgb(90,200,90),stop:1 rgb(65,165,65))"
-                    no_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1," "stop:0 rgb(195,65,65),stop:1 rgb(160,45,45))"
-                    no_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1," "stop:0 rgb(220,75,75),stop:1 rgb(185,55,55))"
+                    yes_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(75,175,75),stop:1 rgb(50,145,50))"
+                    yes_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(90,200,90),stop:1 rgb(65,165,65))"
+                    no_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(195,65,65),stop:1 rgb(160,45,45))"
+                    no_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(220,75,75),stop:1 rgb(185,55,55))"
                 else:
                     yes_bg = "rgb(55,155,55)"
                     yes_bg_hover = "rgb(70,180,70)"

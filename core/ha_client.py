@@ -44,13 +44,13 @@ class HAClient:
         """Return authorization headers."""
         return {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
 
-    async def _get_session(self) -> aiohttp.ClientSession:
+    def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(headers=self.headers)
         return self._session
 
-    async def _get_anon_session(self) -> aiohttp.ClientSession:
+    def _get_anon_session(self) -> aiohttp.ClientSession:
         """Get or create the credential-free session used for foreign origins.
 
         Deliberately carries no Authorization header and stores no cookies, so
@@ -150,7 +150,7 @@ class HAClient:
     async def get_entities(self) -> list[dict]:
         """Fetch all entities."""
         try:
-            session = await self._get_session()
+            session = self._get_session()
             async with session.get(f"{self.url}/api/states", timeout=10) as response:
                 if response.status == 200:
                     return await response.json()
@@ -162,7 +162,7 @@ class HAClient:
     async def get_config(self) -> Optional[dict]:
         """Fetch Home Assistant instance config."""
         try:
-            session = await self._get_session()
+            session = self._get_session()
             async with session.get(f"{self.url}/api/config", timeout=10) as response:
                 if response.status == 200:
                     return await response.json()
@@ -174,7 +174,7 @@ class HAClient:
     async def get_state(self, entity_id: str) -> Optional[dict]:
         """Get state of a specific entity."""
         try:
-            session = await self._get_session()
+            session = self._get_session()
             async with session.get(f"{self.url}/api/states/{entity_id}", timeout=5) as response:
                 if response.status == 200:
                     return await response.json()
@@ -186,7 +186,7 @@ class HAClient:
     async def get_weather_forecast(self, entity_id: str, forecast_type="daily") -> list:
         """Fetch weather forecast for a given entity."""
         try:
-            session = await self._get_session()
+            session = self._get_session()
             payload = {"type": forecast_type, "entity_id": entity_id}
             async with session.post(
                 f"{self.url}/api/services/weather/get_forecasts?return_response=true", json=payload, timeout=10
@@ -211,7 +211,7 @@ class HAClient:
             if entity_id:
                 payload["entity_id"] = entity_id
 
-            session = await self._get_session()
+            session = self._get_session()
             async with session.post(
                 f"{self.url}/api/services/{domain}/{service}", json=payload, timeout=timeout
             ) as response:
@@ -223,7 +223,7 @@ class HAClient:
     async def get_camera_image(self, entity_id: str) -> Optional[bytes]:
         """Fetch camera snapshot image."""
         try:
-            session = await self._get_session()
+            session = self._get_session()
             async with session.get(f"{self.url}/api/camera_proxy/{entity_id}", timeout=10) as response:
                 if response.status == 200:
                     return await response.read()
@@ -248,7 +248,7 @@ class HAClient:
             raise ValueError("Home Assistant URL and token are required")
         # The session is fetched per call: configure() and close() replace it
         # when the settings change, and the next reconnect must pick that up.
-        session = await self._get_session()
+        session = self._get_session()
         # A stream runs for hours, so no total limit (the session default is
         # five minutes); sock_read catches a connection that has gone silent.
         timeout = aiohttp.ClientTimeout(total=None, sock_connect=10, sock_read=read_timeout)
@@ -281,12 +281,12 @@ class HAClient:
 
         try:
             if same_origin:
-                session = await self._get_session()
+                session = self._get_session()
                 # Fail closed: the HA proxy endpoints do not redirect, and
                 # following one could carry the token off-origin.
                 allow_redirects = False
             else:
-                session = await self._get_anon_session()
+                session = self._get_anon_session()
                 # Safe to follow: this session carries no credentials.
                 allow_redirects = True
 

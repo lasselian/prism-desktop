@@ -169,14 +169,14 @@ def get_geoclue2_install_hint(distro_id: str) -> str:
 async def _get_windows_location() -> Optional[dict]:
     """Fetch location via the Windows Runtime Geolocation API."""
     if not _WINRT_AVAILABLE:
-        logger.warning("[Location] winrt-Windows.Devices.Geolocation not installed " "— location unavailable")
+        logger.warning("[Location] winrt-Windows.Devices.Geolocation not installed — location unavailable")
         return None
 
     try:
         access_status = await Geolocator.request_access_async()
         if access_status != GeolocationAccessStatus.ALLOWED:
             logger.warning(
-                "[Location] Access denied (status=%s). " "Enable location in Windows Settings → Privacy → Location.",
+                "[Location] Access denied (status=%s). Enable location in Windows Settings → Privacy → Location.",
                 access_status,
             )
             return None
@@ -208,7 +208,7 @@ async def _get_linux_location() -> Optional[dict]:
     """Fetch location via GeoClue2 over the system D-Bus."""
     if not _DBUS_NEXT_AVAILABLE:
         logger.warning(
-            "[Location] dbus-next not installed — location unavailable. " "Install with: pip install dbus-next"
+            "[Location] dbus-next not installed — location unavailable. Install with: pip install dbus-next"
         )
         return None
 

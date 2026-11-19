@@ -1518,7 +1518,7 @@ class PrismDesktopApp(QObject):
             *[self.ha_client.get_state(eid) for eid in entity_ids],
             return_exceptions=True,
         )
-        for eid, state in zip(entity_ids, results):
+        for eid, state in zip(entity_ids, results, strict=True):  # gather keeps order and length
             if isinstance(state, dict):
                 self.on_state_changed(eid, state, live=False)
 

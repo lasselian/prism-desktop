@@ -194,7 +194,7 @@ class DBusNotifier:
     def _on_closed(self, nid: int):
         self._pending.pop(nid, None)
 
-    async def close(self):
+    def close(self):
         """Best-effort teardown (not required at process exit)."""
         if self._bus is not None:
             try:

@@ -10,12 +10,12 @@ import uuid
 import logging
 import aiohttp
 import psutil
-
-psutil.cpu_percent(interval=None)  # prime baseline; first real call always returns 0.0 otherwise
 from typing import Optional
 
 from core.build_info import APP_VERSION
 from services import system_sensors
+
+psutil.cpu_percent(interval=None)  # prime baseline; first real call always returns 0.0 otherwise
 
 logger = logging.getLogger(__name__)
 

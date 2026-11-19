@@ -62,32 +62,16 @@ class ServiceDispatcher:
 
     async def _service_call_for_type(self, config: dict, entity_id: str) -> ServiceCall | None:
         """The default action of a tile type; None means do nothing."""
-        handler = self._TYPE_HANDLERS.get(config.get('type', 'switch'))
+        btn_type = config.get('type', 'switch')
+        stateful = self._STATEFUL_HANDLERS.get(btn_type)
+        if stateful is not None:
+            return await stateful(self, config, entity_id)
+        handler = _STATIC_HANDLERS.get(btn_type)
         if handler is not None:
-            return await handler(self, config, entity_id)
+            return handler(config, entity_id)
         if config.get('action') == 'set_input_number':
             return 'input_number', 'set_value', entity_id, {'value': config.get('value', 0.0)}
         return 'homeassistant', 'toggle', entity_id, {}
-
-    async def _curtain(self, config: dict, entity_id: str) -> ServiceCall:
-        return 'cover', 'toggle', entity_id, {}
-
-    async def _media_player(self, config: dict, entity_id: str) -> ServiceCall:
-        return 'media_player', config.get('action', 'media_play_pause'), entity_id, {}
-
-    async def _script(self, config: dict, entity_id: str) -> ServiceCall:
-        variables = config.get('script_variables', {})
-        if variables:
-            # Call the script by name so variables arrive as top-level data.
-            return 'script', entity_id.replace('script.', '', 1), None, variables
-        return 'script', 'turn_on', entity_id, {}
-
-    async def _automation(self, config: dict, entity_id: str) -> ServiceCall:
-        service = 'trigger' if config.get('action') == 'trigger' else 'toggle'
-        return 'automation', service, entity_id, {}
-
-    async def _scene(self, config: dict, entity_id: str) -> ServiceCall:
-        return 'scene', 'turn_on', entity_id, {}
 
     async def _lock(self, config: dict, entity_id: str) -> ServiceCall | None:
         action = config.get('action')
@@ -116,13 +100,43 @@ class ServiceDispatcher:
         state = await self.ha_client.get_state(entity_id)
         return state.get('state') if state else None
 
-    _TYPE_HANDLERS = {
-        'curtain': _curtain,
-        'media_player': _media_player,
-        'script': _script,
-        'automation': _automation,
-        'scene': _scene,
+    # Tile types whose action depends on the entity's current state.
+    _STATEFUL_HANDLERS = {
         'lock': _lock,
         'lawn_mower': _lawn_mower,
         'vacuum': _vacuum,
     }
+
+
+def _curtain(config: dict, entity_id: str) -> ServiceCall:
+    return 'cover', 'toggle', entity_id, {}
+
+
+def _media_player(config: dict, entity_id: str) -> ServiceCall:
+    return 'media_player', config.get('action', 'media_play_pause'), entity_id, {}
+
+
+def _script(config: dict, entity_id: str) -> ServiceCall:
+    variables = config.get('script_variables', {})
+    if variables:
+        # Call the script by name so variables arrive as top-level data.
+        return 'script', entity_id.replace('script.', '', 1), None, variables
+    return 'script', 'turn_on', entity_id, {}
+
+
+def _automation(config: dict, entity_id: str) -> ServiceCall:
+    service = 'trigger' if config.get('action') == 'trigger' else 'toggle'
+    return 'automation', service, entity_id, {}
+
+
+def _scene(config: dict, entity_id: str) -> ServiceCall:
+    return 'scene', 'turn_on', entity_id, {}
+
+
+_STATIC_HANDLERS = {
+    'curtain': _curtain,
+    'media_player': _media_player,
+    'script': _script,
+    'automation': _automation,
+    'scene': _scene,
+}
