@@ -82,6 +82,7 @@ class AutoUpdateThread(QThread):
             "capture_output": True,
             "text": True,
             "timeout": timeout,
+            "check": False,  # callers inspect returncode themselves
         }
         if sys.platform == "win32":
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
@@ -255,11 +256,11 @@ class AutoUpdateThread(QThread):
             shutil.copy2(appimage_path, staged)
             staged.chmod(0o755)
             os.replace(staged, current)
-        except PermissionError:
+        except PermissionError as exc:
             staged.unlink(missing_ok=True)
             raise OSError(
                 f"Cannot replace {current} — check that you own the file or have write permission."
-            )
+            ) from exc
         except BaseException:
             staged.unlink(missing_ok=True)
             raise

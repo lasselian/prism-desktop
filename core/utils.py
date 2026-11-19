@@ -60,12 +60,16 @@ def get_platform_config_dir() -> Path:
     system = platform.system()
 
     if system == 'Windows':
-        return Path(os.getenv('APPDATA', Path.home())) / "PrismDesktop"
+        # An empty APPDATA would otherwise resolve against the working directory.
+        return Path(os.getenv('APPDATA') or Path.home()) / "PrismDesktop"
     elif system == 'Darwin':
         return Path.home() / "Library" / "Application Support" / "PrismDesktop"
     else:
-        # XDG compliant
-        xdg_config = os.getenv('XDG_CONFIG_HOME', str(Path.home() / '.config'))
+        # XDG Base Directory spec: an unset, empty or relative XDG_CONFIG_HOME
+        # is invalid and means ~/.config.
+        xdg_config = os.getenv('XDG_CONFIG_HOME', '')
+        if not os.path.isabs(xdg_config):
+            xdg_config = str(Path.home() / '.config')
         return Path(xdg_config) / "PrismDesktop"
 
 
@@ -86,3 +90,15 @@ def get_config_path(filename: str = "config.json") -> Path:
         return app_data / filename
     else:
         return Path(__file__).parent.parent / filename
+
+
+# asyncio keeps only weak references to tasks, so a task nobody stores can be
+# garbage-collected before it finishes. Fire-and-forget tasks go through here.
+_background_tasks: set = set()
+
+
+def keep_task(task):
+    """Hold a strong reference to *task* until it finishes, then return it."""
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task

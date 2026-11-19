@@ -72,7 +72,7 @@ class ThemeManager(QObject):
             try:
                 result = subprocess.run(
                     ['kreadconfig5', '--group', 'General', '--key', 'ColorScheme'],
-                    capture_output=True, text=True, timeout=2
+                    capture_output=True, text=True, timeout=2, check=False
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     scheme = result.stdout.strip().lower()
@@ -84,7 +84,7 @@ class ThemeManager(QObject):
             try:
                 result = subprocess.run(
                     ['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'],
-                    capture_output=True, text=True, timeout=2
+                    capture_output=True, text=True, timeout=2, check=False
                 )
                 if result.returncode == 0:
                     return 'dark' if 'dark' in result.stdout.lower() else 'light'
@@ -95,7 +95,7 @@ class ThemeManager(QObject):
             try:
                 result = subprocess.run(
                     ['gsettings', 'get', 'org.gnome.desktop.interface', 'gtk-theme'],
-                    capture_output=True, text=True, timeout=2
+                    capture_output=True, text=True, timeout=2, check=False
                 )
                 if result.returncode == 0:
                     return 'dark' if 'dark' in result.stdout.lower() else 'light'
@@ -109,7 +109,7 @@ class ThemeManager(QObject):
             try:
                 result = subprocess.run(
                     ['defaults', 'read', '-g', 'AppleInterfaceStyle'],
-                    capture_output=True, text=True, timeout=2
+                    capture_output=True, text=True, timeout=2, check=False
                 )
                 return 'dark' if result.returncode == 0 else 'light'
             except (FileNotFoundError, subprocess.TimeoutExpired):

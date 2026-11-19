@@ -69,7 +69,7 @@ class GridManager:
             
         forbidden_cells = self.layout_engine.get_forbidden_cells()
         if forbidden_cells:
-            for btn, r, c, span_y, span_x in placements:
+            for btn, r, c, _, _ in placements:
                 is_local = btn.config and btn.config.get('type') == 'pin_window'
                 if (r, c) in forbidden_cells and not (btn.config and (btn.config.get('entity_id') or is_local)):
                     btn.config = {'type': 'forbidden'}
@@ -77,7 +77,7 @@ class GridManager:
                     btn.update_content()
                     btn.update_style()
 
-        for btn, r, c, span_y, span_x in placements:
+        for btn, *_ in placements:
             if btn.config and (btn.config.get('entity_id') or btn.config.get('type') == 'pin_window'):
                 btn.raise_()
             
@@ -111,7 +111,7 @@ class GridManager:
                     self.dashboard.height_anim.setEndValue(float(new_height))
                     self.dashboard.height_anim.start()
 
-    def set_buttons(self, configs: list[dict], appearance_config: dict = None, update_height=True):
+    def set_buttons(self, configs: list[dict], appearance_config: dict | None = None, update_height=True):
         """Set button configurations using (row, col) based positioning."""
         self.dashboard._all_button_configs = configs
         page = getattr(self.dashboard, '_current_page', 0)

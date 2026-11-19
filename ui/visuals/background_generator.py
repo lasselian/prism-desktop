@@ -31,7 +31,7 @@ class BackgroundGenerator:
     _PHI = 1.6180339887
 
     @staticmethod
-    def generate(width: int, height: int, seed: int = None, palette: list[str] = None,
+    def generate(width: int, height: int, seed: int | None = None, palette: list[str] | None = None,
                  light_mode: bool = False) -> QPixmap:
         """
         Generate a static background pixmap (single frozen frame of the light field).
@@ -53,7 +53,7 @@ class BackgroundGenerator:
         )
 
     @staticmethod
-    def generate_layers(width: int, height: int, seed: int = None, palette: list[str] = None,
+    def generate_layers(width: int, height: int, seed: int | None = None, palette: list[str] | None = None,
                         light_mode: bool = False) -> dict:
         """
         Generate anchor definitions for a prismatic light-field animation.
@@ -86,7 +86,7 @@ class BackgroundGenerator:
         avg_b = sum(c.blue()  for c in q_palette) // len(q_palette)
         base_color = QColor(avg_r, avg_g, avg_b)
         # Darken dramatically: keep hue, reduce saturation + value
-        h, s, v, _ = base_color.getHsv()
+        h, s, _, _ = base_color.getHsv()
         if light_mode:
             # Light glass: keep hue, very low saturation, very high value
             base_color = QColor.fromHsv(h, max(0, min(255, int(s * 0.18))), int(255 * 0.97))

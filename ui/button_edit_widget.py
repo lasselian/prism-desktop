@@ -150,7 +150,7 @@ class ButtonEditWidget(QWidget):
     # Class-level preference for entity display format (persists across instances)
     _global_show_friendly_names = True
     
-    def __init__(self, entities: list, config: dict = None, slot: int = 0, theme_manager=None, input_manager=None, parent=None):
+    def __init__(self, entities: list, config: dict | None = None, slot: int = 0, theme_manager=None, input_manager=None, parent=None):
         super().__init__(parent)
         self.entities = entities or []
         self.config = config or {}

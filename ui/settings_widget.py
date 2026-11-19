@@ -56,7 +56,7 @@ class _ShortcutRow(QWidget):
         self.setObjectName("shortcutRow")
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
-        from ui.icons import get_icon, get_mdi_font as _mdi_font, get_icon_for_type
+        from ui.icons import get_icon, get_icon_for_type
 
         rl = QHBoxLayout(self)
         rl.setContentsMargins(0, 4, 0, 4)
@@ -67,7 +67,7 @@ class _ShortcutRow(QWidget):
         _custom_icon = btn_cfg.get('icon', '')
         _icon_char = get_icon(_custom_icon) if _custom_icon else get_icon_for_type(btn_cfg.get('type', 'switch'))
         icon_lbl = QLabel(_icon_char)
-        icon_lbl.setFont(_mdi_font(18))
+        icon_lbl.setFont(get_mdi_font(18))
         icon_lbl.setFixedWidth(24)
         icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         color = btn_cfg.get('color', '')
@@ -86,7 +86,7 @@ class _ShortcutRow(QWidget):
         # Action buttons — always in layout; CSS hides them at rest and reveals on hover
         edit_btn = QPushButton(Icons.PENCIL_OUTLINE)
         edit_btn.setObjectName("editBtn")
-        edit_btn.setFont(_mdi_font(15))
+        edit_btn.setFont(get_mdi_font(15))
         edit_btn.setFixedSize(24, 24)
         edit_btn.setToolTip("Edit shortcut")
         edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -94,7 +94,7 @@ class _ShortcutRow(QWidget):
 
         delete_btn = QPushButton(Icons.TRASH_CAN_OUTLINE)
         delete_btn.setObjectName("deleteBtn")
-        delete_btn.setFont(_mdi_font(15))
+        delete_btn.setFont(get_mdi_font(15))
         delete_btn.setFixedSize(24, 24)
         delete_btn.setToolTip("Remove shortcut")
         delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1411,7 +1411,6 @@ class SettingsWidget(QWidget):
 
         if new_language != old_language:
             from ui.notifications import notify_language_restart
-            from PyQt6.QtCore import QTimer
             QTimer.singleShot(300, lambda: notify_language_restart(self.window()))
 
     # -------------------------------------------------------------------------

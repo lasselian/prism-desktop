@@ -244,7 +244,7 @@ def get_icon(name: str) -> str:
                 with open(bundled_file, 'r', encoding='utf-8') as f:
                     _mdi_cache = json.load(f)
                     loaded = True
-            except:
+            except Exception:
                 pass
         
         # 2. If not bundled, try config path (cached file)
@@ -254,7 +254,7 @@ def get_icon(name: str) -> str:
                 try:
                     with open(cached_file, 'r', encoding='utf-8') as f:
                         _mdi_cache = json.load(f)
-                except:
+                except Exception:
                     pass
         
         # If still empty and not fetching, fetch in background
@@ -300,7 +300,7 @@ def get_icon_for_type(entity_type: str, state: str = "off") -> str:
         return Icons.GAUGE
 
     elif entity_type == "fan":
-        return Icons.FAN if state == "on" else Icons.FAN
+        return Icons.FAN
 
     elif entity_type == "lock":
         if state == "jammed":

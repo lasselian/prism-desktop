@@ -381,7 +381,7 @@ class Dashboard(QWidget):
         """Whether the dashboard should stay pinned to the top edge."""
         return self._get_tray_position() == 'top'
 
-    def _calculate_target_height(self, rows: int = None) -> int:
+    def _calculate_target_height(self, rows: int | None = None) -> int:
         """Calculate total window height for a given row count."""
         if rows is None:
             rows = self._rows
@@ -393,7 +393,7 @@ class Dashboard(QWidget):
 
     BANNER_DISMISS_MS = 5000  # shared auto-dismiss duration for all banners
 
-    def show_toast(self, message: str, duration_ms: int = None):
+    def show_toast(self, message: str, duration_ms: int | None = None):
         """Show an auto-dismissing floating notification banner."""
         # Don't override an active confirm banner
         if self._active_banner and self._active_banner.banner_type == "confirm":
@@ -410,7 +410,7 @@ class Dashboard(QWidget):
         if on_reject:
             banner.rejected.connect(on_reject)
 
-    def _show_banner(self, message: str, banner_type: str, auto_dismiss_ms: int = None):
+    def _show_banner(self, message: str, banner_type: str, auto_dismiss_ms: int | None = None):
         """Create and show a floating notification banner outside the dashboard."""
         if auto_dismiss_ms is None:
             auto_dismiss_ms = self.BANNER_DISMISS_MS
@@ -672,7 +672,7 @@ class Dashboard(QWidget):
                     new_buttons.append(button)
                         
             elif target_slots < current_slots:
-                for i in range(current_slots - 1, target_slots - 1, -1):
+                for _ in range(current_slots - 1, target_slots - 1, -1):
                     btn = self.buttons.pop()
                     self._recycle_button(btn)
             
@@ -849,7 +849,7 @@ class Dashboard(QWidget):
                 self.buttons.append(button)
                 new_buttons.append(button)
         elif target_slots < current_slots:
-            for i in range(current_slots - 1, target_slots - 1, -1):
+            for _ in range(current_slots - 1, target_slots - 1, -1):
                 btn = self.buttons.pop()
                 self._recycle_button(btn)
         
@@ -1473,7 +1473,7 @@ class Dashboard(QWidget):
                 try:
                     # Qt Key to char
                     if chr(key).lower() == target_key: return True
-                except: pass
+                except Exception: pass
                 
             return False
 
@@ -1516,7 +1516,7 @@ class Dashboard(QWidget):
 
         return False
     
-    def set_buttons(self, configs: list[dict], appearance_config: dict = None, update_height=True):
+    def set_buttons(self, configs: list[dict], appearance_config: dict | None = None, update_height=True):
         """Set button configurations using (row, col) based positioning."""
         if appearance_config:
             page_count = appearance_config.get('pages', 3)
@@ -2203,7 +2203,7 @@ class Dashboard(QWidget):
         self._lock_view_sizes('edit_button', target_height)
         self._animation_timer.start()
 
-    def show_edit_button(self, slot: int, config: dict = None, entities: list = None):
+    def show_edit_button(self, slot: int, config: dict | None = None, entities: list | None = None):
         """Open the embedded button editor."""
         if self._current_view == 'edit_button': return
         
@@ -2448,10 +2448,10 @@ class Dashboard(QWidget):
         progress = min(1.0, elapsed / self._anim_duration)
         
         # Cubic Ease Out: 1 - pow(1 - x, 3)
-        t = 1.0 - pow(1.0 - progress, 3)
+        eased = 1.0 - pow(1.0 - progress, 3)
         
         # Calculate current height
-        current_h = int(self._anim_start_height + (self._anim_target_height - self._anim_start_height) * t)
+        current_h = int(self._anim_start_height + (self._anim_target_height - self._anim_start_height) * eased)
         
         if self._is_top_anchored():
             new_y = self._anchor_top_y
@@ -2461,7 +2461,7 @@ class Dashboard(QWidget):
         # Animate width if it changed (e.g. settings expansion)
         start_w = getattr(self, '_anim_start_width', None)
         if start_w is not None:
-            current_w = int(start_w + (self._fixed_width - start_w) * t)
+            current_w = int(start_w + (self._fixed_width - start_w) * eased)
             anchor_right = getattr(self, '_anchor_right_x', self.x() + self.width())
             new_x = anchor_right - current_w
         else:
@@ -2518,7 +2518,7 @@ class Dashboard(QWidget):
             # but disconnect in case a stale connection still exists.
             if hasattr(self, 'height_anim') and self.height_anim:
                  self.height_anim.finished.disconnect(self._on_transition_done)
-        except:
+        except Exception:
             pass
             
         # Unlock grid size so it behaves normally (if we are in grid view)
@@ -2573,7 +2573,7 @@ class Dashboard(QWidget):
         """Reposition window to keep it anchored to the configured tray edge."""
         try:
             screen = self.screen()
-        except:
+        except Exception:
             screen = QApplication.primaryScreen()
             
         if not screen:

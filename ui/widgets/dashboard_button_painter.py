@@ -73,20 +73,20 @@ class DashboardButtonPainter:
     @staticmethod
     def _perimeter_path(rect, corner_r):
         """Clockwise rounded-rect path starting at top-center (12 o'clock)."""
-        l, t, r, b = rect.left(), rect.top(), rect.right(), rect.bottom()
-        cx = (l + r) / 2.0
+        x0, y0, x1, y1 = rect.left(), rect.top(), rect.right(), rect.bottom()
+        cx = (x0 + x1) / 2.0
         cr = corner_r
         path = QPainterPath()
-        path.moveTo(cx, t)
-        path.lineTo(r - cr, t)
-        path.arcTo(r - 2*cr, t, 2*cr, 2*cr, 90, -90)
-        path.lineTo(r, b - cr)
-        path.arcTo(r - 2*cr, b - 2*cr, 2*cr, 2*cr, 0, -90)
-        path.lineTo(l + cr, b)
-        path.arcTo(l, b - 2*cr, 2*cr, 2*cr, 270, -90)
-        path.lineTo(l, t + cr)
-        path.arcTo(l, t, 2*cr, 2*cr, 180, -90)
-        path.lineTo(cx, t)
+        path.moveTo(cx, y0)
+        path.lineTo(x1 - cr, y0)
+        path.arcTo(x1 - 2*cr, y0, 2*cr, 2*cr, 90, -90)
+        path.lineTo(x1, y1 - cr)
+        path.arcTo(x1 - 2*cr, y1 - 2*cr, 2*cr, 2*cr, 0, -90)
+        path.lineTo(x0 + cr, y1)
+        path.arcTo(x0, y1 - 2*cr, 2*cr, 2*cr, 270, -90)
+        path.lineTo(x0, y0 + cr)
+        path.arcTo(x0, y0, 2*cr, 2*cr, 180, -90)
+        path.lineTo(cx, y0)
         return path
 
     @staticmethod
@@ -407,14 +407,12 @@ class DashboardButtonPainter:
         # Always show Pill if Huge 2x2+
         label = button.config.get('label')
         if is_huge and label:
-            bg_pix = None
-            x_off = 0
-            y_off = 0
             if has_art and show_art:
-                 bg_pix = scaled
-                 # x_off and y_off are already calculated above
-            
-            DashboardButtonPainter._draw_pill_label(painter, rect, label, bg_pix, x_off, y_off)
+                # Same crop offsets as the art drawn above, so the frosted pill
+                # samples the part of the art that is actually behind it.
+                DashboardButtonPainter._draw_pill_label(painter, rect, label, scaled, x_off, y_off)
+            else:
+                DashboardButtonPainter._draw_pill_label(painter, rect, label)
 
         
         # --- Icons ---
@@ -785,7 +783,7 @@ class DashboardButtonPainter:
                         nozzle_str = f"{_fmt(n_act)}/{_fmt(n_tgt)}"
                     else:
                         nozzle_str = _fmt(n_act)
-                except: nozzle_str = _fmt(nozzle_val)
+                except Exception: nozzle_str = _fmt(nozzle_val)
 
             # Bed
             bed_data = dashboard._entity_states.get(cfg.get('printer_bed_entity'), {})
@@ -804,7 +802,7 @@ class DashboardButtonPainter:
                         bed_str = f"{_fmt_bed(b_act)}/{_fmt_bed(b_tgt)}"
                     else:
                         bed_str = _fmt_bed(b_act)
-                except: bed_str = _fmt_bed(bed_val)
+                except Exception: bed_str = _fmt_bed(bed_val)
             
         icon = Icons.PRINTER_3D # standard mdi-printer-3d
         
@@ -1013,7 +1011,7 @@ class DashboardButtonPainter:
             
             # Progress %
             try: prog_val = float(progress)
-            except: prog_val = 0.0
+            except Exception: prog_val = 0.0
                 
             if printer_state.lower() not in ["off", "unavailable"]:
                  painter.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.Medium))
@@ -1033,7 +1031,7 @@ class DashboardButtonPainter:
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, icon)
             
             try: prog_val = float(progress)
-            except: prog_val = 0.0
+            except Exception: prog_val = 0.0
             
             if prog_val > 0 and prog_val < 100 and printer_state.lower() not in ["off", "unavailable"]:
                  # Small progress indicator text below icon

@@ -20,7 +20,6 @@ Usage:
   python3 build_macos.py --no-dmg
 """
 
-import os
 import sys
 import shutil
 import plistlib
@@ -313,7 +312,7 @@ def run_pyinstaller(cmd: list, cwd: Path, target_arch: str) -> str:
     except subprocess.CalledProcessError:
         if target_arch == "universal2":
             host_arch = "x86_64" if platform.machine() == "x86_64" else "arm64"
-            print(f"\n⚠️ Universal2 build failed (due to single-arch wheel dependencies).")
+            print("\n⚠️ Universal2 build failed (due to single-arch wheel dependencies).")
             print(f"   Falling back to {host_arch} build (compatible with all Macs via Rosetta 2)...")
             
             # Reconstruct command with host_arch

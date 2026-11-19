@@ -137,7 +137,7 @@ def build_binary(base_dir):
     ]
 
     print(f"Command: {' '.join(pyinstaller_args)}")
-    result = subprocess.run(pyinstaller_args, cwd=str(base_dir))
+    result = subprocess.run(pyinstaller_args, cwd=str(base_dir), check=False)
 
     if result.returncode != 0:
         print("\n❌ PyInstaller build failed!")
@@ -233,18 +233,18 @@ def main():
     arch = get_arch()
     base_dir = Path(__file__).parent.absolute()
 
-    print(f"╔══════════════════════════════════════════╗")
-    print(f"║   PrismDesktop Linux Build               ║")
+    print("╔══════════════════════════════════════════╗")
+    print("║   PrismDesktop Linux Build               ║")
     print(f"║   Architecture: {arch:<25s}║")
-    print(f"╚══════════════════════════════════════════╝")
+    print("╚══════════════════════════════════════════╝")
 
     # Check for appimagetool
     appimagetool = find_appimagetool(arch)
     if not appimagetool:
-        print(f"\nError: 'appimagetool' not found.")
+        print("\nError: 'appimagetool' not found.")
         print(f"Download 'appimagetool-{arch}.AppImage' from:")
-        print(f"  https://github.com/AppImage/appimagetool/releases")
-        print(f"Place it in this directory or add it to your PATH.")
+        print("  https://github.com/AppImage/appimagetool/releases")
+        print("Place it in this directory or add it to your PATH.")
         sys.exit(1)
 
     print(f"Using appimagetool: {appimagetool}")
@@ -252,7 +252,7 @@ def main():
     write_build_info(base_dir)
 
     # Step 1: Build binary
-    print(f"\n[1/2] Building binary with PyInstaller...")
+    print("\n[1/2] Building binary with PyInstaller...")
     binary_dir = build_binary(base_dir)
 
     # Step 2: Package AppImage

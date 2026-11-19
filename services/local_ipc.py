@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import os
 import socket as _socket
+import sys
 import tempfile
 
 from core.utils import get_config_path
@@ -20,14 +21,31 @@ def prism_ipc_server_name() -> str:
 
 
 def send_local_command(command: str, timeout_ms: int = 1000) -> bool:
-    """Send a command to the running Prism instance over a local socket."""
+    """Send a command to the running Prism instance. Returns False if none is listening."""
+    payload = command.strip().encode("utf-8")
+    if sys.platform == "win32":
+        return _send_over_named_pipe(payload)
+    return _send_over_unix_socket(payload, timeout_ms)
+
+
+def _send_over_unix_socket(payload: bytes, timeout_ms: int) -> bool:
+    # QLocalServer on Unix listens on a socket file in the temp directory.
     socket_path = os.path.join(tempfile.gettempdir(), prism_ipc_server_name())
     try:
-        sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
-        sock.settimeout(timeout_ms / 1000.0)
-        sock.connect(socket_path)
-        sock.sendall(command.strip().encode("utf-8"))
-        sock.close()
+        with _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout_ms / 1000.0)
+            sock.connect(socket_path)
+            sock.sendall(payload)
+        return True
+    except OSError:
+        return False
+
+
+def _send_over_named_pipe(payload: bytes) -> bool:
+    # QLocalServer on Windows listens on the named pipe \\.\pipe\<server name>.
+    try:
+        with open(rf"\\.\pipe\{prism_ipc_server_name()}", "wb", buffering=0) as pipe:
+            pipe.write(payload)
         return True
     except OSError:
         return False
