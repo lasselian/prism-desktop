@@ -312,31 +312,27 @@ def run_pyinstaller(cmd: list, cwd: Path, target_arch: str) -> str:
         subprocess.check_call(cmd, cwd=str(cwd))
         return target_arch
     except subprocess.CalledProcessError:
-        if target_arch == "universal2":
-            host_arch = "x86_64" if platform.machine() == "x86_64" else "arm64"
-            print("\n⚠️ Universal2 build failed (due to single-arch wheel dependencies).")
-            print(f"   Falling back to {host_arch} build (compatible with all Macs via Rosetta 2)...")
-
-            # Reconstruct command with host_arch
-            cmd_fallback = []
-            skip_next = False
-            for arg in cmd:
-                if skip_next:
-                    skip_next = False
-                    continue
-                if arg == "--target-arch":
-                    skip_next = True
-                    continue
-                cmd_fallback.append(arg)
-
-            cmd_fallback.insert(-1, "--target-arch")
-            cmd_fallback.insert(-1, host_arch)
-
-            print(f"Fallback Command: {' '.join(cmd_fallback)}\n")
-            subprocess.check_call(cmd_fallback, cwd=str(cwd))
-            return host_arch
-        else:
+        if target_arch != "universal2":
             raise
+    host_arch = "x86_64" if platform.machine() == "x86_64" else "arm64"
+    print("\n⚠️ Universal2 build failed (due to single-arch wheel dependencies).")
+    print(f"   Falling back to {host_arch} build (compatible with all Macs via Rosetta 2)...")
+    cmd_fallback = _with_target_arch(cmd, host_arch)
+    print(f"Fallback Command: {' '.join(cmd_fallback)}\n")
+    subprocess.check_call(cmd_fallback, cwd=str(cwd))
+    return host_arch
+
+
+def _with_target_arch(cmd: list, arch: str) -> list:
+    """cmd with any --target-arch replaced by arch, placed just before the script (the last argument)."""
+    without = []
+    args = iter(cmd)
+    for arg in args:
+        if arg == "--target-arch":
+            next(args, None)  # drop its value too
+        else:
+            without.append(arg)
+    return [*without[:-1], "--target-arch", arch, without[-1]]
 
 
 def build_macos(
@@ -353,21 +349,9 @@ def build_macos(
 
     # 1. Ensure working Python environment with PyInstaller & dependencies
     build_python = ensure_build_environment(BASE_DIR)
-
-    host_machine = platform.machine()
-    is_universal_env = is_python_universal(build_python)
-
     if target_arch == "auto":
-        target_arch = "universal2" if is_universal_env else host_machine
-
-    print("=" * 60)
-    print("  🚀 Prism Desktop macOS Build")
-    print(f"  Version:      {get_display_version()}")
-    print(f"  Target Arch:  {target_arch}")
-    print(f"  Host Machine: {host_machine} ({platform.processor()})")
-    print(f"  Build Python: {build_python}")
-    print(f"  macOS:        {platform.mac_ver()[0]}")
-    print("=" * 60)
+        target_arch = "universal2" if is_python_universal(build_python) else platform.machine()
+    _print_build_header(target_arch, build_python)
 
     # 2. Ensure MDI mapping is generated
     from generate_mdi_mapping import generate as generate_mdi_mapping
@@ -375,28 +359,60 @@ def build_macos(
     if not generate_mdi_mapping():
         print("⚠️ Warning: mdi_mapping.json could not be generated — icons may not work offline.")
 
-    # 3. Write build metadata
+    # 3. Write build metadata, 4. ensure icon.icns
     write_build_info(BASE_DIR)
-
-    # 4. Ensure icon.icns
     icon_path = generate_icns_if_needed(BASE_DIR)
 
     # 5. Clean previous build artifacts
     dist_dir = BASE_DIR / "dist"
-    build_dir = BASE_DIR / "build"
     if clean:
-        if dist_dir.exists():
-            shutil.rmtree(dist_dir, ignore_errors=True)
-        if build_dir.exists():
-            shutil.rmtree(build_dir, ignore_errors=True)
-
+        shutil.rmtree(dist_dir, ignore_errors=True)
+        shutil.rmtree(BASE_DIR / "build", ignore_errors=True)
     dist_dir.mkdir(parents=True, exist_ok=True)
 
-    # 6. Build command using the resolved build_python
+    # 6. PyInstaller
+    print("\n🔨 Running PyInstaller...")
+    final_arch = run_pyinstaller(_pyinstaller_command(build_python, icon_path, target_arch), BASE_DIR, target_arch)
+    app_bundle = dist_dir / "PrismDesktop.app"
+    if not app_bundle.exists():
+        print(f"❌ Error: {app_bundle} was not created.")
+        sys.exit(1)
+
+    # 7. Info.plist, 8. ad-hoc code signing, 9. clear quarantine attributes locally
+    customize_info_plist(app_bundle)
+    if not skip_sign:
+        ad_hoc_codesign(app_bundle)
+    try:
+        subprocess.run(["xattr", "-cr", str(app_bundle)], check=False)
+    except Exception:
+        pass
+
+    # 10. Package archives
+    arch_suffix = "Universal" if final_arch == "universal2" else final_arch
+    output_zip = dist_dir / f"PrismDesktop-macOS-{arch_suffix}.zip"
+    output_dmg = dist_dir / f"PrismDesktop-macOS-{arch_suffix}.dmg"
+    if make_zip:
+        create_zip_archive(app_bundle, output_zip)
+    if make_dmg:
+        create_dmg_package(app_bundle, output_dmg)
+    _print_build_summary(final_arch, app_bundle, output_zip if make_zip else None, output_dmg if make_dmg else None)
+
+
+def _print_build_header(target_arch: str, build_python) -> None:
+    print("=" * 60)
+    print("  🚀 Prism Desktop macOS Build")
+    print(f"  Version:      {get_display_version()}")
+    print(f"  Target Arch:  {target_arch}")
+    print(f"  Host Machine: {platform.machine()} ({platform.processor()})")
+    print(f"  Build Python: {build_python}")
+    print(f"  macOS:        {platform.mac_ver()[0]}")
+    print("=" * 60)
+
+
+def _pyinstaller_command(build_python, icon_path: Path, target_arch: str) -> list:
     font_path = BASE_DIR / "materialdesignicons-webfont.ttf"
     mapping_path = BASE_DIR / "mdi_mapping.json"
     translations_path = BASE_DIR / "translations"
-
     cmd = [
         str(build_python),
         "-m",
@@ -412,60 +428,26 @@ def build_macos(
         "--add-data",
         f"{font_path}:.",
     ]
-
     if icon_path.exists():
         cmd.extend(["--icon", str(icon_path)])
-
     if mapping_path.exists():
         cmd.extend(["--add-data", f"{mapping_path}:."])
-
     if translations_path.exists():
         cmd.extend(["--add-data", f"{translations_path}:translations"])
-
     if target_arch and target_arch != "native":
         cmd.extend(["--target-arch", target_arch])
-
     cmd.append("main.py")
+    return cmd
 
-    print("\n🔨 Running PyInstaller...")
-    final_arch = run_pyinstaller(cmd, BASE_DIR, target_arch)
 
-    app_bundle = dist_dir / "PrismDesktop.app"
-    if not app_bundle.exists():
-        print(f"❌ Error: {app_bundle} was not created.")
-        sys.exit(1)
-
-    # 7. Customize Info.plist
-    customize_info_plist(app_bundle)
-
-    # 8. Ad-Hoc Code Sign
-    if not skip_sign:
-        ad_hoc_codesign(app_bundle)
-
-    # 9. Clear quarantine attributes locally
-    try:
-        subprocess.run(["xattr", "-cr", str(app_bundle)], check=False)
-    except Exception:
-        pass
-
-    # 10. Package archives
-    arch_suffix = "Universal" if final_arch == "universal2" else final_arch
-    output_zip = dist_dir / f"PrismDesktop-macOS-{arch_suffix}.zip"
-    output_dmg = dist_dir / f"PrismDesktop-macOS-{arch_suffix}.dmg"
-
-    if make_zip:
-        create_zip_archive(app_bundle, output_zip)
-
-    if make_dmg:
-        create_dmg_package(app_bundle, output_dmg)
-
+def _print_build_summary(final_arch: str, app_bundle: Path, output_zip, output_dmg) -> None:
     print("\n" + "=" * 60)
     print("  🎉 Build Completed Successfully!")
     print(f"  Architecture: {final_arch}")
     print(f"  App Bundle:   {app_bundle}")
-    if make_zip and output_zip.exists():
+    if output_zip and output_zip.exists():
         print(f"  ZIP Release:  {output_zip}")
-    if make_dmg and output_dmg.exists():
+    if output_dmg and output_dmg.exists():
         print(f"  DMG Release:  {output_dmg}")
     print("=" * 60)
     print("\n💡 macOS First-Run & Distribution Notes:")
