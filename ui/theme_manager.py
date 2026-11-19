@@ -52,82 +52,8 @@ class ThemeManager(QObject):
 
     def get_system_theme(self) -> str:
         """Detect system theme preference across platforms."""
-        system = platform.system()
-
-        if system == 'Windows':
-            try:
-                import winreg
-
-                key = winreg.OpenKey(
-                    winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-                )
-                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-                winreg.CloseKey(key)
-                return 'light' if value == 1 else 'dark'
-            except Exception:
-                return 'dark'
-
-        elif system == 'Linux':
-            # Try KDE Plasma first
-            try:
-                result = subprocess.run(
-                    ['kreadconfig5', '--group', 'General', '--key', 'ColorScheme'],
-                    capture_output=True,
-                    text=True,
-                    timeout=2,
-                    check=False,
-                )
-                if result.returncode == 0 and result.stdout.strip():
-                    scheme = result.stdout.strip().lower()
-                    return 'dark' if 'dark' in scheme else 'light'
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                pass
-
-            # Try GNOME
-            try:
-                result = subprocess.run(
-                    ['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'],
-                    capture_output=True,
-                    text=True,
-                    timeout=2,
-                    check=False,
-                )
-                if result.returncode == 0:
-                    return 'dark' if 'dark' in result.stdout.lower() else 'light'
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                pass
-
-            # Fallback: check GTK theme name
-            try:
-                result = subprocess.run(
-                    ['gsettings', 'get', 'org.gnome.desktop.interface', 'gtk-theme'],
-                    capture_output=True,
-                    text=True,
-                    timeout=2,
-                    check=False,
-                )
-                if result.returncode == 0:
-                    return 'dark' if 'dark' in result.stdout.lower() else 'light'
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                pass
-
-            return 'dark'  # Default to dark
-
-        elif system == 'Darwin':
-            # macOS
-            try:
-                result = subprocess.run(
-                    ['defaults', 'read', '-g', 'AppleInterfaceStyle'],
-                    capture_output=True,
-                    text=True,
-                    timeout=2,
-                    check=False,
-                )
-                return 'dark' if result.returncode == 0 else 'light'
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                return 'light'
-
-        return 'dark'  # Default for unknown platforms
+        detect = _THEME_DETECTORS.get(platform.system())
+        return detect() if detect else 'dark'  # unknown platforms
 
     def set_theme(self, theme: str):
         """Set the application theme ('light', 'dark', or 'system')."""
@@ -173,3 +99,44 @@ class ThemeManager(QObject):
         palette.setColor(QPalette.ColorRole.HighlightedText, QColor(colors['highlight_text']))
 
         app.setPalette(palette)
+
+
+def _settings_output(cmd: list[str]) -> str | None:
+    """stdout of a quick settings query; None if it failed or the tool isn't installed."""
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=2, check=False)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
+def _windows_theme() -> str:
+    try:
+        import winreg
+
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+        value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+        winreg.CloseKey(key)
+        return 'light' if value == 1 else 'dark'
+    except Exception:
+        return 'dark'
+
+
+def _linux_theme() -> str:
+    # KDE Plasma first, then GNOME's colour scheme, then the GTK theme name.
+    scheme = (_settings_output(['kreadconfig5', '--group', 'General', '--key', 'ColorScheme']) or '').strip().lower()
+    if scheme:
+        return 'dark' if 'dark' in scheme else 'light'
+    for key in ('color-scheme', 'gtk-theme'):
+        out = _settings_output(['gsettings', 'get', 'org.gnome.desktop.interface', key])
+        if out is not None:
+            return 'dark' if 'dark' in out.lower() else 'light'
+    return 'dark'
+
+
+def _macos_theme() -> str:
+    # AppleInterfaceStyle only exists (as "Dark") while dark mode is on.
+    return 'dark' if _settings_output(['defaults', 'read', '-g', 'AppleInterfaceStyle']) is not None else 'light'
+
+
+_THEME_DETECTORS = {'Windows': _windows_theme, 'Linux': _linux_theme, 'Darwin': _macos_theme}

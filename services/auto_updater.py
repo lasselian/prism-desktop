@@ -263,20 +263,19 @@ class AutoUpdateThread(QThread):
         Extract the updated .app bundle from the downloaded ZIP and replace
         the running application bundle in /Applications (or current bundle dir).
         """
-        import zipfile
-
-        current_app = None
-        for p in Path(sys.executable).parents:
-            if p.suffix == ".app":
-                current_app = p
-                break
-
+        current_app = _running_app_bundle()
         if not current_app or not current_app.exists():
             raise OSError(f"Could not locate the .app bundle for {sys.executable}")
+        new_app = self._extract_app_bundle(zip_path)
+        self._clear_quarantine(new_app)
+        self._swap_app_bundles(current_app, new_app)
+
+    @staticmethod
+    def _extract_app_bundle(zip_path: Path) -> Path:
+        import zipfile
 
         extract_dir = zip_path.parent / "extracted"
         extract_dir.mkdir(exist_ok=True)
-
         try:
             subprocess.run(["ditto", "-xk", str(zip_path), str(extract_dir)], check=True)
         except Exception:
@@ -284,21 +283,24 @@ class AutoUpdateThread(QThread):
                 zf.extractall(extract_dir)
 
         new_app = extract_dir / "PrismDesktop.app"
-        if not new_app.exists():
-            apps = list(extract_dir.glob("*.app"))
-            if apps:
-                new_app = apps[0]
-            else:
-                raise OSError("Downloaded archive did not contain PrismDesktop.app")
+        if new_app.exists():
+            return new_app
+        apps = list(extract_dir.glob("*.app"))
+        if not apps:
+            raise OSError("Downloaded archive did not contain PrismDesktop.app")
+        return apps[0]
 
-        # Strip quarantine flag and ad-hoc sign new .app
+    @staticmethod
+    def _clear_quarantine(app: Path) -> None:
+        """Strip the quarantine flag and ad-hoc sign the new bundle."""
         try:
-            subprocess.run(["xattr", "-cr", str(new_app)], check=False)
-            subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(new_app)], check=False)
+            subprocess.run(["xattr", "-cr", str(app)], check=False)
+            subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(app)], check=False)
         except Exception:
             pass
 
-        # Move/replace current .app bundle
+    @staticmethod
+    def _swap_app_bundles(current_app: Path, new_app: Path) -> None:
         backup_app = current_app.with_suffix(".app.old")
         if backup_app.exists():
             shutil.rmtree(backup_app, ignore_errors=True)
@@ -311,7 +313,7 @@ class AutoUpdateThread(QThread):
             shutil.move(str(current_app), str(backup_app))
         except OSError as exc:
             raise OSError(
-                f"Cannot replace {current_app} — check that you own the bundle " f"or have write permission ({exc})."
+                f"Cannot replace {current_app} — check that you own the bundle or have write permission ({exc})."
             ) from exc
 
         try:
@@ -389,26 +391,30 @@ def consume_update_flag() -> str | None:
 def restart_app() -> None:
     """Restart the application after a successful update."""
     write_update_flag()
-    if getattr(sys, "frozen", False):
-        if sys.platform.startswith("linux"):
-            # New AppImage is in place at $APPIMAGE; re-exec from there.
-            # sys.executable points into the /tmp squashfs mount, not the file.
-            appimage = os.environ.get("APPIMAGE") or sys.executable
-            subprocess.Popen([appimage])
-        elif sys.platform == "darwin":
-            current_app = None
-            for p in Path(sys.executable).parents:
-                if p.suffix == ".app":
-                    current_app = p
-                    break
-            if current_app:
-                subprocess.Popen(["open", "-n", str(current_app)])
-            else:
-                subprocess.Popen([sys.executable])
-        else:
-            # Windows: the installer (spawned in _apply_windows) relaunches the
-            # app itself once it's done; don't race it by launching here too.
-            logger.info("Quitting so the Windows installer can relaunch the app")
+    command = _relaunch_command()
+    if command:
+        subprocess.Popen(command)
     else:
-        subprocess.Popen([sys.executable] + sys.argv)
+        # Windows: the installer (spawned in _apply_windows) relaunches the
+        # app itself once it's done; don't race it by launching here too.
+        logger.info("Quitting so the Windows installer can relaunch the app")
     QApplication.quit()
+
+
+def _relaunch_command() -> list[str] | None:
+    """How to start the updated app, or None when the installer does it."""
+    if not getattr(sys, "frozen", False):
+        return [sys.executable] + sys.argv
+    if sys.platform.startswith("linux"):
+        # New AppImage is in place at $APPIMAGE; re-exec from there.
+        # sys.executable points into the /tmp squashfs mount, not the file.
+        return [os.environ.get("APPIMAGE") or sys.executable]
+    if sys.platform == "darwin":
+        bundle = _running_app_bundle()
+        return ["open", "-n", str(bundle)] if bundle else [sys.executable]
+    return None
+
+
+def _running_app_bundle() -> Path | None:
+    """The .app bundle the running executable lives in (macOS), if any."""
+    return next((p for p in Path(sys.executable).parents if p.suffix == ".app"), None)

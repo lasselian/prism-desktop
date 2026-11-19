@@ -234,95 +234,52 @@ def get_icon(name: str) -> str:
     """
     if not name:
         return Icons.CIRCLE_OUTLINE
-
-    # Normalize name
     if name.startswith("mdi:"):
         name = name[4:]
-
-    global _mdi_cache, _is_fetching
-    if not _mdi_cache:
-        # Load from file first
-        # 1. Try bundled resource (read-only in exe)
-        bundled_file = get_resource_path("mdi_mapping.json")
-        loaded = False
-
-        if bundled_file.exists():
-            try:
-                with open(bundled_file, 'r', encoding='utf-8') as f:
-                    _mdi_cache = json.load(f)
-                    loaded = True
-            except Exception:
-                pass
-
-        # 2. If not bundled, try config path (cached file)
-        if not loaded:
-            cached_file = get_config_path("mdi_mapping.json")
-            if cached_file.exists() and cached_file != bundled_file:
-                try:
-                    with open(cached_file, 'r', encoding='utf-8') as f:
-                        _mdi_cache = json.load(f)
-                except Exception:
-                    pass
-
-        # If still empty and not fetching, fetch in background
-        if not _mdi_cache:
-            if not _is_fetching:
-                import threading
-
-                _is_fetching = True
-                threading.Thread(target=fetch_mdi_mapping_worker, daemon=True).start()
-
-            # Return placeholder while fetching
-            return Icons.CIRCLE_OUTLINE
-
+    if not _mdi_cache and not _load_saved_mapping():
+        _fetch_mapping_in_background()
+        return Icons.CIRCLE_OUTLINE  # placeholder until the mapping arrives
     return _mdi_cache.get(name, Icons.CIRCLE_OUTLINE)
 
 
-# Convenience function to get icon for entity type
+def _read_mapping(path) -> dict | None:
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _load_saved_mapping() -> bool:
+    """Fill the cache from the bundled mapping, else from one fetched earlier."""
+    global _mdi_cache
+    bundled_file = get_resource_path("mdi_mapping.json")  # read-only in the exe
+    mapping = _read_mapping(bundled_file) if bundled_file.exists() else None
+    if mapping is None:
+        cached_file = get_config_path("mdi_mapping.json")
+        if cached_file.exists() and cached_file != bundled_file:
+            mapping = _read_mapping(cached_file)
+    if mapping:
+        _mdi_cache = mapping
+    return bool(_mdi_cache)
+
+
+def _fetch_mapping_in_background() -> None:
+    global _is_fetching
+    if _is_fetching:
+        return
+    import threading
+
+    _is_fetching = True
+    threading.Thread(target=fetch_mdi_mapping_worker, daemon=True).start()
+
+
 def get_icon_for_type(entity_type: str, state: str = "off") -> str:
     """Get the appropriate icon for an entity type and state."""
-
-    if entity_type == "switch":
-        return Icons.LIGHTBULB if state == "on" else Icons.LIGHTBULB_OFF
-
-    elif entity_type == "script":
-        return Icons.SCRIPT
-
-    elif entity_type == "automation":
-        return Icons.AUTOMATION
-
-    elif entity_type == "curtain":
-        return Icons.BLINDS_OPEN if state == "open" else Icons.BLINDS
-
-    elif entity_type == "climate":
-        if state == "heat":
-            return Icons.FIRE
-        elif state == "cool":
-            return Icons.SNOWFLAKE
-        elif state == "on":
-            return Icons.THERMOMETER_HIGH
-        else:
-            return Icons.THERMOMETER
-
-    elif entity_type == "widget":
-        return Icons.GAUGE
-
-    elif entity_type == "fan":
-        return Icons.FAN
-
-    elif entity_type == "lock":
-        if state == "jammed":
-            return get_icon("lock-alert")
-        return Icons.LOCK if state == "locked" else Icons.LOCK_OPEN
-
-    elif entity_type == "alarm_control_panel":
-        return get_icon(_ALARM_ICON_MAP.get(state, "shield-off-outline"))
-
-    elif entity_type == "sun":
-        return Icons.WEATHER_SUNNY  # MDI fallback; painter handles actual rendering
-
-    # Default/empty
-    return Icons.PLUS_CIRCLE
+    icon = _TYPE_ICONS.get(entity_type)
+    if icon is None:
+        return Icons.PLUS_CIRCLE  # default / empty slot
+    return icon(state) if callable(icon) else icon
 
 
 # Alarm control panel: HA state -> mdi icon name (looked up via get_icon)
@@ -337,4 +294,27 @@ _ALARM_ICON_MAP = {
     "pending": "shield-alert-outline",
     "disarming": "shield-off-outline",
     "triggered": "shield-alert",
+}
+
+_CLIMATE_ICONS = {"heat": Icons.FIRE, "cool": Icons.SNOWFLAKE, "on": Icons.THERMOMETER_HIGH}
+
+
+def _lock_icon(state: str) -> str:
+    if state == "jammed":
+        return get_icon("lock-alert")
+    return Icons.LOCK if state == "locked" else Icons.LOCK_OPEN
+
+
+# Entity type -> icon, or a function of the state for types whose icon changes.
+_TYPE_ICONS = {
+    "switch": lambda state: Icons.LIGHTBULB if state == "on" else Icons.LIGHTBULB_OFF,
+    "script": Icons.SCRIPT,
+    "automation": Icons.AUTOMATION,
+    "curtain": lambda state: Icons.BLINDS_OPEN if state == "open" else Icons.BLINDS,
+    "climate": lambda state: _CLIMATE_ICONS.get(state, Icons.THERMOMETER),
+    "widget": Icons.GAUGE,
+    "fan": Icons.FAN,
+    "lock": _lock_icon,
+    "alarm_control_panel": lambda state: get_icon(_ALARM_ICON_MAP.get(state, "shield-off-outline")),
+    "sun": Icons.WEATHER_SUNNY,  # MDI fallback; the painter draws the real sun tile
 }

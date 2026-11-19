@@ -189,30 +189,37 @@ def get_last_boot() -> Optional[str]:
 def get_idle_time() -> Optional[int]:
     """Seconds since the last keyboard/mouse input."""
     if sys.platform == "win32":
-        import ctypes
-
-        class LASTINPUTINFO(ctypes.Structure):
-            _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
-
-        info = LASTINPUTINFO()
-        info.cbSize = ctypes.sizeof(info)
-        if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
-            return None
-        ticks = ctypes.windll.kernel32.GetTickCount() & 0xFFFFFFFF
-        return int(((ticks - info.dwTime) & 0xFFFFFFFF) / 1000)
-
+        return _idle_time_windows()
     if sys.platform == "darwin":
-        out = _run(["ioreg", "-c", "IOHIDSystem"])
-        if out:
-            for line in out.splitlines():
-                if "HIDIdleTime" in line:
-                    try:
-                        return int(int(line.split("=")[-1].strip()) / 1_000_000_000)
-                    except ValueError:
-                        return None
-        return None
+        return _idle_time_macos()
+    return _idle_time_linux()
 
-    # Linux: GNOME/Mutter exposes idle time on the session bus (works on Wayland).
+
+def _idle_time_windows() -> Optional[int]:
+    import ctypes
+
+    class LASTINPUTINFO(ctypes.Structure):
+        _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+
+    info = LASTINPUTINFO()
+    info.cbSize = ctypes.sizeof(info)
+    if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
+        return None
+    ticks = ctypes.windll.kernel32.GetTickCount() & 0xFFFFFFFF
+    return int(((ticks - info.dwTime) & 0xFFFFFFFF) / 1000)
+
+
+def _idle_time_macos() -> Optional[int]:
+    out = _run(["ioreg", "-c", "IOHIDSystem"])
+    line = next((ln for ln in (out or "").splitlines() if "HIDIdleTime" in ln), None)
+    if line is None:
+        return None
+    nanoseconds = _int_or_none(line.split("=")[-1])
+    return None if nanoseconds is None else int(nanoseconds / 1_000_000_000)
+
+
+def _idle_time_linux() -> Optional[int]:
+    # GNOME/Mutter exposes idle time on the session bus (works on Wayland).
     out = _run(
         [
             "busctl",
@@ -225,18 +232,21 @@ def get_idle_time() -> Optional[int]:
         ]
     )
     if out and out.startswith("t "):
-        try:
-            return int(out.split()[1]) // 1000
-        except ValueError:
-            return None
+        milliseconds = _int_or_none(out.split()[1])
+        return None if milliseconds is None else milliseconds // 1000
     # X11 sessions on other desktops
     out = _run(["xprintidle"])
     if out:
-        try:
-            return int(out.strip()) // 1000
-        except ValueError:
-            return None
+        milliseconds = _int_or_none(out)
+        return None if milliseconds is None else milliseconds // 1000
     return None
+
+
+def _int_or_none(text: str) -> Optional[int]:
+    try:
+        return int(text.strip())
+    except ValueError:
+        return None
 
 
 def get_screen_locked() -> Optional[bool]:
@@ -276,35 +286,40 @@ def _windows_consent_in_use(capability: str) -> Optional[bool]:
         root = winreg.OpenKey(winreg.HKEY_CURRENT_USER, base)
     except OSError:
         return None
-
-    def active(key) -> bool:
-        try:
-            start = winreg.QueryValueEx(key, "LastUsedTimeStart")[0]
-            stop = winreg.QueryValueEx(key, "LastUsedTimeStop")[0]
-        except OSError:
-            return False
-        return start > 0 and stop == 0
-
-    def scan(parent) -> bool:
-        i = 0
-        while True:
-            try:
-                name = winreg.EnumKey(parent, i)
-            except OSError:
-                return False
-            i += 1
-            try:
-                with winreg.OpenKey(parent, name) as sub:
-                    if name == "NonPackaged":
-                        if scan(sub):
-                            return True
-                    elif active(sub):
-                        return True
-            except OSError:
-                continue
-
     with root:
-        return scan(root)
+        return _consent_store_in_use(winreg, root)
+
+
+def _consent_store_in_use(winreg, parent) -> bool:
+    """Any app under this key in use; desktop apps sit one level deeper, under NonPackaged."""
+    for name in _subkey_names(winreg, parent):
+        try:
+            with winreg.OpenKey(parent, name) as sub:
+                in_use = _consent_store_in_use(winreg, sub) if name == "NonPackaged" else _consent_active(winreg, sub)
+        except OSError:
+            continue
+        if in_use:
+            return True
+    return False
+
+
+def _subkey_names(winreg, parent):
+    index = 0
+    while True:
+        try:
+            yield winreg.EnumKey(parent, index)
+        except OSError:
+            return
+        index += 1
+
+
+def _consent_active(winreg, key) -> bool:
+    try:
+        start = winreg.QueryValueEx(key, "LastUsedTimeStart")[0]
+        stop = winreg.QueryValueEx(key, "LastUsedTimeStop")[0]
+    except OSError:
+        return False
+    return start > 0 and stop == 0
 
 
 def get_mic_in_use() -> Optional[bool]:
@@ -334,17 +349,21 @@ def get_camera_in_use() -> Optional[bool]:
         pids = [p for p in os.listdir("/proc") if p.isdigit() and int(p) != me]
     except OSError:
         return None
-    for pid in pids:
-        fd_dir = f"/proc/{pid}/fd"
+    return any(_process_holds_video_device(pid) for pid in pids)
+
+
+def _process_holds_video_device(pid: str) -> bool:
+    fd_dir = f"/proc/{pid}/fd"
+    try:
+        fds = os.listdir(fd_dir)
+    except OSError:
+        return False  # process gone, or not ours
+    for fd in fds:
         try:
-            for fd in os.listdir(fd_dir):
-                try:
-                    if os.readlink(f"{fd_dir}/{fd}").startswith("/dev/video"):
-                        return True
-                except OSError:
-                    continue
+            if os.readlink(f"{fd_dir}/{fd}").startswith("/dev/video"):
+                return True
         except OSError:
-            continue  # process gone, or not ours
+            continue
     return False
 
 
