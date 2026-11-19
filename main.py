@@ -71,6 +71,13 @@ PRINTER_ENTITY_KEYS = [
     'entity_id',
 ]
 
+
+def button_entity_ids(config: dict) -> list[str]:
+    """Every HA entity a button shows: its entity, or all of a 3D printer's."""
+    keys = PRINTER_ENTITY_KEYS if config.get('type') == '3d_printer' else ('entity_id',)
+    return [config[key] for key in keys if config.get(key)]
+
+
 # Domains whose entities sit at 'unknown' until they are first activated.
 STATELESS_TRIGGER_DOMAINS = ('scene', 'button', 'input_button')
 
@@ -101,7 +108,7 @@ from ui.theme_manager import ThemeManager
 from core.ha_client import HAClient
 from core.ha_websocket import HAWebSocket
 from ui.dashboard import Dashboard
-from ui.grid_layout_engine import plan_move
+from ui.grid_layout_engine import is_real_button, plan_move
 
 from ui.tray_manager import TrayManager
 from services.notifications import NotificationManager
@@ -629,15 +636,8 @@ class PrismDesktopApp(QObject):
 
         # Subscribe to configured entities
         for btn in self.config.get('buttons', []):
-            if btn.get('type') == '3d_printer':
-                for key in PRINTER_ENTITY_KEYS:
-                    eid = btn.get(key)
-                    if eid:
-                        self._ha_websocket.subscribe_entity(eid)
-            else:
-                entity_id = btn.get('entity_id')
-                if entity_id:
-                    self._ha_websocket.subscribe_entity(entity_id)
+            for entity_id in button_entity_ids(btn):
+                self._ha_websocket.subscribe_entity(entity_id)
 
         self._ha_websocket.state_changed.connect(self.on_state_changed)
         self._ha_websocket.notification_received.connect(self.on_notification)
@@ -708,43 +708,45 @@ class PrismDesktopApp(QObject):
         while True:
             try:
                 if self.dashboard and self.dashboard.isVisible():
-                    # Identify visible camera buttons and 3D printers
-                    # (image.* entities are refreshed via on_state_changed instead of polling)
-                    camera_buttons = []
-                    for btn in self.dashboard.buttons:
-                        if btn.isVisible():
-                            if btn.config.get('type') == 'camera':
-                                entity_id = btn.config.get('entity_id')
-                                if entity_id and entity_id.startswith('camera.'):
-                                    camera_buttons.append((btn, entity_id))
-                            elif btn.config.get('type') == '3d_printer':
-                                cam_entity_id = btn.config.get('printer_camera_entity')
-                                # Only pull the camera feed if the button is large enough to display it (2x2+)
-                                # OR if the 3D printer overlay is currently active and belongs to this button
-                                om = self.dashboard.overlay_manager
-                                is_active_overlay = (
-                                    om is not None
-                                    and om.printer_overlay.isVisible()
-                                    and om._active_printer_config
-                                    and om._active_printer_config.get('printer_camera_entity') == cam_entity_id
-                                )
-
-                                if (
-                                    cam_entity_id
-                                    and cam_entity_id.startswith('camera.')
-                                    and (is_active_overlay or (btn.span_x >= 2 and btn.span_y >= 2))
-                                ):
-                                    camera_buttons.append((btn, cam_entity_id))
-
-                    # Fetch all visible cameras concurrently
-                    tasks = [self._fetch_camera_image(entity_id) for _, entity_id in camera_buttons]
-                    if tasks:
-                        await asyncio.gather(*tasks)
-
+                    entity_ids = self._visible_camera_entities()
+                    if entity_ids:
+                        await asyncio.gather(*(self._fetch_camera_image(eid) for eid in entity_ids))
                 await asyncio.sleep(self._camera_refresh_interval)
             except Exception as e:
                 logger.error(f"Camera loop error: {e}")
                 await asyncio.sleep(10)
+
+    def _visible_camera_entities(self) -> list[str]:
+        """Cameras shown on visible tiles (image.* entities refresh via on_state_changed instead)."""
+        entity_ids = []
+        for btn in self.dashboard.buttons:
+            entity_id = self._camera_to_poll(btn) if btn.isVisible() else None
+            if entity_id:
+                entity_ids.append(entity_id)
+        return entity_ids
+
+    def _camera_to_poll(self, btn) -> str | None:
+        btn_type = btn.config.get('type')
+        if btn_type == 'camera':
+            entity_id = btn.config.get('entity_id')
+        elif btn_type == '3d_printer':
+            entity_id = btn.config.get('printer_camera_entity')
+            # A printer's feed is only pulled while it can be seen: on a 2x2+
+            # tile, or in this printer's open overlay.
+            if not (btn.span_x >= 2 and btn.span_y >= 2) and not self._printer_overlay_shows(entity_id):
+                return None
+        else:
+            return None
+        return entity_id if entity_id and entity_id.startswith('camera.') else None
+
+    def _printer_overlay_shows(self, camera_entity_id) -> bool:
+        om = self.dashboard.overlay_manager
+        return bool(
+            om is not None
+            and om.printer_overlay.isVisible()
+            and om._active_printer_config
+            and om._active_printer_config.get('printer_camera_entity') == camera_entity_id
+        )
 
     @staticmethod
     def _put_cache(cache: dict, key, value, max_size: int = 20) -> None:
@@ -841,33 +843,57 @@ class PrismDesktopApp(QObject):
         new_ha_config = new_config.get('home_assistant', {})
         new_url = new_ha_config.get('url', '').rstrip('/')
         new_token = new_ha_config.get('token', '')
-
         ha_changed = self.ha_client.url != new_url or self.ha_client.token != new_token
         if self.ha_client.token and not new_token:
             # The user emptied the token field. save_config() never writes an empty
             # token, so without this the old one would come back on the next start.
             clear_token()
+
+        glass_ui_enabled = self._adopt_config(new_config)
+        self._apply_layout_settings()
+        self._apply_shortcut_settings()
+        if glass_ui_enabled and self.dashboard:
+            from ui.notifications import notify_glass_ui_warning
+
+            notify_glass_ui_warning(self.dashboard)
+
+        if ha_changed:
+            await self._restart_ha_connections()
+            return
+        # HA config unchanged, but if the WebSocket isn't live, treat Save as
+        # "reconnect" — a stuck or dead connection otherwise has no user-facing
+        # recovery short of changing the token or restarting the app (issue #57).
+        if new_url and new_token and not self._ws_connected:
+            logger.info("HA config unchanged but WebSocket is not connected, forcing reconnect...")
+            self.stop_websocket()
+            self.start_websocket()
+        self.theme_manager.set_theme(self.config.get('appearance', {}).get('theme', 'system'))
+        await self._sync_mobile_app_features()
+
+    def _adopt_config(self, new_config: dict) -> bool:
+        """Make new_config the live config and save it; True if Glass UI was just switched on."""
         new_glass_ui = new_config.get('appearance', {}).get('glass_ui', False)
         glass_ui_enabled = not self._glass_ui_active and new_glass_ui
         self._glass_ui_active = new_glass_ui
-
         self.config_manager.config = new_config
         self.config = self.config_manager.config
         self._temperature_unit_initialized = 'temperature_unit' in self.config.get('appearance', {})
         self.save_config()
+        return glass_ui_enabled
 
-        # Re-apply UI
-        rows = self.config.get('appearance', {}).get('rows', 2)
-        cols = self.config.get('appearance', {}).get('cols', 4)
-        if self.dashboard:
-            self.dashboard.set_rows(rows)
-            self.dashboard.set_cols(cols)
-            self.dashboard.set_buttons(self.config.get('buttons', []), self.config.get('appearance', {}))
-            # Re-apply camera images after rebuild
-            self.dashboard.apply_camera_cache(self._camera_cache)
-            if self.dashboard.isVisible():
-                self.dashboard.refresh_tray_anchor(move_now=True, tray_geometry=self._tray_geometry())
+    def _apply_layout_settings(self):
+        if not self.dashboard:
+            return
+        appearance = self.config.get('appearance', {})
+        self.dashboard.set_rows(appearance.get('rows', 2))
+        self.dashboard.set_cols(appearance.get('cols', 4))
+        self.dashboard.set_buttons(self.config.get('buttons', []), appearance)
+        # Re-apply camera images after rebuild
+        self.dashboard.apply_camera_cache(self._camera_cache)
+        if self.dashboard.isVisible():
+            self.dashboard.refresh_tray_anchor(move_now=True, tray_geometry=self._tray_geometry())
 
+    def _apply_shortcut_settings(self):
         if self.input_manager:
             self.input_manager.update_shortcut(self.config.get('shortcut', {}))
         assist_enabled = self.config.get('assist', {}).get('enabled', False)
@@ -876,48 +902,34 @@ class PrismDesktopApp(QObject):
         self._apply_assist_visibility()
         self._update_button_shortcuts()
 
-        if glass_ui_enabled and self.dashboard:
-            from ui.notifications import notify_glass_ui_warning
+    async def _restart_ha_connections(self):
+        logger.info("HA config changed, restarting connections...")
+        # Clear mobile_app registration so we re-register with the new HA instance
+        self.config.setdefault("mobile_app", {}).pop("webhook_id", None)
+        self._stop_location_loop()
+        self._stop_metrics_loop()
+        self.stop_websocket()
+        await self.ha_client.close()
 
-            notify_glass_ui_warning(self.dashboard)
+        self.init_ha_client()
+        self.camera_pip.reconnect_all()
+        self.start_websocket()
+        self.fetch_initial_states()
 
-        if ha_changed:
-            logger.info("HA config changed, restarting connections...")
-            # Clear mobile_app registration so we re-register with the new HA instance
-            self.config.setdefault("mobile_app", {}).pop("webhook_id", None)
-            self._stop_location_loop()
-            self._stop_metrics_loop()
-            self.stop_websocket()
-            await self.ha_client.close()
-
-            self.init_ha_client()
-            self.camera_pip.reconnect_all()
-            self.start_websocket()
-            self.fetch_initial_states()
+    async def _sync_mobile_app_features(self):
+        """Start or stop the location and sensor loops to match the settings."""
+        if self.config.get('mobile_app', {}).get('location_enabled', False):
+            self._start_location_loop()
         else:
-            # HA config unchanged, but if the WebSocket isn't live, treat Save as
-            # "reconnect" — a stuck or dead connection otherwise has no user-facing
-            # recovery short of changing the token or restarting the app (issue #57).
-            if new_url and new_token and not self._ws_connected:
-                logger.info("HA config unchanged but WebSocket is not connected, forcing reconnect...")
-                self.stop_websocket()
-                self.start_websocket()
-
-            self.theme_manager.set_theme(self.config.get('appearance', {}).get('theme', 'system'))
-            # Sync location loop with new setting
-            location_enabled = self.config.get('mobile_app', {}).get('location_enabled', False)
-            if location_enabled:
-                self._start_location_loop()
-            else:
-                self._stop_location_loop()
-            # Sync metrics loop (loop exits immediately when no webhook_id, so safe to call always)
-            if self._metrics_wanted():
-                self._start_metrics_loop()
-            else:
-                self._stop_metrics_loop()
-            # Refresh logged_in sensor in case the toggle was just re-enabled
-            # (no-op when disabled — _push_sensor_state checks the setting)
-            await self._push_sensor_state(True)
+            self._stop_location_loop()
+        # The metrics loop exits at once without a webhook_id, so starting it is always safe.
+        if self._metrics_wanted():
+            self._start_metrics_loop()
+        else:
+            self._stop_metrics_loop()
+        # Refresh logged_in sensor in case the toggle was just re-enabled
+        # (no-op when disabled — _push_sensor_state checks the setting)
+        await self._push_sensor_state(True)
 
     @pyqtSlot(dict)
     def _on_embedded_settings_saved(self, new_config: dict):
@@ -1016,31 +1028,17 @@ class PrismDesktopApp(QObject):
             self.dashboard.set_buttons(buttons, self.config.get('appearance', {}))
         self._update_button_shortcuts()
 
-        # Update subscriptions
-        if new_config.get('type') == '3d_printer' and self._ha_websocket:
-            for key in PRINTER_ENTITY_KEYS:
-                eid = new_config.get(key)
-                if eid:
-                    self._ha_websocket.subscribe_entity(eid)
-                    _create_task_safe(self._fetch_single_state(eid))
-        else:
-            entity_id = new_config.get('entity_id')
-            if entity_id and self._ha_websocket:
+        # Subscribe to the new entities and fetch their state right away
+        if self._ha_websocket:
+            for entity_id in button_entity_ids(new_config):
                 self._ha_websocket.subscribe_entity(entity_id)
-                # Fetch immediate state
                 _create_task_safe(self._fetch_single_state(entity_id))
 
     @pyqtSlot(int)
     def on_duplicate_button_requested(self, slot: int):
         buttons = self.config.get('buttons', [])
-
-        # Find source by (row, col, page)
-        row = slot // self.dashboard.cols
-        col = slot % self.dashboard.cols
         page = self._current_page()
-        source_config = next(
-            (b for b in buttons if b.get('row') == row and b.get('col') == col and b.get('page', 0) == page), None
-        )
+        source_config = self._config_at(*divmod(slot, self.dashboard.cols), page)
         if not source_config:
             return
 
@@ -1065,41 +1063,21 @@ class PrismDesktopApp(QObject):
             self.dashboard.set_buttons(buttons, self.config.get('appearance', {}))
 
         if self._ha_websocket:
-            if new_config.get('type') == '3d_printer':
-                for key in PRINTER_ENTITY_KEYS:
-                    eid = new_config.get(key)
-                    if eid:
-                        self._ha_websocket.subscribe_entity(eid)
-            else:
-                if new_config.get('entity_id'):
-                    self._ha_websocket.subscribe_entity(new_config.get('entity_id'))
+            for entity_id in button_entity_ids(new_config):
+                self._ha_websocket.subscribe_entity(entity_id)
 
     @pyqtSlot(int, int)
     def on_buttons_reordered(self, source: int, target: int):
-        # Dashboard handles visual reindexing (drag/drop)
-        # But we must persist the change to config
+        """Persist a drag-and-drop move; the dashboard has already moved the tiles."""
         buttons = self.config.get('buttons', [])
         cols = self.dashboard.cols
-
-        # Convert runtime slots to (row, col)
-        src_row, src_col = source // cols, source % cols
-        tgt_row, tgt_col = target // cols, target % cols
-
-        # Find configs by (row, col, page)
         page = self._current_page()
-        source_btn = next(
-            (b for b in buttons if b.get('row') == src_row and b.get('col') == src_col and b.get('page', 0) == page),
-            None,
-        )
+        tgt_row, tgt_col = divmod(target, cols)
+        source_btn = self._config_at(*divmod(source, cols), page)
         if not source_btn:
             return
-
-        target_btn = next(
-            (b for b in buttons if b.get('row') == tgt_row and b.get('col') == tgt_col and b.get('page', 0) == page),
-            None,
-        )
-
-        if target_btn is not None and not (target_btn.get('entity_id') or target_btn.get('type') == 'pin_window'):
+        target_btn = self._config_at(tgt_row, tgt_col, page)
+        if target_btn is not None and not is_real_button(target_btn):
             target_btn = None  # placeholder config, not a real tile
 
         # Spans matter: refuse a move that would push a tile off the grid or on
@@ -1115,22 +1093,30 @@ class PrismDesktopApp(QObject):
 
         self.config['buttons'] = buttons
         self.save_config()
-
-        # Refresh Dashboard
         if self.dashboard:
-            self.dashboard.set_buttons(buttons, self.config.get('appearance', {}))
+            self._rebuild_dashboard_buttons(buttons)
 
-            # Restore Album Art from Cache
-            for btn in buttons:
-                eid = btn.get('entity_id')
-                if eid and eid in self._media_art_cache:
-                    _, pixmap = self._media_art_cache[eid]
-                    if pixmap and not pixmap.isNull():
-                        self.dashboard.update_media_art(eid, pixmap)
+    def _config_at(self, row: int, col: int, page: int) -> dict | None:
+        """The button config at (row, col) on a page, if any."""
+        return next(
+            (
+                b
+                for b in self.config.get('buttons', [])
+                if b.get('row') == row and b.get('col') == col and b.get('page', 0) == page
+            ),
+            None,
+        )
 
-            # Re-apply known states to newly built buttons without an HTTP round-trip
-            for eid, state in self.dashboard.entity_states.items():
-                self.on_state_changed(eid, state, live=False)
+    def _rebuild_dashboard_buttons(self, buttons: list):
+        """Rebuild the tiles, then restore album art and known states without an HTTP round-trip."""
+        self.dashboard.set_buttons(buttons, self.config.get('appearance', {}))
+        for btn in buttons:
+            eid = btn.get('entity_id')
+            cached = self._media_art_cache.get(eid) if eid else None
+            if cached and cached[1] and not cached[1].isNull():
+                self.dashboard.update_media_art(eid, cached[1])
+        for eid, state in self.dashboard.entity_states.items():
+            self.on_state_changed(eid, state, live=False)
 
     @pyqtSlot(int)
     def on_clear_button_requested(self, slot):
@@ -1453,7 +1439,6 @@ class PrismDesktopApp(QObject):
         webhook_id = self.config.get('mobile_app', {}).get('webhook_id', '')
         if not ha_url or not webhook_id:
             return
-        loop = asyncio.get_running_loop()
         fast_sensors = set(FAST_SENSORS)
         last_fast = {}
         last_slow = float('-inf')
@@ -1462,29 +1447,40 @@ class PrismDesktopApp(QObject):
             extra_ids = enabled_sensor_ids(mobile_cfg)
             fast_ids = extra_ids & fast_sensors
             states = {}
-
             if time.monotonic() - last_slow >= 30:
                 last_slow = time.monotonic()
-                all_metrics = get_system_metrics()
-                if mobile_cfg.get('send_cpu', False):
-                    states['cpu_usage'] = all_metrics['cpu_usage']
-                if mobile_cfg.get('send_ram', False):
-                    states['ram_usage'] = all_metrics['ram_usage']
-                slow_ids = extra_ids - fast_sensors
-                if slow_ids:
-                    states.update(await loop.run_in_executor(None, collect_system_sensors, slow_ids))
+                states.update(await self._slow_sensor_states(mobile_cfg, extra_ids - fast_sensors))
 
             # Forget fast sensors that were switched off so they re-push when re-enabled
             last_fast = {k: v for k, v in last_fast.items() if k in fast_ids}
-            fast_changed = {}
-            if fast_ids:
-                fast_now = await loop.run_in_executor(None, collect_system_sensors, fast_ids)
-                fast_changed = {k: v for k, v in fast_now.items() if k not in last_fast or last_fast[k] != v}
-                states.update(fast_changed)
+            fast_changed = await self._changed_sensor_states(fast_ids, last_fast)
+            states.update(fast_changed)
 
             if states and await update_sensor_states(ha_url, webhook_id, states):
                 last_fast.update(fast_changed)
             await asyncio.sleep(10 if fast_ids else 30)
+
+    @staticmethod
+    async def _slow_sensor_states(mobile_cfg: dict, slow_ids: set) -> dict:
+        """CPU/RAM (when switched on) and the slow system/presence sensors."""
+        metrics = get_system_metrics()
+        states = {
+            key: metrics[key]
+            for key, setting in (('cpu_usage', 'send_cpu'), ('ram_usage', 'send_ram'))
+            if mobile_cfg.get(setting, False)
+        }
+        if slow_ids:
+            loop = asyncio.get_running_loop()
+            states.update(await loop.run_in_executor(None, collect_system_sensors, slow_ids))
+        return states
+
+    @staticmethod
+    async def _changed_sensor_states(sensor_ids: set, last_sent: dict) -> dict:
+        """Current values of the given sensors that differ from what was last sent."""
+        if not sensor_ids:
+            return {}
+        now = await asyncio.get_running_loop().run_in_executor(None, collect_system_sensors, sensor_ids)
+        return {k: v for k, v in now.items() if k not in last_sent or last_sent[k] != v}
 
     @pyqtSlot()
     def on_ws_disconnected(self):
@@ -1500,17 +1496,7 @@ class PrismDesktopApp(QObject):
         _create_task_safe(self._async_fetch_initial_states())
 
     async def _async_fetch_initial_states(self):
-        entity_ids = []
-        for b in self.config.get('buttons', []):
-            if b.get('type') == '3d_printer':
-                for key in PRINTER_ENTITY_KEYS:
-                    if b.get(key):
-                        entity_ids.append(b.get(key))
-            else:
-                if b.get('entity_id'):
-                    entity_ids.append(b.get('entity_id'))
-
-        entity_ids = list(set(entity_ids))  # Remove duplicates
+        entity_ids = list({eid for b in self.config.get('buttons', []) for eid in button_entity_ids(b)})
         if not entity_ids:
             return
 
