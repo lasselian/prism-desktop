@@ -1,5 +1,7 @@
 import math
+import sys
 from contextlib import contextmanager
+from datetime import datetime
 
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import (
@@ -267,6 +269,10 @@ _HVAC_MODE_ICONS = {
     'heat_cool': 'sun-snowflake-variant',
 }
 _FAN_SPEED_TEXT = {'low': '1', 'medium': '2', 'high': '3', 'mid': '2', 'middle': '2', 'min': '1', 'max': 'Max'}
+
+
+# The alarm keypad, row by row: (kind, digit)
+_KEYPAD_KEYS = [('digit', str(n)) for n in range(1, 10)] + [('back', None), ('digit', '0'), ('submit', None)]
 
 
 def _icon_row_layout(count: int, avail_width: float, spacing: float):
@@ -1474,8 +1480,6 @@ class WeatherOverlay(BaseOverlay):
             self.close_morph()
 
     def _get_weather_emoji(self, state: str) -> str:
-        import sys
-
         if sys.platform.startswith('linux'):
             mapping = {
                 'clear-night': Icons.WEATHER_NIGHT,
@@ -1527,14 +1531,9 @@ class WeatherOverlay(BaseOverlay):
         )
         self._draw_border_animation(painter, rect)
 
-        base_alpha = int(255 * self._morph_progress)
-        alpha = int(base_alpha * self._content_opacity)
+        alpha = int(int(255 * self._morph_progress) * self._content_opacity)
         if alpha < 10:
             return
-
-        import sys
-
-        is_linux = sys.platform.startswith('linux')
 
         close_size = 20
         self._btn_close = QRect(rect.width() - close_size - 12, 8, close_size, close_size)
@@ -1542,88 +1541,80 @@ class WeatherOverlay(BaseOverlay):
         painter.setPen(self._fg_color(int(alpha * 0.5)))
         painter.drawText(self._btn_close, Qt.AlignmentFlag.AlignCenter, get_icon('close'))
 
-        title_rect = QRect(20, 8, rect.width() - 80, 20)
         font_title = QFont(SYSTEM_FONT, 8, QFont.Weight.Bold)
         font_title.setCapitalization(QFont.Capitalization.AllUppercase)
         painter.setFont(font_title)
         painter.setPen(self._fg_color(int(alpha * 0.4)))
-        painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text)
+        painter.drawText(
+            QRect(20, 8, rect.width() - 80, 20), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text
+        )
 
+        # Today on the left third, the forecast to the right of a thin divider
         mid_x = int(rect.width() * 0.3)
         painter.setPen(QPen(self._fg_color(int(alpha * 0.1)), 1))
         painter.drawLine(mid_x, 20, mid_x, rect.height() - 20)
+        source_unit = self._current_state.get('attributes', {}).get('temperature_unit')
+        self._draw_current_weather(painter, rect, mid_x, alpha, source_unit)
+        self._draw_forecast(painter, rect, mid_x, alpha, source_unit)
 
-        current_st = self._current_state.get('state', 'unknown')
+    def _draw_current_weather(self, painter, rect, mid_x: int, alpha: int, source_unit):
         attrs = self._current_state.get('attributes', {})
-        temp = attrs.get('temperature', '--')
-        emoji = self._get_weather_emoji(current_st)
-        source_unit = attrs.get('temperature_unit')
-        temp_str = format_temperature(temp, source_unit, self._temperature_unit_preference, precision=1)
-
-        if is_linux:
-            painter.setFont(get_mdi_font(36))
-        else:
-            painter.setFont(QFont(SYSTEM_FONT, 32))
-        painter.setPen(self._fg_color(alpha))
-
-        fm = painter.fontMetrics()
-        icon_h = fm.height()
-        painter.drawText(
-            QRect(0, rect.height() // 2 - icon_h // 2 - 12, mid_x, icon_h), Qt.AlignmentFlag.AlignCenter, emoji
+        temp_str = format_temperature(
+            attrs.get('temperature', '--'), source_unit, self._temperature_unit_preference, precision=1
         )
-
+        # MDI glyphs on Linux, emoji elsewhere
+        painter.setFont(get_mdi_font(36) if sys.platform.startswith('linux') else QFont(SYSTEM_FONT, 32))
+        painter.setPen(self._fg_color(alpha))
+        icon_h = painter.fontMetrics().height()
+        painter.drawText(
+            QRect(0, rect.height() // 2 - icon_h // 2 - 12, mid_x, icon_h),
+            Qt.AlignmentFlag.AlignCenter,
+            self._get_weather_emoji(self._current_state.get('state', 'unknown')),
+        )
         painter.setFont(QFont(SYSTEM_FONT, 14, QFont.Weight.DemiBold))
         painter.drawText(QRect(0, rect.height() // 2 + 18, mid_x, 30), Qt.AlignmentFlag.AlignCenter, temp_str)
 
-        right_rect = QRect(mid_x, 0, rect.width() - mid_x, rect.height())
-        forecast_count = len(self._forecasts)
+    def _draw_forecast(self, painter, rect, mid_x: int, alpha: int, source_unit):
+        """As many 65px day columns as fit, centred right of the divider."""
+        if not self._forecasts:
+            return
+        item_w = 65
+        avail_w = rect.width() - mid_x - 20
+        display_count = min(len(self._forecasts), avail_w // item_w)
+        start_x = mid_x + (avail_w - (display_count * item_w)) // 2 + 10
+        fy = rect.height() // 2 - 35
+        for i, forecast in enumerate(self._forecasts[:display_count]):
+            self._draw_forecast_day(painter, forecast, start_x + i * item_w, fy, item_w, alpha, source_unit)
 
-        if forecast_count > 0:
-            item_w = 65
-            avail_w = right_rect.width() - 20
-            max_items = avail_w // item_w
-            display_count = min(forecast_count, max_items)
-            start_x = right_rect.left() + (avail_w - (display_count * item_w)) // 2 + 10
+    def _draw_forecast_day(self, painter, forecast: dict, fx: int, fy: int, item_w: int, alpha: int, source_unit):
+        """Weekday, condition icon, high and (when known) low."""
+        try:
+            day_str = datetime.fromisoformat(forecast.get('datetime', '')).strftime("%a")
+        except Exception:
+            day_str = "-"
+        pref = self._temperature_unit_preference
+        high = format_temperature(forecast.get('temperature', '--'), source_unit, pref, precision=1)
+        low = format_temperature(forecast.get('templow', '--'), source_unit, pref, precision=1, fallback='--')
 
-            for i in range(display_count):
-                f = self._forecasts[i]
-                fx = start_x + (i * item_w)
-                fy = rect.height() // 2 - 35
-                dt_str = f.get('datetime', '')
-                try:
-                    from datetime import datetime
+        painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.DemiBold))
+        painter.setPen(self._fg_color(int(alpha * 0.6)))
+        painter.drawText(QRect(fx, fy, item_w, 15), Qt.AlignmentFlag.AlignCenter, day_str.upper())
 
-                    day_str = datetime.fromisoformat(dt_str).strftime("%a")
-                except Exception:
-                    day_str = "-"
+        painter.setFont(get_mdi_font(20) if sys.platform.startswith('linux') else QFont(SYSTEM_FONT, 16))
+        painter.setPen(self._fg_color(alpha))
+        painter.drawText(
+            QRect(fx, fy + 18, item_w, 30),
+            Qt.AlignmentFlag.AlignCenter,
+            self._get_weather_emoji(forecast.get('condition', 'unknown')),
+        )
 
-                f_emoji = self._get_weather_emoji(f.get('condition', 'unknown'))
-                high = format_temperature(
-                    f.get('temperature', '--'), source_unit, self._temperature_unit_preference, precision=1
-                )
-                low = format_temperature(
-                    f.get('templow', '--'), source_unit, self._temperature_unit_preference, precision=1, fallback='--'
-                )
-
-                painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.DemiBold))
-                painter.setPen(self._fg_color(int(alpha * 0.6)))
-                painter.drawText(QRect(fx, fy, item_w, 15), Qt.AlignmentFlag.AlignCenter, day_str.upper())
-
-                if is_linux:
-                    painter.setFont(get_mdi_font(20))
-                else:
-                    painter.setFont(QFont(SYSTEM_FONT, 16))
-                painter.setPen(self._fg_color(alpha))
-                painter.drawText(QRect(fx, fy + 18, item_w, 30), Qt.AlignmentFlag.AlignCenter, f_emoji)
-
-                painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold))
-                painter.setPen(self._fg_color(int(alpha * 0.95)))
-                painter.drawText(QRect(fx, fy + 50, item_w, 16), Qt.AlignmentFlag.AlignCenter, high)
-
-                if not str(low).startswith('--'):
-                    painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.Medium))
-                    painter.setPen(self._fg_color(int(alpha * 0.4)))
-                    painter.drawText(QRect(fx, fy + 68, item_w, 16), Qt.AlignmentFlag.AlignCenter, low)
+        painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold))
+        painter.setPen(self._fg_color(int(alpha * 0.95)))
+        painter.drawText(QRect(fx, fy + 50, item_w, 16), Qt.AlignmentFlag.AlignCenter, high)
+        if not str(low).startswith('--'):
+            painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.Medium))
+            painter.setPen(self._fg_color(int(alpha * 0.4)))
+            painter.drawText(QRect(fx, fy + 68, item_w, 16), Qt.AlignmentFlag.AlignCenter, low)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2287,82 +2278,62 @@ class AlarmOverlay(PressableOverlay):
                     painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon(icon_name))
 
     def _draw_keypad(self, painter, rect, alpha, top):
+        """The code entry: a prompt, a dot per digit typed, and a 3x4 keypad."""
         padding = 16
         self._mode_btns = []
         self._btn_disarm = QRect()
 
-        action_label_key = (
+        prompt_key = (
             'overlay.alarm.enter_code_disarm' if self._pending_action == 'disarm' else 'overlay.alarm.enter_code_arm'
         )
         painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.DemiBold))
         painter.setPen(self._fg_color(int(alpha * 0.5)))
-        subtitle_rect = QRectF(padding, top, rect.width() - padding * 2, 16)
-        painter.drawText(subtitle_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, t(action_label_key))
-
-        dots_rect = QRectF(padding, top + 18, rect.width() - padding * 2, 22)
+        painter.drawText(
+            QRectF(padding, top, rect.width() - padding * 2, 16),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            t(prompt_key),
+        )
         painter.setFont(QFont(SYSTEM_FONT, 18, QFont.Weight.Bold))
         painter.setPen(self._fg_color(alpha))
-        dots = "• " * len(self._entered_code)
-        painter.drawText(dots_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, dots.strip())
+        painter.drawText(
+            QRectF(padding, top + 18, rect.width() - padding * 2, 22),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            ("• " * len(self._entered_code)).strip(),
+        )
 
-        keys = [
-            ('1', '1'),
-            ('2', '2'),
-            ('3', '3'),
-            ('4', '4'),
-            ('5', '5'),
-            ('6', '6'),
-            ('7', '7'),
-            ('8', '8'),
-            ('9', '9'),
-            ('back', None),
-            ('0', '0'),
-            ('submit', None),
-        ]
-        cols = 3
-        rows = 4
-        gap = 6
+        cols, rows, gap = 3, 4, 6
         grid_top = top + 46
-        avail_w = rect.width() - padding * 2
-        avail_h = rect.height() - grid_top - padding
-        cell_w = (avail_w - (cols - 1) * gap) / cols
-        cell_h = min((avail_h - (rows - 1) * gap) / rows, 32)
-
+        cell_w = (rect.width() - padding * 2 - (cols - 1) * gap) / cols
+        cell_h = min((rect.height() - grid_top - padding - (rows - 1) * gap) / rows, 32)
         self._keypad_btns = []
-        for i, (key, digit) in enumerate(keys):
-            col = i % cols
-            row = i // cols
-            x = padding + col * (cell_w + gap)
-            y = grid_top + row * (cell_h + gap)
-            btn_rect = QRect(int(x), int(y), int(cell_w), int(cell_h))
-
-            if key == 'back':
-                kind, value = 'back', None
-            elif key == 'submit':
-                kind, value = 'submit', None
-            else:
-                kind, value = 'digit', digit
+        for i, (kind, value) in enumerate(_KEYPAD_KEYS):
+            row, col = divmod(i, cols)
+            btn_rect = QRect(
+                int(padding + col * (cell_w + gap)), int(grid_top + row * (cell_h + gap)), int(cell_w), int(cell_h)
+            )
             self._keypad_btns.append((btn_rect, kind, value))
+            self._draw_keypad_key(painter, btn_rect, kind, value, alpha)
 
-            with self._press_feedback(painter, btn_rect):
-                path = QPainterPath()
-                path.addRoundedRect(QRectF(btn_rect), 8, 8)
-                if kind == 'submit':
-                    fill = QColor(52, 168, 83, int(alpha * 0.85))
-                else:
-                    fill = QColor(255, 255, 255, int(alpha * 0.08))
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(fill)
-                painter.drawPath(path)
-
-                if kind == 'digit':
-                    painter.setFont(QFont(SYSTEM_FONT, 13, QFont.Weight.Medium))
-                    painter.setPen(self._fg_color(alpha))
-                    painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, digit)
-                else:
-                    painter.setFont(get_mdi_font(16))
-                    painter.setPen(
-                        QColor(255, 255, 255, alpha) if kind == 'submit' else self._fg_color(int(alpha * 0.7))
-                    )
-                    icon = get_icon('check-bold') if kind == 'submit' else get_icon('backspace-outline')
-                    painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, icon)
+    def _draw_keypad_key(self, painter, btn_rect: QRect, kind: str, value, alpha: int):
+        """A digit, backspace, or the green submit key."""
+        with self._press_feedback(painter, btn_rect):
+            path = QPainterPath()
+            path.addRoundedRect(QRectF(btn_rect), 8, 8)
+            painter.setPen(Qt.PenStyle.NoPen)
+            if kind == 'submit':
+                painter.setBrush(QColor(52, 168, 83, int(alpha * 0.85)))
+            else:
+                painter.setBrush(QColor(255, 255, 255, int(alpha * 0.08)))
+            painter.drawPath(path)
+            if kind == 'digit':
+                painter.setFont(QFont(SYSTEM_FONT, 13, QFont.Weight.Medium))
+                painter.setPen(self._fg_color(alpha))
+                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, value)
+                return
+            painter.setFont(get_mdi_font(16))
+            if kind == 'submit':
+                painter.setPen(QColor(255, 255, 255, alpha))
+                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon('check-bold'))
+            else:
+                painter.setPen(self._fg_color(int(alpha * 0.7)))
+                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon('backspace-outline'))
