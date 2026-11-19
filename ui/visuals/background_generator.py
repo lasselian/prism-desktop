@@ -1,9 +1,42 @@
+import hashlib
 import math
-import random
+import secrets
 from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import (
     QColor, QPainter, QPixmap, QRadialGradient, QBrush,
 )
+
+
+class _StableRng:
+    """Seeded values that stay the same across Python releases.
+
+    random.Random only promises a stable random() stream between releases;
+    choice(), randint() and uniform() may change, which would repaint every
+    tile's background after a Python upgrade. Decorative use only.
+    """
+
+    def __init__(self, seed: int):
+        self._key = seed.to_bytes(16, "little", signed=True)
+        self._counter = 0
+
+    def random(self) -> float:
+        """Next value in [0, 1)."""
+        block = hashlib.blake2b(
+            self._counter.to_bytes(8, "little"), key=self._key, digest_size=8
+        ).digest()
+        self._counter += 1
+        # 53 bits fit a float exactly, so the result never rounds up to 1.0.
+        return (int.from_bytes(block, "little") >> 11) / 2**53
+
+    def uniform(self, a: float, b: float) -> float:
+        return a + (b - a) * self.random()
+
+    def randint(self, a: int, b: int) -> int:
+        """Integer in [a, b], both ends included."""
+        return a + int(self.random() * (b - a + 1))
+
+    def choice(self, seq):
+        return seq[int(self.random() * len(seq))]
 
 
 class BackgroundGenerator:
@@ -71,9 +104,9 @@ class BackgroundGenerator:
         width = max(1, width)
         height = max(1, height)
         if seed is None:
-            seed = random.randint(0, 1_000_000)
+            seed = secrets.randbelow(1_000_001)  # any arbitrary pattern will do
 
-        rng = random.Random(seed)
+        rng = _StableRng(seed)
 
         # --- Resolve palette ---
         if not palette:

@@ -19,6 +19,7 @@ Usage:
 import os
 import sys
 import shutil
+import stat
 import subprocess
 import platform
 from pathlib import Path
@@ -86,10 +87,10 @@ def find_appimagetool(arch):
     for name in candidates:
         local_path = base_dir / name
         if local_path.exists():
-            # Ensure executable
+            # Ensure we can execute it; other users' permissions stay as they were
             try:
                 current_mode = os.stat(local_path).st_mode
-                os.chmod(local_path, current_mode | 0o111)
+                os.chmod(local_path, current_mode | stat.S_IXUSR)
             except Exception as e:
                 print(f"Warning: Could not make {name} executable: {e}")
             return str(local_path)

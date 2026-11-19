@@ -5,6 +5,7 @@ config.json.bak
 .ha_token.enc
 .ha_token.salt
 .ha_token.*.tmp
+prism_desktop_just_updated
 
 # Build Artifacts
 dist/

@@ -16,7 +16,8 @@ from core.utils import get_config_path
 def prism_ipc_server_name() -> str:
     """Return a stable local server name for the current Prism config path."""
     config_path = str(get_config_path().resolve())
-    digest = hashlib.sha1(config_path.encode("utf-8")).hexdigest()[:12]
+    # Only a name, not a security boundary; sha1 keeps it identical to older versions.
+    digest = hashlib.sha1(config_path.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
     return f"prism-desktop-{digest}"
 
 
@@ -67,6 +68,9 @@ def _build_server_class():
         def __init__(self, parent=None):
             super().__init__(parent)
             self._server = QLocalServer(self)
+            # Only this user may connect: owner-only socket file on Unix,
+            # a current-user ACL on the Windows named pipe.
+            self._server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
             self._server.newConnection.connect(self._on_new_connection)
             self._clients = set()
 

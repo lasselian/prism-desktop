@@ -17,6 +17,20 @@ class AuthenticationError(Exception):
     """Home Assistant rejected the access token."""
 
 
+_WS_SCHEMES = {"http": "ws", "https": "wss"}
+
+
+def websocket_url(base_url: str) -> str:
+    """Return Home Assistant's WebSocket endpoint for a base URL such as http://ha.local:8123.
+
+    The socket is encrypted exactly when the configured URL is: an HTTPS
+    install gets wss, a plain-HTTP install on the LAN gets ws.
+    """
+    scheme, sep, rest = base_url.partition("://")
+    ws_scheme = _WS_SCHEMES.get(scheme.lower(), scheme)
+    return f"{ws_scheme}{sep}{rest.rstrip('/')}/api/websocket"
+
+
 class HAWebSocket(QObject):
     """WebSocket client for Home Assistant real-time updates."""
     
@@ -78,9 +92,8 @@ class HAWebSocket(QObject):
             self.error.emit("URL and token are required")
             return
         
-        ws_url = current_url.replace('http://', 'ws://').replace('https://', 'wss://')
-        ws_url = f"{ws_url}/api/websocket"
-        
+        ws_url = websocket_url(current_url)
+
         try:
             self._session = aiohttp.ClientSession()
             self._ws = await self._session.ws_connect(ws_url)

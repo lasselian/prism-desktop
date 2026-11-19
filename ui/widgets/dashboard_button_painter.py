@@ -1,4 +1,5 @@
 import math
+import zlib
 from datetime import datetime, timezone, timedelta
 from PyQt6.QtCore import Qt, QRect, QRectF, QPointF, QPropertyAnimation
 from PyQt6.QtGui import (
@@ -369,7 +370,9 @@ class DashboardButtonPainter:
              artist = attrs.get('media_artist', '')
 
              if title or artist:
-                 seed = hash(f"{title}{artist}")
+                 # crc32, not hash(): str hashes change on every start, and the
+                 # same track should get the same background each time.
+                 seed = zlib.crc32(f"{title}{artist}".encode("utf-8"))
              else:
                  seed = button.slot
 

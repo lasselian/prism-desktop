@@ -18,6 +18,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 from core.build_info import REPO_ROOT, APP_VERSION
+from core.utils import get_config_path
 
 logger = logging.getLogger(__name__)
 
@@ -346,8 +347,25 @@ class AutoUpdateThread(QThread):
 
 # ── Post-update flag ──────────────────────────────────────────────────────────
 
+_FLAG_NAME = "prism_desktop_just_updated"
+
+
 def _flag_path() -> Path:
-    return Path(tempfile.gettempdir()) / "prism_desktop_just_updated"
+    # Next to config.json (portable, installed or source), per user unlike
+    # the shared temp directory.
+    return get_config_path().with_name(_FLAG_NAME)
+
+
+def _legacy_flag_path() -> Path | None:
+    """Where versions up to 1.7 wrote the flag; still read so the first update
+    onto this version gets its sanity check. Only a file this user owns counts."""
+    path = Path(tempfile.gettempdir()) / _FLAG_NAME
+    try:
+        if hasattr(os, "getuid") and path.stat().st_uid != os.getuid():
+            return None
+    except OSError:
+        return None
+    return path
 
 
 def write_update_flag() -> None:
@@ -363,15 +381,16 @@ def consume_update_flag() -> str | None:
     Read and delete the update flag written before the restart.
     Returns the version string that was running before the update, or None.
     """
-    path = _flag_path()
-    if not path.exists():
-        return None
-    try:
-        prev = path.read_text(encoding="utf-8").strip()
-        path.unlink(missing_ok=True)
-        return prev or "unknown"
-    except OSError:
-        return None
+    for path in (_flag_path(), _legacy_flag_path()):
+        if path is None or not path.exists():
+            continue
+        try:
+            prev = path.read_text(encoding="utf-8").strip()
+            path.unlink(missing_ok=True)
+            return prev or "unknown"
+        except OSError:
+            return None
+    return None
 
 
 # ── App restart ───────────────────────────────────────────────────────────────
