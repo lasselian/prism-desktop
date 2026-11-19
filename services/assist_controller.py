@@ -18,7 +18,12 @@ from typing import Callable, Optional
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal, QBuffer, QIODeviceBase
 from PyQt6.QtMultimedia import (
-    QAudio, QAudioFormat, QAudioSource, QMediaDevices, QMediaPlayer, QAudioOutput,
+    QAudio,
+    QAudioFormat,
+    QAudioSource,
+    QMediaDevices,
+    QMediaPlayer,
+    QAudioOutput,
 )
 
 from core.ha_client import HAClient
@@ -84,12 +89,12 @@ class AssistController(QObject):
 
     listening_started = pyqtSignal()
     listening_stopped = pyqtSignal()
-    processing = pyqtSignal()           # mic closed, waiting for speech-to-text
+    processing = pyqtSignal()  # mic closed, waiting for speech-to-text
     heard = pyqtSignal(str)
     thinking = pyqtSignal()
-    reply_partial = pyqtSignal(str)     # streamed reply so far (agents that stream)
+    reply_partial = pyqtSignal(str)  # streamed reply so far (agents that stream)
     reply_ready = pyqtSignal(str, bool)  # final reply, is_error (agent couldn't handle it)
-    notice = pyqtSignal(str)            # transient status, not a chat message
+    notice = pyqtSignal(str)  # transient status, not a chat message
     error = pyqtSignal(str)
     busy_changed = pyqtSignal(bool)
     speaking_changed = pyqtSignal(bool)
@@ -239,8 +244,7 @@ class AssistController(QObject):
         )
         if actual_fmt.channelCount() != 1 or not self._capture_is_int16:
             logger.warning(
-                "Assist: mic capture format isn't mono Int16 — HA will likely "
-                "fail to transcribe this stream"
+                "Assist: mic capture format isn't mono Int16 — HA will likely " "fail to transcribe this stream"
             )
 
         if self._audio_device is not None:
@@ -363,9 +367,7 @@ class AssistController(QObject):
                             self.reply_partial.emit(partial)
                 elif etype == 'intent-end':
                     got_result = True
-                    continue_conversation = self._handle_conversation_result(
-                        data.get('intent_output', {}) or {}
-                    )
+                    continue_conversation = self._handle_conversation_result(data.get('intent_output', {}) or {})
                 elif etype == 'tts-end':
                     url = (data.get('tts_output', {}) or {}).get('url')
                     if url and speak:

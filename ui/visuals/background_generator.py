@@ -3,7 +3,11 @@ import math
 import secrets
 from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import (
-    QColor, QPainter, QPixmap, QRadialGradient, QBrush,
+    QColor,
+    QPainter,
+    QPixmap,
+    QRadialGradient,
+    QBrush,
 )
 
 
@@ -21,9 +25,7 @@ class _StableRng:
 
     def random(self) -> float:
         """Next value in [0, 1)."""
-        block = hashlib.blake2b(
-            self._counter.to_bytes(8, "little"), key=self._key, digest_size=8
-        ).digest()
+        block = hashlib.blake2b(self._counter.to_bytes(8, "little"), key=self._key, digest_size=8).digest()
         self._counter += 1
         # 53 bits fit a float exactly, so the result never rounds up to 1.0.
         return (int.from_bytes(block, "little") >> 11) / 2**53
@@ -51,21 +53,22 @@ class BackgroundGenerator:
     # Prismatic / spectral palettes
     PRISM_PALETTES = [
         ["#7400B8", "#5390D9", "#48BFE3", "#64DFDF"],  # Deep violet → cyan spectrum
-        ["#FF006E", "#8338EC", "#3A86FF"],              # Magenta → purple → blue
-        ["#3A0CA3", "#4361EE", "#4CC9F0"],              # Royal blue → electric cyan
-        ["#F72585", "#B5179E", "#7209B7", "#3A0CA3"],   # Hot pink → deep purple
-        ["#560BAD", "#480CA8", "#3F37C9", "#4895EF"],   # Indigo cascade
-        ["#7209B7", "#4CC9F0", "#F72585"],              # Purple → cyan → pink (triadic)
-        ["#4361EE", "#F72585", "#4CC9F0"],              # Blue → pink → cyan
-        ["#3A86FF", "#8338EC", "#FF006E", "#48BFE3"],   # Full prism
+        ["#FF006E", "#8338EC", "#3A86FF"],  # Magenta → purple → blue
+        ["#3A0CA3", "#4361EE", "#4CC9F0"],  # Royal blue → electric cyan
+        ["#F72585", "#B5179E", "#7209B7", "#3A0CA3"],  # Hot pink → deep purple
+        ["#560BAD", "#480CA8", "#3F37C9", "#4895EF"],  # Indigo cascade
+        ["#7209B7", "#4CC9F0", "#F72585"],  # Purple → cyan → pink (triadic)
+        ["#4361EE", "#F72585", "#4CC9F0"],  # Blue → pink → cyan
+        ["#3A86FF", "#8338EC", "#FF006E", "#48BFE3"],  # Full prism
     ]
 
     # Golden ratio — used to create irrational frequency ratios
     _PHI = 1.6180339887
 
     @staticmethod
-    def generate(width: int, height: int, seed: int | None = None, palette: list[str] | None = None,
-                 light_mode: bool = False) -> QPixmap:
+    def generate(
+        width: int, height: int, seed: int | None = None, palette: list[str] | None = None, light_mode: bool = False
+    ) -> QPixmap:
         """
         Generate a static background pixmap (single frozen frame of the light field).
 
@@ -78,16 +81,13 @@ class BackgroundGenerator:
         Returns:
             QPixmap: The generated background.
         """
-        layers = BackgroundGenerator.generate_layers(
-            width, height, seed=seed, palette=palette, light_mode=light_mode
-        )
-        return BackgroundGenerator.render_frame(
-            width, height, layers, frame=(layers["seed"] % 1000)
-        )
+        layers = BackgroundGenerator.generate_layers(width, height, seed=seed, palette=palette, light_mode=light_mode)
+        return BackgroundGenerator.render_frame(width, height, layers, frame=(layers["seed"] % 1000))
 
     @staticmethod
-    def generate_layers(width: int, height: int, seed: int | None = None, palette: list[str] | None = None,
-                        light_mode: bool = False) -> dict:
+    def generate_layers(
+        width: int, height: int, seed: int | None = None, palette: list[str] | None = None, light_mode: bool = False
+    ) -> dict:
         """
         Generate anchor definitions for a prismatic light-field animation.
 
@@ -114,9 +114,9 @@ class BackgroundGenerator:
         q_palette = [QColor(c) if isinstance(c, str) else c for c in palette]
 
         # --- Base color: dark glass tinted by palette average ---
-        avg_r = sum(c.red()   for c in q_palette) // len(q_palette)
+        avg_r = sum(c.red() for c in q_palette) // len(q_palette)
         avg_g = sum(c.green() for c in q_palette) // len(q_palette)
-        avg_b = sum(c.blue()  for c in q_palette) // len(q_palette)
+        avg_b = sum(c.blue() for c in q_palette) // len(q_palette)
         base_color = QColor(avg_r, avg_g, avg_b)
         # Darken dramatically: keep hue, reduce saturation + value
         h, s, _, _ = base_color.getHsv()
@@ -141,30 +141,31 @@ class BackgroundGenerator:
                 color.setAlpha(rng.randint(90, 130))
 
             # Frequencies: multiply by golden-ratio powers for irrational ratios
-            phi_pow = BackgroundGenerator._PHI ** i
+            phi_pow = BackgroundGenerator._PHI**i
             freq_x = base_freq * phi_pow * rng.uniform(0.8, 1.2)
             freq_y = base_freq * phi_pow * rng.uniform(0.6, 1.0)
 
-            anchors.append({
-                "color":      color,
-                "freq_x":     freq_x,
-                "freq_y":     freq_y,
-                "phase_x":    rng.uniform(0, 2 * math.pi),
-                "phase_y":    rng.uniform(0, 2 * math.pi),
-                "radius":     rng.uniform(0.4, 0.7),       # fraction of max(tiny_w, tiny_h)
-                "radius_freq": rng.uniform(0.0008, 0.002),  # very slow breathing
-            })
+            anchors.append(
+                {
+                    "color": color,
+                    "freq_x": freq_x,
+                    "freq_y": freq_y,
+                    "phase_x": rng.uniform(0, 2 * math.pi),
+                    "phase_y": rng.uniform(0, 2 * math.pi),
+                    "radius": rng.uniform(0.4, 0.7),  # fraction of max(tiny_w, tiny_h)
+                    "radius_freq": rng.uniform(0.0008, 0.002),  # very slow breathing
+                }
+            )
 
         return {
-            "anchors":    anchors,
+            "anchors": anchors,
             "base_color": base_color,
-            "seed":       seed,
+            "seed": seed,
             "light_mode": light_mode,
         }
 
     @staticmethod
-    def render_frame(width: int, height: int, layers: dict, frame: int,
-                     tiny_pixmap: QPixmap = None) -> QPixmap:
+    def render_frame(width: int, height: int, layers: dict, frame: int, tiny_pixmap: QPixmap = None) -> QPixmap:
         """
         Render one frame of the prismatic light field.
 
@@ -230,7 +231,8 @@ class BackgroundGenerator:
 
         # Upscale — bilinear interpolation IS the frosted-glass blur
         result = tiny.scaled(
-            width, height,
+            width,
+            height,
             Qt.AspectRatioMode.IgnoreAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )

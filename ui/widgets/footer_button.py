@@ -3,6 +3,7 @@ from PyQt6.QtCore import QRectF
 from PyQt6.QtGui import QPainter
 from ui.widgets.dashboard_button_painter import DashboardButtonPainter
 
+
 class FooterButton(QPushButton):
     """
     A specialized button for the dashboard footer that inherits the

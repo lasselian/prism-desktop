@@ -130,6 +130,7 @@ def _run(cmd: list, timeout: float = 2.0) -> Optional[str]:
 
 # ── system group ──────────────────────────────────────────────────────────────
 
+
 def _battery():
     try:
         return psutil.sensors_battery()
@@ -184,6 +185,7 @@ def get_last_boot() -> Optional[str]:
 
 # ── presence group ────────────────────────────────────────────────────────────
 
+
 def get_idle_time() -> Optional[int]:
     """Seconds since the last keyboard/mouse input."""
     if sys.platform == "win32":
@@ -211,10 +213,17 @@ def get_idle_time() -> Optional[int]:
         return None
 
     # Linux: GNOME/Mutter exposes idle time on the session bus (works on Wayland).
-    out = _run([
-        "busctl", "--user", "call", "org.gnome.Mutter.IdleMonitor",
-        "/org/gnome/Mutter/IdleMonitor/Core", "org.gnome.Mutter.IdleMonitor", "GetIdletime",
-    ])
+    out = _run(
+        [
+            "busctl",
+            "--user",
+            "call",
+            "org.gnome.Mutter.IdleMonitor",
+            "/org/gnome/Mutter/IdleMonitor/Core",
+            "org.gnome.Mutter.IdleMonitor",
+            "GetIdletime",
+        ]
+    )
     if out and out.startswith("t "):
         try:
             return int(out.split()[1]) // 1000
@@ -233,6 +242,7 @@ def get_idle_time() -> Optional[int]:
 def get_screen_locked() -> Optional[bool]:
     if sys.platform == "win32":
         import ctypes
+
         user32 = ctypes.windll.user32
         # The input desktop is the secure Winlogon desktop while locked; a normal
         # process can't open or switch to it.
@@ -260,6 +270,7 @@ def get_screen_locked() -> Optional[bool]:
 def _windows_consent_in_use(capability: str) -> Optional[bool]:
     """Windows records mic/camera use per app; a start time with no stop time means active."""
     import winreg
+
     base = rf"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\{capability}"
     try:
         root = winreg.OpenKey(winreg.HKEY_CURRENT_USER, base)

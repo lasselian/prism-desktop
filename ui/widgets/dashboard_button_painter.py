@@ -3,8 +3,16 @@ import zlib
 from datetime import datetime, timezone, timedelta
 from PyQt6.QtCore import Qt, QRect, QRectF, QPointF, QPropertyAnimation
 from PyQt6.QtGui import (
-    QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QBrush,
-    QLinearGradient, QConicalGradient, QRadialGradient
+    QColor,
+    QFont,
+    QFontMetrics,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QBrush,
+    QLinearGradient,
+    QConicalGradient,
+    QRadialGradient,
 )
 from ui.icons import get_icon, get_mdi_font, Icons
 from core.utils import SYSTEM_FONT
@@ -13,6 +21,7 @@ from core.temperature_utils import format_temperature
 from ui.visuals.background_generator import BackgroundGenerator
 
 _DEFAULT_SENSOR_COLOR = '#3c3c3c'
+
 
 class DashboardButtonPainter:
     """Handles custom painting for DashboardButton."""
@@ -39,8 +48,9 @@ class DashboardButtonPainter:
         painter.fillRect(QRectF(rect.x(), bar_y, fill_w, bar_height), color)
 
     @staticmethod
-    def draw_horizontal_bar_pill(painter, rect, fraction, fill_color, track_color,
-                                 text=None, font=None, text_color=None):
+    def draw_horizontal_bar_pill(
+        painter, rect, fraction, fill_color, track_color, text=None, font=None, text_color=None
+    ):
         pill_rect = QRectF(rect)
         radius = pill_rect.height() / 2.0
 
@@ -59,7 +69,9 @@ class DashboardButtonPainter:
                 grad = QLinearGradient(0, fill_rect.bottom(), 0, fill_rect.top())
                 grad.setColorAt(0.0, fill_color)
                 lighter = QColor(fill_color)
-                lighter.setHsvF(lighter.hsvHueF(), max(0.0, lighter.hsvSaturationF() - 0.05), min(1.0, lighter.valueF() + 0.12))
+                lighter.setHsvF(
+                    lighter.hsvHueF(), max(0.0, lighter.hsvSaturationF() - 0.05), min(1.0, lighter.valueF() + 0.12)
+                )
                 grad.setColorAt(1.0, lighter)
                 painter.setClipPath(pill_path)
                 painter.setBrush(QBrush(grad))
@@ -80,13 +92,13 @@ class DashboardButtonPainter:
         path = QPainterPath()
         path.moveTo(cx, y0)
         path.lineTo(x1 - cr, y0)
-        path.arcTo(x1 - 2*cr, y0, 2*cr, 2*cr, 90, -90)
+        path.arcTo(x1 - 2 * cr, y0, 2 * cr, 2 * cr, 90, -90)
         path.lineTo(x1, y1 - cr)
-        path.arcTo(x1 - 2*cr, y1 - 2*cr, 2*cr, 2*cr, 0, -90)
+        path.arcTo(x1 - 2 * cr, y1 - 2 * cr, 2 * cr, 2 * cr, 0, -90)
         path.lineTo(x0 + cr, y1)
-        path.arcTo(x0, y1 - 2*cr, 2*cr, 2*cr, 270, -90)
+        path.arcTo(x0, y1 - 2 * cr, 2 * cr, 2 * cr, 270, -90)
         path.lineTo(x0, y0 + cr)
-        path.arcTo(x0, y0, 2*cr, 2*cr, 180, -90)
+        path.arcTo(x0, y0, 2 * cr, 2 * cr, 180, -90)
         path.lineTo(cx, y0)
         return path
 
@@ -154,7 +166,9 @@ class DashboardButtonPainter:
                 grad = QLinearGradient(0, arc_rect.bottom(), 0, arc_rect.top())
                 grad.setColorAt(0.0, fill_color)
                 lighter = QColor(fill_color)
-                lighter.setHsvF(lighter.hsvHueF(), max(0.0, lighter.hsvSaturationF() - 0.05), min(1.0, lighter.valueF() + 0.12))
+                lighter.setHsvF(
+                    lighter.hsvHueF(), max(0.0, lighter.hsvSaturationF() - 0.05), min(1.0, lighter.valueF() + 0.12)
+                )
                 grad.setColorAt(1.0, lighter)
                 pen_fill = QPen(QBrush(grad), thickness)
                 pen_fill.setCapStyle(Qt.PenCapStyle.RoundCap)
@@ -183,7 +197,7 @@ class DashboardButtonPainter:
         # Media Player (Apple-like)
         if button.config.get('type') == 'media_player':
             DashboardButtonPainter._paint_media_player(button)
-            
+
         # 3D Printer
         if button.config.get('type') == '3d_printer':
             DashboardButtonPainter._paint_3d_printer(button)
@@ -193,8 +207,11 @@ class DashboardButtonPainter:
             DashboardButtonPainter._draw_sun_button(button)
 
         # Sensor widget with gauge/bar/perimeter display style
-        if (button.config.get('type') == 'widget'
-                and button.config.get('display_style') in ('gauge', 'bar', 'perimeter')):
+        if button.config.get('type') == 'widget' and button.config.get('display_style') in (
+            'gauge',
+            'bar',
+            'perimeter',
+        ):
             DashboardButtonPainter._paint_widget_sensor(button)
 
         # Lock hold-to-unlock progress ring
@@ -203,76 +220,86 @@ class DashboardButtonPainter:
 
         # Draw Camera Image (if applicable)
         if button.config and button.config.get('type') == 'camera':
-             # Use cached rounded pixmap if available (Performance + Style)
-             if hasattr(button, '_cached_display_pixmap') and button._cached_display_pixmap and not button._cached_display_pixmap.isNull():
-                 painter = QPainter(button)
-                 painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-                 
-                 # Ensure clipping even when using cached pixmap (for the edge effects)
-                 path = QPainterPath()
-                 path.addRoundedRect(QRectF(button.rect()), 12, 12)
-                 painter.setClipPath(path)
-                 
-                 painter.drawPixmap(0, 0, button._cached_display_pixmap)
-                 DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(button.rect()), is_top_clamped=False)
-                 painter.end()
-             
-             # Fallback to direct scaling if cache missing (e.g. first frame or resize race condition)
-             elif hasattr(button, '_last_camera_pixmap') and button._last_camera_pixmap:
-                 painter = QPainter(button)
-                 painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-                 
-                 # Clip to rounded rect
-                 path = QPainterPath()
-                 path.addRoundedRect(QRectF(button.rect()), 12, 12)
-                 painter.setClipPath(path)
-                 
-                 # Scale to fill button while maintaining aspect ratio (crop if needed)
-                 scaled = button._last_camera_pixmap.scaled(
-                     button.width(), button.height(),
-                     Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                     Qt.TransformationMode.SmoothTransformation
-                 )
-                 
-                 # Center crop
-                 x = (scaled.width() - button.width()) // 2
-                 y = (scaled.height() - button.height()) // 2
-                 
-                 # Draw cropped
-                 painter.drawPixmap(0, 0, scaled, x, y, button.width(), button.height())
-                 DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(button.rect()), is_top_clamped=False)
-                 painter.end()
-                 
+            # Use cached rounded pixmap if available (Performance + Style)
+            if (
+                hasattr(button, '_cached_display_pixmap')
+                and button._cached_display_pixmap
+                and not button._cached_display_pixmap.isNull()
+            ):
+                painter = QPainter(button)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+                # Ensure clipping even when using cached pixmap (for the edge effects)
+                path = QPainterPath()
+                path.addRoundedRect(QRectF(button.rect()), 12, 12)
+                painter.setClipPath(path)
+
+                painter.drawPixmap(0, 0, button._cached_display_pixmap)
+                DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(button.rect()), is_top_clamped=False)
+                painter.end()
+
+            # Fallback to direct scaling if cache missing (e.g. first frame or resize race condition)
+            elif hasattr(button, '_last_camera_pixmap') and button._last_camera_pixmap:
+                painter = QPainter(button)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+                # Clip to rounded rect
+                path = QPainterPath()
+                path.addRoundedRect(QRectF(button.rect()), 12, 12)
+                painter.setClipPath(path)
+
+                # Scale to fill button while maintaining aspect ratio (crop if needed)
+                scaled = button._last_camera_pixmap.scaled(
+                    button.width(),
+                    button.height(),
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+
+                # Center crop
+                x = (scaled.width() - button.width()) // 2
+                y = (scaled.height() - button.height()) // 2
+
+                # Draw cropped
+                painter.drawPixmap(0, 0, scaled, x, y, button.width(), button.height())
+                DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(button.rect()), is_top_clamped=False)
+                painter.end()
+
         # === Camera Pill Label ===
         if button.config and button.config.get('type') == 'camera':
-             label = button.config.get('label')
-             if label:
-                 # Re-open painter for overlay
-                 painter = QPainter(button)
-                 painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-                 
-                 # Prepare background for blur
-                 bg_pix = None
-                 x_off = 0
-                 y_off = 0
-                 
-                 if hasattr(button, '_cached_display_pixmap') and button._cached_display_pixmap and not button._cached_display_pixmap.isNull():
-                     bg_pix = button._cached_display_pixmap
-                 elif hasattr(button, '_last_camera_pixmap') and button._last_camera_pixmap:
-                     # For fallback, we need to replicate the scale/crop to get correct blur source
-                     # This is expensive but fallback is rare
-                     scaled = button._last_camera_pixmap.scaled(
-                         button.width(), button.height(),
-                         Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                         Qt.TransformationMode.SmoothTransformation
-                     )
-                     bg_pix = scaled
-                     x_off = (scaled.width() - button.width()) // 2
-                     y_off = (scaled.height() - button.height()) // 2
-                 
-                 DashboardButtonPainter._draw_pill_label(painter, button.rect(), label, bg_pix, x_off, y_off)
-                 painter.end()
-        
+            label = button.config.get('label')
+            if label:
+                # Re-open painter for overlay
+                painter = QPainter(button)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+                # Prepare background for blur
+                bg_pix = None
+                x_off = 0
+                y_off = 0
+
+                if (
+                    hasattr(button, '_cached_display_pixmap')
+                    and button._cached_display_pixmap
+                    and not button._cached_display_pixmap.isNull()
+                ):
+                    bg_pix = button._cached_display_pixmap
+                elif hasattr(button, '_last_camera_pixmap') and button._last_camera_pixmap:
+                    # For fallback, we need to replicate the scale/crop to get correct blur source
+                    # This is expensive but fallback is rare
+                    scaled = button._last_camera_pixmap.scaled(
+                        button.width(),
+                        button.height(),
+                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                    bg_pix = scaled
+                    x_off = (scaled.width() - button.width()) // 2
+                    y_off = (scaled.height() - button.height()) // 2
+
+                DashboardButtonPainter._draw_pill_label(painter, button.rect(), label, bg_pix, x_off, y_off)
+                painter.end()
+
         # Pulse Animation (Script)
         if button._pulse_opacity > 0.01:
             DashboardButtonPainter._paint_pulse(button)
@@ -306,23 +333,25 @@ class DashboardButtonPainter:
         # Gives ALL configured buttons a subtle physical lip, making them feel like 3D glass/plastic tiles
         button_style = getattr(button, 'button_style', 'Gradient')
         if button.config and button.config.get('type') != 'forbidden' and button_style == 'Gradient':
-            is_light = (button.theme_manager and button.theme_manager.get_effective_theme() == 'light')
+            is_light = button.theme_manager and button.theme_manager.get_effective_theme() == 'light'
             painter = QPainter(button)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            DashboardButtonPainter.draw_button_bevel_edge(painter, QRectF(button.rect()), intensity_modifier=0.25, is_light=is_light)
+            DashboardButtonPainter.draw_button_bevel_edge(
+                painter, QRectF(button.rect()), intensity_modifier=0.25, is_light=is_light
+            )
             painter.end()
 
     @staticmethod
     def _paint_media_player(button):
         painter = QPainter(button)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+
         rect = button.rect()
         is_playing = button._state == "playing"
         is_huge = button.span_x >= 2 and button.span_y >= 2  # 2x2+
         is_wide = button.span_x >= 2
         is_tall = button.span_y >= 2 and button.span_x < 2  # 1x2
-        
+
         # Resolve accent color
         btn_color = button.config.get('color')
         if not btn_color and button.theme_manager:
@@ -330,82 +359,81 @@ class DashboardButtonPainter:
             btn_color = colors.get('accent', '#4285F4')
         elif not btn_color:
             btn_color = "#4285F4"
-        
+
         # --- Background ---
         clip_path = QPainterPath()
         clip_path.addRoundedRect(QRectF(rect).adjusted(1, 1, -1, -1), 12, 12)
         painter.setClipPath(clip_path)
-        
+
         # Album art background (any size except 1x1, if enabled)
         has_art = button._album_art and not button._album_art.isNull()
         show_art = button.config.get('show_album_art', True)
         if (is_huge or is_tall or is_wide) and has_art and show_art:
             # Draw blurred/dimmed album art
             scaled = button._album_art.scaled(
-                rect.width(), rect.height(),
+                rect.width(),
+                rect.height(),
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation
+                Qt.TransformationMode.SmoothTransformation,
             )
             # Center crop
             x_off = (scaled.width() - rect.width()) // 2
             y_off = (scaled.height() - rect.height()) // 2
             painter.drawPixmap(0, 0, scaled, x_off, y_off, rect.width(), rect.height())
-            
+
             # Gradient overlay: user color at bottom -> transparent at top
             # FIX: Use explicit TopLeft/BottomLeft for full coverage
             grad = QLinearGradient(QPointF(rect.topLeft()), QPointF(rect.bottomLeft()))
-            grad.setColorAt(0.0, QColor(0, 0, 0, 0))           # Top: transparent
+            grad.setColorAt(0.0, QColor(0, 0, 0, 0))  # Top: transparent
             overlay_color = QColor(btn_color)
             overlay_color.setAlpha(255)
-            grad.setColorAt(1.0, overlay_color)                  # Bottom: user color
+            grad.setColorAt(1.0, overlay_color)  # Bottom: user color
             painter.fillRect(rect, grad)
         else:
-             # No Art -> Procedural Background
+            # No Art -> Procedural Background
 
-             # Generate deterministic seed based on media info or button slot
-             media_state = button._media_state or {}
-             attrs = media_state.get('attributes', {})
+            # Generate deterministic seed based on media info or button slot
+            media_state = button._media_state or {}
+            attrs = media_state.get('attributes', {})
 
-             title = attrs.get('media_title', '')
-             artist = attrs.get('media_artist', '')
+            title = attrs.get('media_title', '')
+            artist = attrs.get('media_artist', '')
 
-             if title or artist:
-                 # crc32, not hash(): str hashes change on every start, and the
-                 # same track should get the same background each time.
-                 seed = zlib.crc32(f"{title}{artist}".encode("utf-8"))
-             else:
-                 seed = button.slot
+            if title or artist:
+                # crc32, not hash(): str hashes change on every start, and the
+                # same track should get the same background each time.
+                seed = zlib.crc32(f"{title}{artist}".encode("utf-8"))
+            else:
+                seed = button.slot
 
-             animated = button.config.get('animated_bg', True)
-             w, h = rect.width(), rect.height()
+            animated = button.config.get('animated_bg', True)
+            w, h = rect.width(), rect.height()
 
-             if animated:
-                 # --- Animated prismatic light field ---
-                 button._ensure_anim_bg_layers(seed)
-                 bg = BackgroundGenerator.render_frame(
-                     w, h,
-                     button._anim_bg_layers,
-                     button._anim_bg_frame,
-                     tiny_pixmap=button._anim_bg_tiny,
-                 )
-                 painter.drawPixmap(0, 0, bg)
-             else:
-                 # --- Static background (original behaviour) ---
-                 light_mode = bool(
-                     button.theme_manager
-                     and button.theme_manager.get_effective_theme() == 'light'
-                 )
-                 bg_pixmap = BackgroundGenerator.generate(w, h, seed=seed, light_mode=light_mode)
-                 painter.drawPixmap(0, 0, bg_pixmap)
+            if animated:
+                # --- Animated prismatic light field ---
+                button._ensure_anim_bg_layers(seed)
+                bg = BackgroundGenerator.render_frame(
+                    w,
+                    h,
+                    button._anim_bg_layers,
+                    button._anim_bg_frame,
+                    tiny_pixmap=button._anim_bg_tiny,
+                )
+                painter.drawPixmap(0, 0, bg)
+            else:
+                # --- Static background (original behaviour) ---
+                light_mode = bool(button.theme_manager and button.theme_manager.get_effective_theme() == 'light')
+                bg_pixmap = BackgroundGenerator.generate(w, h, seed=seed, light_mode=light_mode)
+                painter.drawPixmap(0, 0, bg_pixmap)
 
-             # Gradient overlay (for text readability)
-             grad = QLinearGradient(QPointF(rect.topLeft()), QPointF(rect.bottomLeft()))
-             grad.setColorAt(0.0, QColor(0, 0, 0, 0))
-             overlay_color = QColor(btn_color)
-             overlay_color.setAlpha(200 if is_playing else 120)
-             grad.setColorAt(1.0, overlay_color)
-             painter.fillRect(rect, grad)
-            
+            # Gradient overlay (for text readability)
+            grad = QLinearGradient(QPointF(rect.topLeft()), QPointF(rect.bottomLeft()))
+            grad.setColorAt(0.0, QColor(0, 0, 0, 0))
+            overlay_color = QColor(btn_color)
+            overlay_color.setAlpha(200 if is_playing else 120)
+            grad.setColorAt(1.0, overlay_color)
+            painter.fillRect(rect, grad)
+
         # === PILL LABEL (Apple-like) ===
         # Always show Pill if Huge 2x2+
         label = button.config.get('label')
@@ -417,44 +445,43 @@ class DashboardButtonPainter:
             else:
                 DashboardButtonPainter._draw_pill_label(painter, rect, label)
 
-        
         # --- Icons ---
         is_playing = button._state == 'playing'
         is_paused = button._state == 'paused'
-        
+
         play_icon = Icons.PLAY_PAUSE
         if is_playing:
             play_icon = Icons.PAUSE
         elif is_paused:
             play_icon = Icons.PLAY
-            
+
         painter.setPen(QColor("white"))
-        
+
         # Get media info
         attrs = button._media_state.get('attributes', {})
         title = attrs.get('media_title', '')
         artist = attrs.get('media_artist', '')
-        
+
         if is_huge:
             # === 2x2: Now Playing Layout ===
             # Layout: album art top | transport controls middle | text bottom
             w = rect.width()
             h = rect.height()
-            
+
             # Transport controls (center area)
             ctrl_h = 40
             ctrl_y = h // 2 - ctrl_h // 2
             painter.setFont(get_mdi_font(30))
-            
+
             r_prev = QRect(0, ctrl_y, w // 3, ctrl_h)
             painter.drawText(r_prev, Qt.AlignmentFlag.AlignCenter, Icons.PREVIOUS)
-            
+
             r_play = QRect(w // 3, ctrl_y, w // 3, ctrl_h)
             painter.drawText(r_play, Qt.AlignmentFlag.AlignCenter, play_icon)
-            
+
             r_next = QRect((w // 3) * 2, ctrl_y, w // 3, ctrl_h)
             painter.drawText(r_next, Qt.AlignmentFlag.AlignCenter, Icons.NEXT)
-            
+
             # === SONG INFO PILL (bottom area) ===
             if title or artist:
                 # Build single-line display string: "Artist - Title"
@@ -462,33 +489,30 @@ class DashboardButtonPainter:
                     info_text = f"{artist}  \u2013  {title}"
                 else:
                     info_text = title or artist
-                
+
                 # Measure text to determine pill size
                 info_font = QFont(SYSTEM_FONT, 8, QFont.Weight.DemiBold)
                 info_fm = QFontMetrics(info_font)
-                
+
                 text_w = info_fm.horizontalAdvance(info_text)
                 padding_h = 20  # Horizontal padding
                 info_pill_w = min(text_w + padding_h * 2, w * 0.9)
                 info_pill_h = 28  # Single line pill
-                
+
                 info_pill_x = (w - info_pill_w) / 2
                 info_pill_y = h - info_pill_h - 8  # 8px from bottom
                 info_pill_rect = QRectF(info_pill_x, info_pill_y, info_pill_w, info_pill_h)
-                
+
                 # --- Pill Background ---
                 info_pill_path = QPainterPath()
                 info_pill_path.addRoundedRect(info_pill_rect, 14, 14)
-                
+
                 if has_art and show_art:
                     # Blurred art background
                     from ui.utils.glass_effect import draw_frosted_pill
+
                     info_text_color = draw_frosted_pill(
-                        painter, 
-                        info_pill_rect, 
-                        background_pixmap=scaled, 
-                        bg_x_offset=x_off, 
-                        bg_y_offset=y_off
+                        painter, info_pill_rect, background_pixmap=scaled, bg_x_offset=x_off, bg_y_offset=y_off
                     )
                 else:
                     # No art fallback
@@ -500,7 +524,7 @@ class DashboardButtonPainter:
                     painter.setPen(pen)
                     painter.drawRoundedRect(info_pill_rect, 14, 14)
                     painter.restore()
-                
+
                 # --- Draw Text ---
                 painter.setFont(info_font)
                 painter.setPen(info_text_color)
@@ -508,43 +532,43 @@ class DashboardButtonPainter:
                 fm = painter.fontMetrics()
                 elided = fm.elidedText(info_text, Qt.TextElideMode.ElideRight, int(max_text_area))
                 painter.drawText(info_pill_rect, Qt.AlignmentFlag.AlignCenter, elided)
-            
+
         elif is_tall:
             # === 1x2: Tall Layout ===
             w = rect.width()
             h = rect.height()
-            
+
             # Play/pause (upper area)
             painter.setFont(get_mdi_font(30))
             play_rect = QRect(0, 0, w, h // 2)
             painter.drawText(play_rect, Qt.AlignmentFlag.AlignCenter, play_icon)
-            
+
             # Prev / Next (bottom area)
             ctrl_y = h // 2 + 8
             ctrl_h = h // 2 - 8
             painter.setFont(get_mdi_font(24))
-            
+
             r_prev = QRect(0, ctrl_y, w // 2, ctrl_h)
             painter.drawText(r_prev, Qt.AlignmentFlag.AlignCenter, Icons.PREVIOUS)
-            
+
             r_next = QRect(w // 2, ctrl_y, w // 2, ctrl_h)
             painter.drawText(r_next, Qt.AlignmentFlag.AlignCenter, Icons.NEXT)
-            
+
         elif is_wide:
             # === 2x1: Wide Transport ===
             w = rect.width()
             h = rect.height()
             painter.setFont(get_mdi_font(28))
-            
+
             r_prev = QRect(0, 0, w // 3, h)
             painter.drawText(r_prev, Qt.AlignmentFlag.AlignCenter, Icons.PREVIOUS)
-            
+
             r_play = QRect(w // 3, 0, w // 3, h)
             painter.drawText(r_play, Qt.AlignmentFlag.AlignCenter, play_icon)
-            
+
             r_next = QRect((w // 3) * 2, 0, w // 3, h)
             painter.drawText(r_next, Qt.AlignmentFlag.AlignCenter, Icons.NEXT)
-            
+
         else:
             # === 1x1: Compact Play/Pause ===
             painter.setFont(get_mdi_font(28))
@@ -630,8 +654,11 @@ class DashboardButtonPainter:
                 arc_y = rect.y() + top_pad
                 arc_rect = QRectF(arc_x, arc_y, arc_size, arc_size)
                 DashboardButtonPainter.draw_gauge_arc(
-                    painter, arc_rect, fraction=gauge_fraction,
-                    fill_color=fill_color, track_color=track_color,
+                    painter,
+                    arc_rect,
+                    fraction=gauge_fraction,
+                    fill_color=fill_color,
+                    track_color=track_color,
                 )
                 baseline_y = arc_y + arc_size / 2
                 remaining_h = rect.y() + rect.height() - baseline_y
@@ -708,7 +735,7 @@ class DashboardButtonPainter:
     def _paint_3d_printer(button):
         painter = QPainter(button)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+
         rect = button.rect()
         is_huge = button.span_x >= 2 and button.span_y >= 2  # 2x2+
         is_wide = button.span_x >= 2
@@ -716,7 +743,7 @@ class DashboardButtonPainter:
         # State Data
         state = button._state.lower()  # printing, paused, operational, etc.
         printer_state = state.capitalize()
-        
+
         # Theme / Colors
         if button.theme_manager:
             colors = button.theme_manager.get_colors()
@@ -725,33 +752,37 @@ class DashboardButtonPainter:
         else:
             text_color = QColor('#e0e0e0')
             dim_text_color = QColor('#aaaaaa')
-            
+
         # Accent color based on state
         if state in ['printing', 'heating']:
-            accent_color = QColor('#34A853') # Green
+            accent_color = QColor('#34A853')  # Green
         elif state == 'paused':
-            accent_color = QColor('#FBBC05') # Yellow
+            accent_color = QColor('#FBBC05')  # Yellow
         elif 'error' in state or state == 'offline':
-            accent_color = QColor('#EA4335') # Red
+            accent_color = QColor('#EA4335')  # Red
         else:
-            accent_color = QColor('#4285F4') # Blue (Idle/Operational)
-            
+            accent_color = QColor('#4285F4')  # Blue (Idle/Operational)
+
         # Fetch entities manually since standard button abstraction binds to 1 entity
         dashboard = button.window()  # Walk up to dashboard
         camera_pixmap = None
         nozzle_str = "--"
         bed_str = "--"
         progress = 0
-        
+
         cfg = button.config
-        
+
         if hasattr(dashboard, '_entity_states'):
             # Camera image is handled by the standard `_last_camera_pixmap` on button if configured via `set_camera_image`
-            if hasattr(button, '_cached_display_pixmap') and button._cached_display_pixmap and not button._cached_display_pixmap.isNull():
-                 camera_pixmap = button._cached_display_pixmap
+            if (
+                hasattr(button, '_cached_display_pixmap')
+                and button._cached_display_pixmap
+                and not button._cached_display_pixmap.isNull()
+            ):
+                camera_pixmap = button._cached_display_pixmap
             elif hasattr(button, '_last_camera_pixmap') and button._last_camera_pixmap:
-                 camera_pixmap = button._last_camera_pixmap
-            
+                camera_pixmap = button._last_camera_pixmap
+
             # Prefer dedicated progress entity if configured
             state_data = dashboard._entity_states.get(cfg.get('printer_state_entity'), {})
             attrs = state_data.get('attributes', {})
@@ -762,12 +793,12 @@ class DashboardButtonPainter:
             else:
                 # Fall back to common progress attributes on state entity
                 progress = attrs.get('progress', attrs.get('job_percentage', 0))
-            
+
             try:
                 progress = float(progress)
             except (ValueError, TypeError):
                 progress = 0.0
-            
+
             # Nozzle
             nozzle_data = dashboard._entity_states.get(cfg.get('printer_nozzle_entity'), {})
             nozzle_val = nozzle_data.get('state', '--')
@@ -786,7 +817,8 @@ class DashboardButtonPainter:
                         nozzle_str = f"{_fmt(n_act)}/{_fmt(n_tgt)}"
                     else:
                         nozzle_str = _fmt(n_act)
-                except Exception: nozzle_str = _fmt(nozzle_val)
+                except Exception:
+                    nozzle_str = _fmt(nozzle_val)
 
             # Bed
             bed_data = dashboard._entity_states.get(cfg.get('printer_bed_entity'), {})
@@ -805,64 +837,66 @@ class DashboardButtonPainter:
                         bed_str = f"{_fmt_bed(b_act)}/{_fmt_bed(b_tgt)}"
                     else:
                         bed_str = _fmt_bed(b_act)
-                except Exception: bed_str = _fmt_bed(bed_val)
-            
-        icon = Icons.PRINTER_3D # standard mdi-printer-3d
-        
+                except Exception:
+                    bed_str = _fmt_bed(bed_val)
+
+        icon = Icons.PRINTER_3D  # standard mdi-printer-3d
+
         # DRAW LOGIC
         if is_huge:
             # === 2x2+: Camera Top, Stats Strip Bottom ===
             w = rect.width()
             h = rect.height()
-            
+
             # 1. Camera Feed (fills entire card; footer pills float over it)
             cam_h = h
             cam_rect = QRectF(0, 0, w, cam_h)
-            
+
             path = QPainterPath()
             path.addRoundedRect(QRectF(rect), 12, 12)
             painter.setClipPath(path)
-            
+
             if camera_pixmap and not camera_pixmap.isNull():
-                 # Fast direct draw if using cached rounded pixmap
-                 if camera_pixmap == getattr(button, '_cached_display_pixmap', None):
-                      painter.drawPixmap(0, 0, camera_pixmap)
-                      bg_pix = camera_pixmap
-                      x_bg = 0
-                      y_bg = 0
-                 else:
-                      # Aspect fill the top section
-                      scaled = camera_pixmap.scaled(
-                          int(w), int(cam_h),
-                          Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                          Qt.TransformationMode.SmoothTransformation
-                      )
-                      x_off = (scaled.width() - w) / 2
-                      y_off = (scaled.height() - cam_h) / 2
-                      painter.drawPixmap(0, 0, scaled, int(x_off), int(y_off), int(w), int(cam_h))
-                      bg_pix = scaled
-                      x_bg = int(x_off)
-                      y_bg = int(y_off)
-                      
-                 # Add glass edge effects (shadow + highlight) to the camera feed
-                 DashboardButtonPainter.draw_image_edge_effects(painter, cam_rect, is_top_clamped=False)
-                 
+                # Fast direct draw if using cached rounded pixmap
+                if camera_pixmap == getattr(button, '_cached_display_pixmap', None):
+                    painter.drawPixmap(0, 0, camera_pixmap)
+                    bg_pix = camera_pixmap
+                    x_bg = 0
+                    y_bg = 0
+                else:
+                    # Aspect fill the top section
+                    scaled = camera_pixmap.scaled(
+                        int(w),
+                        int(cam_h),
+                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                    x_off = (scaled.width() - w) / 2
+                    y_off = (scaled.height() - cam_h) / 2
+                    painter.drawPixmap(0, 0, scaled, int(x_off), int(y_off), int(w), int(cam_h))
+                    bg_pix = scaled
+                    x_bg = int(x_off)
+                    y_bg = int(y_off)
+
+                # Add glass edge effects (shadow + highlight) to the camera feed
+                DashboardButtonPainter.draw_image_edge_effects(painter, cam_rect, is_top_clamped=False)
+
             else:
-                 bg_pix = None
-                 x_bg = 0
-                 y_bg = 0
-                 # Fallback empty camera zone
-                 painter.fillRect(cam_rect.toRect(), QColor(0, 0, 0, 100))
-                 painter.setFont(get_mdi_font(40))
-                 painter.setPen(QColor(255, 255, 255, 100))
-                 painter.drawText(cam_rect, Qt.AlignmentFlag.AlignCenter, Icons.VIDEO_OFF)
-            
+                bg_pix = None
+                x_bg = 0
+                y_bg = 0
+                # Fallback empty camera zone
+                painter.fillRect(cam_rect.toRect(), QColor(0, 0, 0, 100))
+                painter.setFont(get_mdi_font(40))
+                painter.setPen(QColor(255, 255, 255, 100))
+                painter.drawText(cam_rect, Qt.AlignmentFlag.AlignCenter, Icons.VIDEO_OFF)
+
             # Draw Pill Overlay for Progress %
             try:
                 prog_val = float(progress)
             except (ValueError, TypeError):
                 prog_val = 0.0
-                
+
             if printer_state.lower() not in ["off", "unavailable"]:
                 prog_str = f"{prog_val:.0f}%"
                 DashboardButtonPainter._draw_pill_label(
@@ -874,22 +908,22 @@ class DashboardButtonPainter:
                 DashboardButtonPainter._draw_pill_label(
                     painter, cam_rect, btn_name, bg_pix, x_bg, y_bg, position='top-left', force_dark=True
                 )
-            
+
             # 2. Floating frosted pills at the bottom (state left, temps right)
             from ui.utils.glass_effect import draw_frosted_pill
 
-            pill_h     = 28
-            pill_y     = h - pill_h - 12
-            pad_x      = 12
+            pill_h = 28
+            pill_y = h - pill_h - 12
+            pad_x = 12
             inter_pill = 8
 
             is_offline = printer_state.lower() in ("off", "unavailable")
 
             # --- Right pill: nozzle + bed (icons + values) — sized first; takes priority ---
             icon_font = get_mdi_font(13)
-            val_font  = QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold)
-            fm_icon   = QFontMetrics(icon_font)
-            fm_val    = QFontMetrics(val_font)
+            val_font = QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold)
+            fm_icon = QFontMetrics(icon_font)
+            fm_val = QFontMetrics(val_font)
 
             noz_icon = get_icon('printer-3d-nozzle')
             bed_icon = get_icon('square-medium')
@@ -897,20 +931,24 @@ class DashboardButtonPainter:
             gap = 6
             sep = 12
             temps_content_w = (
-                fm_icon.horizontalAdvance(noz_icon) + gap + fm_val.horizontalAdvance(nozzle_str)
+                fm_icon.horizontalAdvance(noz_icon)
+                + gap
+                + fm_val.horizontalAdvance(nozzle_str)
                 + sep
-                + fm_icon.horizontalAdvance(bed_icon) + gap + fm_val.horizontalAdvance(bed_str)
+                + fm_icon.horizontalAdvance(bed_icon)
+                + gap
+                + fm_val.horizontalAdvance(bed_str)
             )
             temps_pill_w = 0 if is_offline else min(temps_content_w + 24, w - pad_x * 2)
 
             # --- Left pill: state — only if there's room left after temps ---
-            state_label  = printer_state.capitalize() if printer_state else ""
-            state_font   = QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold)
-            fm_state     = QFontMetrics(state_font)
+            state_label = printer_state.capitalize() if printer_state else ""
+            state_font = QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold)
+            fm_state = QFontMetrics(state_font)
             state_text_w = fm_state.horizontalAdvance(state_label.upper()) if state_label else 0
             ideal_state_w = max(56, state_text_w + 24) if state_label else 0
 
-            remaining_w  = w - pad_x * 2 - (temps_pill_w + inter_pill if temps_pill_w else 0)
+            remaining_w = w - pad_x * 2 - (temps_pill_w + inter_pill if temps_pill_w else 0)
             state_pill_w = min(ideal_state_w, remaining_w) if remaining_w >= 56 else 0
 
             # Draw state pill
@@ -932,62 +970,76 @@ class DashboardButtonPainter:
 
                 painter.setFont(icon_font)
                 nw = fm_icon.horizontalAdvance(noz_icon)
-                painter.drawText(QRectF(cx, pill_y, nw, pill_h),
-                                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, noz_icon)
+                painter.drawText(
+                    QRectF(cx, pill_y, nw, pill_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, noz_icon
+                )
                 cx += nw + gap
 
                 painter.setFont(val_font)
                 nvw = fm_val.horizontalAdvance(nozzle_str)
-                painter.drawText(QRectF(cx, pill_y, nvw, pill_h),
-                                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, nozzle_str)
+                painter.drawText(
+                    QRectF(cx, pill_y, nvw, pill_h),
+                    Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                    nozzle_str,
+                )
                 cx += nvw + sep
 
                 painter.setFont(icon_font)
                 bw = fm_icon.horizontalAdvance(bed_icon)
-                painter.drawText(QRectF(cx, pill_y, bw, pill_h),
-                                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, bed_icon)
+                painter.drawText(
+                    QRectF(cx, pill_y, bw, pill_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, bed_icon
+                )
                 cx += bw + gap
 
                 painter.setFont(val_font)
                 bvw = fm_val.horizontalAdvance(bed_str)
-                painter.drawText(QRectF(cx, pill_y, bvw, pill_h),
-                                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, bed_str)
-            
+                painter.drawText(
+                    QRectF(cx, pill_y, bvw, pill_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, bed_str
+                )
+
         elif is_wide:
             # === 2x1: Wide layout ===
             # Icon/Ring Left, Stats Right
             w = rect.width()
             h = rect.height()
-            
+
             # Left Icon (with circular progress if printing)
             icon_size = 40
             icon_x = 24
             icon_y = (h - icon_size) // 2
-            
+
             painter.setFont(get_mdi_font(28))
             painter.setPen(accent_color)
             painter.drawText(QRectF(icon_x, icon_y, icon_size, icon_size), Qt.AlignmentFlag.AlignCenter, icon)
-            
+
             # Text area on the right
             text_x = icon_x + icon_size + 16
-            
+
             # State Title
             state_font = QFont(SYSTEM_FONT, 12, QFont.Weight.Bold)
             painter.setFont(state_font)
             painter.setPen(text_color)
-            
+
             avail_width = w - text_x - 16
             fm = QFontMetrics(state_font)
             elided_state = fm.elidedText(printer_state, Qt.TextElideMode.ElideRight, int(avail_width))
-            
-            painter.drawText(QRectF(text_x, 16, avail_width, 24), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom, elided_state)
-            
+
+            painter.drawText(
+                QRectF(text_x, 16, avail_width, 24),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom,
+                elided_state,
+            )
+
             # Sub stats
             painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.Medium))
             painter.setPen(dim_text_color)
             stats_str = f"N: {nozzle_str}  B: {bed_str}"
-            painter.drawText(QRectF(text_x, 44, w - text_x - 16, 24), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, stats_str)
-            
+            painter.drawText(
+                QRectF(text_x, 44, w - text_x - 16, 24),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+                stats_str,
+            )
+
             # Progress Bar Bottom
             DashboardButtonPainter.draw_bottom_bar(painter, QRectF(0, 0, w, h), float(progress), 100.0, accent_color)
 
@@ -995,35 +1047,37 @@ class DashboardButtonPainter:
             # === 1x2: Tall layout ===
             w = rect.width()
             h = rect.height()
-            
+
             # Icon in the identical spot as a 1x1 (top half)
             top_half = QRectF(0, 0, w, 80)
             painter.setFont(get_mdi_font(40))
             painter.setPen(accent_color)
             painter.drawText(top_half, Qt.AlignmentFlag.AlignCenter, icon)
-            
+
             # State Title
             state_font = QFont(SYSTEM_FONT, 12, QFont.Weight.Bold)
             painter.setFont(state_font)
             painter.setPen(text_color)
-            
+
             fm = QFontMetrics(state_font)
             elided_state = fm.elidedText(printer_state.capitalize(), Qt.TextElideMode.ElideRight, int(w - 16))
-            
+
             painter.drawText(QRectF(0, 90, w, 24), Qt.AlignmentFlag.AlignCenter, elided_state)
-            
+
             # Progress %
-            try: prog_val = float(progress)
-            except Exception: prog_val = 0.0
-                
+            try:
+                prog_val = float(progress)
+            except Exception:
+                prog_val = 0.0
+
             if printer_state.lower() not in ["off", "unavailable"]:
-                 painter.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.Medium))
-                 painter.setPen(dim_text_color)
-                 painter.drawText(QRectF(0, 116, w, 20), Qt.AlignmentFlag.AlignCenter, f"{prog_val:.0f}%")
-                 
+                painter.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.Medium))
+                painter.setPen(dim_text_color)
+                painter.drawText(QRectF(0, 116, w, 20), Qt.AlignmentFlag.AlignCenter, f"{prog_val:.0f}%")
+
             # Progress Bar Bottom
             DashboardButtonPainter.draw_bottom_bar(painter, QRectF(0, 0, w, h), prog_val, 100.0, accent_color)
-            
+
         else:
             # === 1x1: Compact ===
             w = rect.width()
@@ -1032,15 +1086,17 @@ class DashboardButtonPainter:
             painter.setFont(get_mdi_font(40))
             painter.setPen(accent_color)
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, icon)
-            
-            try: prog_val = float(progress)
-            except Exception: prog_val = 0.0
-            
+
+            try:
+                prog_val = float(progress)
+            except Exception:
+                prog_val = 0.0
+
             if prog_val > 0 and prog_val < 100 and printer_state.lower() not in ["off", "unavailable"]:
-                 # Small progress indicator text below icon
-                 painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.Bold))
-                 painter.setPen(text_color)
-                 painter.drawText(QRectF(0, h/2 + 20, w, 20), Qt.AlignmentFlag.AlignCenter, f"{prog_val:.0f}%")
+                # Small progress indicator text below icon
+                painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.Bold))
+                painter.setPen(text_color)
+                painter.drawText(QRectF(0, h / 2 + 20, w, 20), Qt.AlignmentFlag.AlignCenter, f"{prog_val:.0f}%")
 
         painter.end()
 
@@ -1048,19 +1104,19 @@ class DashboardButtonPainter:
     def _paint_pulse(button):
         painter = QPainter(button)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+
         # Use custom color or accent
         c = QColor("#0078d4")
         if button.theme_manager:
             colors = button.theme_manager.get_colors()
             c = QColor(colors.get('accent', '#0078d4'))
-        
+
         # Allow custom color override
         if button.config and 'color' in button.config:
             c = QColor(button.config['color'])
-            
+
         c.setAlphaF(button._pulse_opacity)
-        
+
         # Draw rounded rect overlay
         painter.setBrush(QBrush(c))
         painter.setPen(Qt.PenStyle.NoPen)
@@ -1109,21 +1165,21 @@ class DashboardButtonPainter:
         """Draw a quick white flash over the button when value changes."""
         painter = QPainter(button)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+
         c = QColor(255, 255, 255)
         c.setAlphaF(button._input_blink_opacity)
-        
+
         painter.setBrush(QBrush(c))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(QRectF(button.rect()), 12, 12)
         painter.end()
-        
+
     @staticmethod
     def _paint_input_arrows(button):
         """Draw minimalist up/down arrows on hover."""
         painter = QPainter(button)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+
         # Determine color based on theme
         if button.theme_manager:
             colors = button.theme_manager.get_colors()
@@ -1132,12 +1188,12 @@ class DashboardButtonPainter:
             c = QColor(0, 0, 0) if is_light else QColor(255, 255, 255)
         else:
             c = QColor(255, 255, 255)
-            
+
         c.setAlphaF(getattr(button, '_arrow_opacity', 0.0) * 0.6)
         painter.setPen(c)
         rect = button.rect()
         w, h = rect.width(), rect.height()
-        
+
         if button.span_y == 1:
             if button.span_x == 1:
                 # No arrows for 1x1 layout - relies purely on drag
@@ -1146,45 +1202,50 @@ class DashboardButtonPainter:
                 # Left and right vertical centers
                 font_size = 20 if button.span_x == 1 else 24
                 painter.setFont(get_mdi_font(font_size))
-                
+
                 padding = 12
                 left_rect = QRectF(padding, 0, w * 0.25, h)
-                painter.drawText(left_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, Icons.CHEVRON_LEFT)
-                
+                painter.drawText(
+                    left_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, Icons.CHEVRON_LEFT
+                )
+
                 right_rect = QRectF(w * 0.75 - padding, 0, w * 0.25, h)
-                painter.drawText(right_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, Icons.CHEVRON_RIGHT)
+                painter.drawText(
+                    right_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, Icons.CHEVRON_RIGHT
+                )
         else:
             painter.setFont(get_mdi_font(24))
-            
+
             # Top quarter for Up Arrow
             up_rect = QRectF(0, 8, w, h * 0.25)
             painter.drawText(up_rect, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignTop, Icons.CHEVRON_UP)
-            
+
             # Bottom quarter for Down Arrow
             down_rect = QRectF(0, h * 0.75 - 8, w, h * 0.25)
             painter.drawText(down_rect, Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignBottom, Icons.CHEVRON_DOWN)
-        
+
         painter.end()
 
     @staticmethod
     def _paint_border_animation(button):
         painter = QPainter(button)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+
         # Interactive 'Press' feedback
         speed = 0.9 if button._border_effect == 'Prism Shard' else 1.5
-        if button._border_effect == 'Liquid Mercury': speed = 1.2
+        if button._border_effect == 'Liquid Mercury':
+            speed = 1.2
         angle = button._anim_progress * 360.0 * speed
-        
+
         opacity = 1.0
         if button._anim_progress > 0.8:
             opacity = (1.0 - button._anim_progress) / 0.2
 
         opacity = max(0.0, opacity)
-        
+
         painter.setOpacity(opacity)
         rect = button.rect().adjusted(1, 1, -1, -1)
-        
+
         if button._border_effect == 'Rainbow':
             DashboardButtonPainter.draw_rainbow_border(painter, rect, angle)
         elif button._border_effect == 'Aurora Borealis':
@@ -1201,63 +1262,63 @@ class DashboardButtonPainter:
         painter = QPainter(button)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = button.rect().adjusted(1, 1, -1, -1)
-        
+
         # Theme-aware border color
-        is_light = (button.theme_manager and button.theme_manager.get_effective_theme() == 'light')
+        is_light = button.theme_manager and button.theme_manager.get_effective_theme() == 'light'
         border_color = QColor("#c0c0c0") if is_light else QColor("#555555")
-        
+
         if not hasattr(button, '_dashed_pen') or getattr(button, '_dashed_pen_light', None) != is_light:
             button._dashed_pen = QPen(border_color)
             button._dashed_pen.setStyle(Qt.PenStyle.DashLine)
             button._dashed_pen.setWidth(2)
             button._dashed_pen_light = is_light
-            
+
         painter.setPen(button._dashed_pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRoundedRect(rect, 10, 10)
-            
+
         painter.end()
 
     @staticmethod
     def _paint_resize_handle(button):
         painter = QPainter(button)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+
         painter.setOpacity(button._resize_handle_opacity)
-        
+
         # Bottom-right corner
         r = button.rect()
-        radius = 12 # Match button border radius
-        handle_size = 28 # Bigger handle
-        
+        radius = 12  # Match button border radius
+        handle_size = 28  # Bigger handle
+
         path = QPainterPath()
-        
+
         # 1. Start on bottom edge, left of corner
         path.moveTo(r.right() - handle_size, r.bottom())
-        
+
         # 2. Outer Edge: Follow the button's rounded corner exactly
-        corner_rect = QRectF(r.right() - 2*radius, r.bottom() - 2*radius, 2*radius, 2*radius)
-        
-        path.lineTo(r.right() - radius, r.bottom()) # Line to start of arc
-        path.arcTo(corner_rect, 270, 90) # The corner itself
-        path.lineTo(r.right(), r.bottom() - handle_size) # Line to handle top
-        
+        corner_rect = QRectF(r.right() - 2 * radius, r.bottom() - 2 * radius, 2 * radius, 2 * radius)
+
+        path.lineTo(r.right() - radius, r.bottom())  # Line to start of arc
+        path.arcTo(corner_rect, 270, 90)  # The corner itself
+        path.lineTo(r.right(), r.bottom() - handle_size)  # Line to handle top
+
         # 3. Inner Edge: Curve inward back to start
         path.quadTo(r.right() - 4, r.bottom() - 4, r.right() - handle_size, r.bottom())
-        
+
         path.closeSubpath()
-        
+
         # Glass Style
         painter.setPen(Qt.PenStyle.NoPen)
-        
+
         # Gradient for glass/shiny look
         grad = QLinearGradient(QPointF(r.right() - handle_size, r.bottom() - handle_size), QPointF(r.bottomRight()))
-        grad.setColorAt(0.0, QColor(255, 255, 255, 120)) # Start brighter 
+        grad.setColorAt(0.0, QColor(255, 255, 255, 120))  # Start brighter
         grad.setColorAt(1.0, QColor(255, 255, 255, 10))  # Fade out
-        
+
         painter.setBrush(QBrush(grad))
         painter.drawPath(path)
-        
+
         # Accent line (Inner Edge only) for sharpness
         pen = QPen(QColor(255, 255, 255, 70))
         pen.setWidthF(2.0)
@@ -1265,7 +1326,18 @@ class DashboardButtonPainter:
         painter.end()
 
     @staticmethod
-    def _draw_pill_label(painter, rect, label, background_pixmap=None, x_off=0, y_off=0, position='top-center', forced_bg_color=None, forced_text_color=None, force_dark=False):
+    def _draw_pill_label(
+        painter,
+        rect,
+        label,
+        background_pixmap=None,
+        x_off=0,
+        y_off=0,
+        position='top-center',
+        forced_bg_color=None,
+        forced_text_color=None,
+        force_dark=False,
+    ):
         """Draws a pill label (frosted glass by default, or solid if colors provided)."""
         if not label:
             return
@@ -1276,10 +1348,10 @@ class DashboardButtonPainter:
             old_font = painter.font()
             painter.setFont(font)
             fm = painter.fontMetrics()
-            
+
             text_w = fm.horizontalAdvance(label.upper())
-            painter.setFont(old_font) # restore
-            
+            painter.setFont(old_font)  # restore
+
             pill_w = max(48, text_w + 24)
             pill_h = 28
             pill_x = rect.width() - pill_w - 12
@@ -1289,30 +1361,30 @@ class DashboardButtonPainter:
             old_font = painter.font()
             painter.setFont(font)
             fm = painter.fontMetrics()
-            
+
             text_w = fm.horizontalAdvance(label.upper())
-            painter.setFont(old_font) # restore
-            
+            painter.setFont(old_font)  # restore
+
             pill_w = max(48, text_w + 24)
             pill_h = 28
             pill_x = 12
             pill_y = 12
-        else: # top-center (Upper Third)
+        else:  # top-center (Upper Third)
             font = QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold)
             old_font = painter.font()
             painter.setFont(font)
             fm = painter.fontMetrics()
-            
+
             text_w = fm.horizontalAdvance(label.upper())
-            painter.setFont(old_font) # restore
-            
-            pill_w = min(rect.width() * 0.9, max(48, text_w + 24)) # Max width constraint
+            painter.setFont(old_font)  # restore
+
+            pill_w = min(rect.width() * 0.9, max(48, text_w + 24))  # Max width constraint
             pill_h = 28
             pill_x = (rect.width() - pill_w) / 2
-            pill_y = rect.height() * 0.15 # 15% from top
-            
+            pill_y = rect.height() * 0.15  # 15% from top
+
         pill_rect = QRectF(pill_x, pill_y, pill_w, pill_h)
-        
+
         if forced_bg_color:
             # Draw solid pill
             painter.save()
@@ -1325,14 +1397,14 @@ class DashboardButtonPainter:
         else:
             # Draw the frosted background and auto-magically get the correct text color contrast
             from ui.utils.glass_effect import draw_frosted_pill
-            
+
             text_color = draw_frosted_pill(
                 painter,
                 pill_rect,
                 background_pixmap=background_pixmap,
                 bg_x_offset=x_off,
                 bg_y_offset=y_off,
-                force_dark=force_dark
+                force_dark=force_dark,
             )
 
         font = QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold)
@@ -1369,11 +1441,11 @@ class DashboardButtonPainter:
 
         for i, color in enumerate(colors):
             gradient.setColorAt(i / (len(colors) - 1), QColor(color))
-        
+
         pen = QPen()
         pen.setWidth(2)
         pen.setBrush(QBrush(gradient))
-        
+
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRoundedRect(rect, 9, 9)
@@ -1393,7 +1465,7 @@ class DashboardButtonPainter:
         radius = max(rect.width(), rect.height()) / 1.5
 
         grad = QRadialGradient(center, radius)
-        grad.setColorAt(0.7, QColor(0, 0, 0, 0))    # Transparent core
+        grad.setColorAt(0.7, QColor(0, 0, 0, 0))  # Transparent core
         grad.setColorAt(1.0, QColor(0, 0, 0, 100))  # Darkened exterior edges
 
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
@@ -1404,12 +1476,21 @@ class DashboardButtonPainter:
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
         # 2. Specular Glass Highlight & Perimeter
-        DashboardButtonPainter.draw_button_bevel_edge(painter, rect, intensity_modifier=1.3, is_top_clamped=is_top_clamped, is_light=is_light, corner_radius=corner_radius)
+        DashboardButtonPainter.draw_button_bevel_edge(
+            painter,
+            rect,
+            intensity_modifier=1.3,
+            is_top_clamped=is_top_clamped,
+            is_light=is_light,
+            corner_radius=corner_radius,
+        )
 
         painter.restore()
 
     @staticmethod
-    def draw_button_bevel_edge(painter, rect, intensity_modifier=1.0, is_top_clamped=False, corner_radius=11, is_light=False):
+    def draw_button_bevel_edge(
+        painter, rect, intensity_modifier=1.0, is_top_clamped=False, corner_radius=11, is_light=False
+    ):
         """Draws a top-left specular highlight and perimeter outline to give buttons physical depth."""
         painter.save()
 
@@ -1420,9 +1501,9 @@ class DashboardButtonPainter:
             if is_top_clamped:
                 p.moveTo(adj_rect.bottomLeft())
                 p.lineTo(adj_rect.left(), adj_rect.top() + r)
-                p.arcTo(adj_rect.left(), adj_rect.top(), r*2, r*2, 180, -90)
+                p.arcTo(adj_rect.left(), adj_rect.top(), r * 2, r * 2, 180, -90)
                 p.lineTo(adj_rect.right() - r, adj_rect.top())
-                p.arcTo(adj_rect.right() - r*2, adj_rect.top(), r*2, r*2, 90, -90)
+                p.arcTo(adj_rect.right() - r * 2, adj_rect.top(), r * 2, r * 2, 90, -90)
                 p.lineTo(adj_rect.bottomRight())
                 p.closeSubpath()
             else:
@@ -1466,9 +1547,9 @@ class DashboardButtonPainter:
             return datetime.fromisoformat(s.replace('Z', '+00:00'))
 
         def format_remaining(total_secs):
-            days  = total_secs // 86400
+            days = total_secs // 86400
             hours = (total_secs % 86400) // 3600
-            mins  = (total_secs % 3600) // 60
+            mins = (total_secs % 3600) // 60
             if days >= 1:
                 return f"{int(days)}d"
             if hours >= 1:
@@ -1486,9 +1567,8 @@ class DashboardButtonPainter:
         painter.setClipPath(clip_path)
 
         # Colors
-        is_light = (getattr(button, 'theme_manager', None) and
-                    button.theme_manager.get_effective_theme() == 'light')
-        track_color = QColor(0, 0, 0, 80)  if is_light else QColor(255, 255, 255, 65)
+        is_light = getattr(button, 'theme_manager', None) and button.theme_manager.get_effective_theme() == 'light'
+        track_color = QColor(0, 0, 0, 80) if is_light else QColor(255, 255, 255, 65)
         text_hex = '#1e1e1e' if is_light else '#ffffff'
         if getattr(button, 'theme_manager', None):
             colors = button.theme_manager.get_colors()
@@ -1496,20 +1576,20 @@ class DashboardButtonPainter:
         text_color = QColor(text_hex)
 
         # State
-        above            = (getattr(button, 'sun_state', 'unknown') == 'above_horizon')
-        next_rising_str  = getattr(button, 'sun_next_rising', None)
+        above = getattr(button, 'sun_state', 'unknown') == 'above_horizon'
+        next_rising_str = getattr(button, 'sun_next_rising', None)
         next_setting_str = getattr(button, 'sun_next_setting', None)
 
         # Sun ratio: 0 = sunrise, 1 = sunset
         ratio = None
         if above and next_rising_str and next_setting_str:
             try:
-                now          = datetime.now(timezone.utc)
-                next_rising  = parse_iso(next_rising_str)
+                now = datetime.now(timezone.utc)
+                next_rising = parse_iso(next_rising_str)
                 next_setting = parse_iso(next_setting_str)
-                sunrise      = next_rising - timedelta(days=1)
-                total_secs   = (next_setting - sunrise).total_seconds()
-                elapsed      = (now - sunrise).total_seconds()
+                sunrise = next_rising - timedelta(days=1)
+                total_secs = (next_setting - sunrise).total_seconds()
+                elapsed = (now - sunrise).total_seconds()
                 ratio = max(0.0, min(1.0, elapsed / total_secs)) if total_secs > 0 else 0.5
             except Exception:
                 ratio = 0.5
@@ -1518,42 +1598,42 @@ class DashboardButtonPainter:
         moon_ratio = None
         if not above and next_rising_str and next_setting_str:
             try:
-                now          = datetime.now(timezone.utc)
-                next_rising  = parse_iso(next_rising_str)
+                now = datetime.now(timezone.utc)
+                next_rising = parse_iso(next_rising_str)
                 next_setting = parse_iso(next_setting_str)
-                prev_sunset  = next_setting - timedelta(days=1)
-                night_dur    = (next_rising - prev_sunset).total_seconds()
-                elapsed      = (now - prev_sunset).total_seconds()
+                prev_sunset = next_setting - timedelta(days=1)
+                night_dur = (next_rising - prev_sunset).total_seconds()
+                elapsed = (now - prev_sunset).total_seconds()
                 moon_ratio = max(0.0, min(1.0, elapsed / night_dur)) if night_dur > 0 else 0.5
             except Exception:
                 moon_ratio = 0.5
 
         # Layout — mirrors sensor gauge positioning
         is_wide = button.span_x >= 2
-        is_1x1  = button.span_x == 1 and button.span_y == 1
+        is_1x1 = button.span_x == 1 and button.span_y == 1
 
         if is_wide:
             arc_size = int(min(h - 12, w // 2 - 10))
             arc_size = max(arc_size, 32)
-            arc_x    = rect.x() + 13
-            arc_y    = rect.y() + h / 2 - arc_size / 4
+            arc_x = rect.x() + 13
+            arc_y = rect.y() + h / 2 - arc_size / 4
         elif is_1x1:
             arc_size = int((w - 8) * 0.72)
             arc_size = max(arc_size, 24)
             content_h = arc_size // 2 + 24
-            top_pad  = max(6, int((h - content_h) // 2))
-            arc_x    = rect.x() + (w - arc_size) / 2
-            arc_y    = rect.y() + top_pad
+            top_pad = max(6, int((h - content_h) // 2))
+            arc_x = rect.x() + (w - arc_size) / 2
+            arc_y = rect.y() + top_pad
         else:
             # tall single column
             arc_size = int(min(w - 16, h * 0.45))
             arc_size = max(arc_size, 32)
-            arc_x    = rect.x() + (w - arc_size) / 2
-            arc_y    = rect.y() + 12
+            arc_x = rect.x() + (w - arc_size) / 2
+            arc_y = rect.y() + 12
 
         # Draw track arc (top semicircle, unfilled — sun/moon travel along it)
         thickness = max(6.0, arc_size / 10.0)
-        inset     = thickness / 2.0
+        inset = thickness / 2.0
         draw_rect = QRectF(arc_x, arc_y, arc_size, arc_size).adjusted(inset, inset, -inset, -inset)
 
         pen_track = QPen(track_color, thickness)
@@ -1579,10 +1659,10 @@ class DashboardButtonPainter:
         if above and ratio is not None:
             animated_ratio = ratio * entry
             dot_x, dot_y = arc_point(animated_ratio)
-            sin_t     = math.sin(animated_ratio * math.pi)
+            sin_t = math.sin(animated_ratio * math.pi)
             dot_color = QColor(255, int(100 + 115 * sin_t), int(20 * (1.0 - sin_t)))
-            base_r    = 5.0 + 2.0 * sin_t
-            glow_c    = QColor(dot_color)
+            base_r = 5.0 + 2.0 * sin_t
+            glow_c = QColor(dot_color)
             glow_c.setAlpha(int(22 + 14 * pulse))
             painter.setBrush(QBrush(glow_c))
             painter.setPen(Qt.PenStyle.NoPen)
@@ -1626,25 +1706,25 @@ class DashboardButtonPainter:
                 ctx_color = QColor(text_color)
                 ctx_color.setAlphaF(text_color.alphaF() * 0.55)
 
-                text_x  = arc_x + arc_size + 4
+                text_x = arc_x + arc_size + 4
                 right_w = w - (text_x - rect.x())
 
                 time_font = QFont(SYSTEM_FONT, 15, QFont.Weight.Medium)
-                ctx_font  = QFont(SYSTEM_FONT, 8)
+                ctx_font = QFont(SYSTEM_FONT, 8)
                 time_h = QFontMetrics(time_font).height()
-                ctx_h  = QFontMetrics(ctx_font).height()
-                gap    = 3
+                ctx_h = QFontMetrics(ctx_font).height()
+                gap = 3
                 block_y = rect.y() + (h - time_h - gap - ctx_h) / 2
 
                 painter.setFont(time_font)
                 painter.setPen(text_color)
-                painter.drawText(QRectF(text_x, block_y, right_w, time_h),
-                                 Qt.AlignmentFlag.AlignCenter, time_str)
+                painter.drawText(QRectF(text_x, block_y, right_w, time_h), Qt.AlignmentFlag.AlignCenter, time_str)
 
                 painter.setFont(ctx_font)
                 painter.setPen(ctx_color)
-                painter.drawText(QRectF(text_x, block_y + time_h + gap, right_w, ctx_h),
-                                 Qt.AlignmentFlag.AlignCenter, context_str)
+                painter.drawText(
+                    QRectF(text_x, block_y + time_h + gap, right_w, ctx_h), Qt.AlignmentFlag.AlignCenter, context_str
+                )
             else:
                 # Below the arc (1x1 only — no context label, space is too tight)
                 baseline_y = arc_y + arc_size / 2
@@ -1654,5 +1734,3 @@ class DashboardButtonPainter:
                 painter.drawText(bottom_rect, Qt.AlignmentFlag.AlignCenter, time_str)
 
         painter.end()
-
-

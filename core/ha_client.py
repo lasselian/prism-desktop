@@ -14,21 +14,22 @@ from core.utils import keep_task
 # request at another endpoint.
 CAMERA_ENTITY_RE = re.compile(r"camera\.[a-z0-9_]+")
 
+
 class HAClient:
     """Asynchronous client for Home Assistant REST API."""
-    
+
     def __init__(self, url: str = "", token: str = ""):
         self.url = url.rstrip('/')
         self.token = token
         self._session: Optional[aiohttp.ClientSession] = None
         self._anon_session: Optional[aiohttp.ClientSession] = None
         self.logger = logging.getLogger(__name__)
-    
+
     def configure(self, url: str, token: str):
         """Update connection settings."""
         self.url = url.rstrip('/')
         self.token = token
-        
+
         # If there's an active session, close it so a new one is spawned with new token headers
         if self._session and not self._session.closed:
             try:
@@ -37,15 +38,12 @@ class HAClient:
             except RuntimeError:
                 pass  # No running event loop
         self._session = None
-    
+
     @property
     def headers(self) -> dict:
         """Return authorization headers."""
-        return {
-            "Authorization": f"Bearer {self.token}",
-            "Content-Type": "application/json"
-        }
-    
+        return {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
+
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
         if self._session is None or self._session.closed:
@@ -59,9 +57,7 @@ class HAClient:
         nothing sensitive can ride along to a third-party host.
         """
         if self._anon_session is None or self._anon_session.closed:
-            self._anon_session = aiohttp.ClientSession(
-                cookie_jar=aiohttp.DummyCookieJar()
-            )
+            self._anon_session = aiohttp.ClientSession(cookie_jar=aiohttp.DummyCookieJar())
         return self._anon_session
 
     def resolve_media_url(self, raw_url: str) -> Optional[Tuple[URL, bool]]:
@@ -83,8 +79,12 @@ class HAClient:
 
         try:
             base = URL(self.url)
-            if (base.scheme not in ('http', 'https') or not base.raw_host
-                    or base.user is not None or base.password is not None):
+            if (
+                base.scheme not in ('http', 'https')
+                or not base.raw_host
+                or base.user is not None
+                or base.password is not None
+            ):
                 return None
 
             raw = raw_url.strip()
@@ -99,14 +99,10 @@ class HAClient:
                 candidate = raw
 
             url = URL(candidate).with_fragment(None)
-            if (url.scheme not in ('http', 'https')
-                    or url.user is not None or url.password is not None):
+            if url.scheme not in ('http', 'https') or url.user is not None or url.password is not None:
                 return None
 
-            same_origin = (
-                (url.scheme, url.raw_host, url.port)
-                == (base.scheme, base.raw_host, base.port)
-            )
+            same_origin = (url.scheme, url.raw_host, url.port) == (base.scheme, base.raw_host, base.port)
             return url, same_origin
         except Exception:
             return None
@@ -119,7 +115,7 @@ class HAClient:
         if self._anon_session and not self._anon_session.closed:
             await self._anon_session.close()
         self._anon_session = None
-    
+
     async def test_connection(self) -> tuple[bool, str]:
         """
         Test connection to Home Assistant.
@@ -127,7 +123,7 @@ class HAClient:
         """
         if not self.url or not self.token:
             return False, "URL and token are required"
-        
+
         try:
             # One-off session so the test always uses the currently configured
             # URL/token rather than a pooled session built from old headers.
@@ -150,7 +146,7 @@ class HAClient:
             detail = str(e) or type(e).__name__
             self.logger.error(f"Connection test error: {detail}")
             return False, f"Error: {detail}"
-    
+
     async def get_entities(self) -> list[dict]:
         """Fetch all entities."""
         try:
@@ -174,7 +170,7 @@ class HAClient:
         except Exception as e:
             self.logger.error(f"Error fetching HA config: {e}")
             return None
-    
+
     async def get_state(self, entity_id: str) -> Optional[dict]:
         """Get state of a specific entity."""
         try:
@@ -186,16 +182,14 @@ class HAClient:
         except Exception as e:
             self.logger.error(f"Error fetching state for {entity_id}: {e}")
             return None
-            
+
     async def get_weather_forecast(self, entity_id: str, forecast_type="daily") -> list:
         """Fetch weather forecast for a given entity."""
         try:
             session = await self._get_session()
             payload = {"type": forecast_type, "entity_id": entity_id}
             async with session.post(
-                f"{self.url}/api/services/weather/get_forecasts?return_response=true",
-                json=payload,
-                timeout=10
+                f"{self.url}/api/services/weather/get_forecasts?return_response=true", json=payload, timeout=10
             ) as response:
                 if response.status == 200:
                     data = await response.json()
@@ -207,40 +201,30 @@ class HAClient:
         except Exception as e:
             self.logger.error(f"Error fetching weather forecast for {entity_id}: {e}")
             return []
-    
+
     async def call_service(
-        self,
-        domain: str,
-        service: str,
-        entity_id: Optional[str] = None,
-        data: Optional[dict] = None,
-        timeout: int = 10
+        self, domain: str, service: str, entity_id: Optional[str] = None, data: Optional[dict] = None, timeout: int = 10
     ) -> bool:
         """Call a service."""
         try:
             payload = dict(data or {})
             if entity_id:
                 payload["entity_id"] = entity_id
-            
+
             session = await self._get_session()
             async with session.post(
-                f"{self.url}/api/services/{domain}/{service}",
-                json=payload,
-                timeout=timeout
+                f"{self.url}/api/services/{domain}/{service}", json=payload, timeout=timeout
             ) as response:
                 return response.status == 200
         except Exception as e:
             self.logger.error(f"Service call failed for {domain}.{service}: {e}")
             return False
-    
+
     async def get_camera_image(self, entity_id: str) -> Optional[bytes]:
         """Fetch camera snapshot image."""
         try:
             session = await self._get_session()
-            async with session.get(
-                f"{self.url}/api/camera_proxy/{entity_id}",
-                timeout=10
-            ) as response:
+            async with session.get(f"{self.url}/api/camera_proxy/{entity_id}", timeout=10) as response:
                 if response.status == 200:
                     return await response.read()
                 return None
@@ -249,9 +233,7 @@ class HAClient:
             return None
 
     @asynccontextmanager
-    async def camera_stream(
-        self, entity_id: str, read_timeout: float = 45
-    ) -> AsyncIterator[aiohttp.ClientResponse]:
+    async def camera_stream(self, entity_id: str, read_timeout: float = 45) -> AsyncIterator[aiohttp.ClientResponse]:
         """Open Home Assistant's MJPEG stream for a camera and yield the response.
 
         The caller checks the status and reads the body. Works for every
@@ -308,9 +290,7 @@ class HAClient:
                 # Safe to follow: this session carries no credentials.
                 allow_redirects = True
 
-            async with session.get(
-                url, timeout=10, allow_redirects=allow_redirects
-            ) as response:
+            async with session.get(url, timeout=10, allow_redirects=allow_redirects) as response:
                 if response.status != 200:
                     return None
                 # Accumulate in chunks: StreamReader.read(n) returns *up to* n
@@ -319,9 +299,7 @@ class HAClient:
                 async for chunk in response.content.iter_chunked(64 * 1024):
                     buf.extend(chunk)
                     if len(buf) > self.MAX_MEDIA_BYTES:
-                        self.logger.warning(
-                            "Oversized %s response discarded", kind
-                        )
+                        self.logger.warning("Oversized %s response discarded", kind)
                         return None
                 return bytes(buf)
         except Exception as e:

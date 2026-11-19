@@ -20,12 +20,14 @@ def _with_icon(icon, message: str) -> str:
 
 # ── Entity ───────────────────────────────────────────────────────────────────
 
+
 def notify_entity_unavailable(dashboard, label: str):
     """Shown when the user taps a button whose entity is unavailable/unknown."""
     dashboard.show_toast(_with_icon(Icons.ALERT_CIRCLE_OUTLINE, t("notifications.entity_unavailable", label=label)))
 
 
 # ── Glass UI ─────────────────────────────────────────────────────────────────
+
 
 def notify_glass_ui_warning(dashboard):
     """Shown once when Glass UI is first enabled."""
@@ -34,6 +36,7 @@ def notify_glass_ui_warning(dashboard):
 
 
 # ── Button / grid ─────────────────────────────────────────────────────────────
+
 
 def notify_page_full(dashboard, page_num: int):
     """Shown when a button cannot be moved because the target page is full."""
@@ -50,14 +53,15 @@ def notify_move_as_1x1(dashboard, orig_w: int, orig_h: int, page_num: int, on_co
 
 # ── Shortcuts ─────────────────────────────────────────────────────────────────
 
+
 def notify_delete_shortcut(dashboard, name: str, on_confirm):
     """Confirm dialog asking whether to clear a button's custom shortcut."""
-    msg = (t("notifications.delete_shortcut", name=name) if name
-           else t("notifications.delete_shortcut_unnamed"))
+    msg = t("notifications.delete_shortcut", name=name) if name else t("notifications.delete_shortcut_unnamed")
     dashboard.show_confirm(msg, on_confirm=on_confirm)
 
 
 # ── Updates ───────────────────────────────────────────────────────────────────
+
 
 def notify_update_available(dashboard, new_version: str, on_confirm):
     """Confirm dialog offering to auto-install a new version."""
@@ -98,11 +102,14 @@ def notify_download_error(dashboard, detail: str = ""):
     msg = t("notifications.update_error")
     if detail:
         msg += f": {detail}"
-    msg += f'&nbsp;&nbsp;<a href="{_GH_RELEASES_URL}" style="color: #88aaff;">{t("notifications.download_manually")}</a>'
+    msg += (
+        f'&nbsp;&nbsp;<a href="{_GH_RELEASES_URL}" style="color: #88aaff;">{t("notifications.download_manually")}</a>'
+    )
     dashboard.show_toast(msg, duration_ms=12000)
 
 
 # ── Connection / settings ─────────────────────────────────────────────────────
+
 
 def notify_connection_test_result(dashboard, success: bool, message: str):
     """Shown after a connection test completes. Error message comes from HA — not translated."""

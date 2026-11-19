@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class ConfigManager:
     """Manages application configuration and secure token storage."""
-    
+
     def __init__(self, config_filename: str = "config.json"):
         self.config_path = get_config_path(config_filename)
         self.config = self.load_config()
@@ -100,9 +100,7 @@ class ConfigManager:
         try:
             # Write to a temp file then atomically replace, so a crash mid-write
             # can never leave a truncated config.json behind.
-            fd, tmp_path = tempfile.mkstemp(
-                dir=str(self.config_path.parent), prefix='.config_', suffix='.tmp'
-            )
+            fd, tmp_path = tempfile.mkstemp(dir=str(self.config_path.parent), prefix='.config_', suffix='.tmp')
             try:
                 with os.fdopen(fd, 'w', encoding='utf-8') as f:
                     json.dump(config_to_save, f, indent=2)

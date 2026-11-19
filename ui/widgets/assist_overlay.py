@@ -7,11 +7,26 @@ open_fade_in).
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel,
-    QScrollArea, QFrame, QGraphicsOpacityEffect,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QLabel,
+    QScrollArea,
+    QFrame,
+    QGraphicsOpacityEffect,
 )
 from PyQt6.QtCore import (
-    Qt, QRect, QRectF, QPointF, QEvent, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal,
+    Qt,
+    QRect,
+    QRectF,
+    QPointF,
+    QEvent,
+    QTimer,
+    QPropertyAnimation,
+    QEasingCurve,
+    pyqtSignal,
 )
 from PyQt6.QtGui import QColor, QPainter, QPalette
 
@@ -206,7 +221,7 @@ class AssistOverlay(BaseOverlay):
         self._speaking = False
         self._instant_close = False
         self._fade_anim = None
-        self._rows = []           # [(row_widget, bubble_label, role)]
+        self._rows = []  # [(row_widget, bubble_label, role)]
         self._partial_bubble = None
         self._history = []
         self._history_idx = None  # None = editing a fresh line
@@ -370,9 +385,7 @@ class AssistOverlay(BaseOverlay):
             f"color: {_rgba(fg, 0.55)}; font-size: 11px; background: transparent; padding: 0 18px;"
         )
         self._empty_icon.setStyleSheet(f"color: {_rgba(pal['accent'], 0.9)}; background: transparent;")
-        self._empty_text.setStyleSheet(
-            f"color: {_rgba(fg, 0.55)}; font-size: 12px; background: transparent;"
-        )
+        self._empty_text.setStyleSheet(f"color: {_rgba(fg, 0.55)}; font-size: 12px; background: transparent;")
 
         self.input.setStyleSheet(
             f"QLineEdit {{ background: {_rgba(fg, 0.07)}; border: 1px solid transparent; "
@@ -395,14 +408,19 @@ class AssistOverlay(BaseOverlay):
         pal = pal or self._palette()
         bg, fg = pal.get(role, pal['assistant'])
         label.setStyleSheet(
-            f"QLabel {{ background: {bg}; color: {fg}; border-radius: 12px; "
-            "padding: 9px 13px; font-size: 13px; }"
+            f"QLabel {{ background: {bg}; color: {fg}; border-radius: 12px; " "padding: 9px 13px; font-size: 13px; }"
         )
 
     # ── Open / close ──
 
-    def open_fade_in(self, target_rect: QRect, color: QColor = None, base_color: QColor = None,
-                      instant_close: bool = False, instant: bool = False):
+    def open_fade_in(
+        self,
+        target_rect: QRect,
+        color: QColor = None,
+        base_color: QColor = None,
+        instant_close: bool = False,
+        instant: bool = False,
+    ):
         """Show the panel directly at its final size/position and fade it
         in. With instant=True, appear immediately with no fade at all —
         used when the dashboard itself was just shown quietly for this same
@@ -589,8 +607,7 @@ class AssistOverlay(BaseOverlay):
             chat_m = self.chat_layout.contentsMargins()
             text_width = width - chat_m.left() - chat_m.right() - hint_m.left() - hint_m.right()
             if text_width > 0:
-                chat_height += (self._empty_text.heightForWidth(text_width)
-                                - self._empty_text.sizeHint().height())
+                chat_height += self._empty_text.heightForWidth(text_width) - self._empty_text.sizeHint().height()
         return (
             self._header.sizeHint().height()
             + self.status_label.sizeHint().height()

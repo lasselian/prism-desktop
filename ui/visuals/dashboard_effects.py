@@ -3,11 +3,10 @@ Visual Effects module for Dashboard.
 Contains border drawing and background capture logic.
 """
 
-from PyQt6.QtGui import (
-    QColor, QPainter, QPen, QBrush, QConicalGradient
-)
+from PyQt6.QtGui import QColor, QPainter, QPen, QBrush, QConicalGradient
 from PyQt6.QtCore import Qt, QRectF, QPoint
 from PyQt6.QtWidgets import QApplication
+
 
 def draw_aurora_border(painter: QPainter, rect: QRectF, progress: float, width: float = 3):
     """Draw the Aurora Borealis border effect."""
@@ -36,6 +35,7 @@ def draw_aurora_border(painter: QPainter, rect: QRectF, progress: float, width: 
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.drawRoundedRect(rect, 12, 12)
 
+
 def draw_rainbow_border(painter: QPainter, rect: QRectF, progress: float, width: float = 3):
     """Draw the rainbow border effect."""
     if not painter.isActive():
@@ -62,6 +62,7 @@ def draw_rainbow_border(painter: QPainter, rect: QRectF, progress: float, width:
     painter.setPen(pen)
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.drawRoundedRect(rect, 12, 12)
+
 
 def draw_prism_shard_border(painter: QPainter, rect: QRectF, progress: float, width: float = 3):
     """Draw the Prism Shard border effect."""
@@ -90,6 +91,7 @@ def draw_prism_shard_border(painter: QPainter, rect: QRectF, progress: float, wi
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.drawRoundedRect(rect, 12, 12)
 
+
 def draw_liquid_mercury_border(painter: QPainter, rect: QRectF, progress: float, width: float = 3):
     """Draw the Liquid Mercury border effect."""
     if not painter.isActive():
@@ -117,47 +119,49 @@ def draw_liquid_mercury_border(painter: QPainter, rect: QRectF, progress: float,
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.drawRoundedRect(rect, 12, 12)
 
+
 def capture_glass_background(target_widget):
     """Capture and blur the desktop area behind the window for frosted glass."""
     screen = QApplication.primaryScreen()
     if not screen:
         return None, None
-        
+
     c_x = target_widget.container.x()
     c_w = target_widget.container.width()
-    
+
     screen_geo = screen.geometry()
-    
+
     # Capture the entire vertical column for this window to avoid needing
     # to recapture when animating height changes
     grab_x = target_widget.x() + c_x
     grab_y = screen_geo.y()
     grab_w = c_w
     grab_h = screen_geo.height()
-    
+
     # Safety: ensure valid dimensions
-    if grab_w <= 0: grab_w = target_widget.width() - 20
-    if grab_w <= 0: grab_w = 100 # Fallback
-    if grab_h <= 0: grab_h = 1080 # Fallback
-    
+    if grab_w <= 0:
+        grab_w = target_widget.width() - 20
+    if grab_w <= 0:
+        grab_w = 100  # Fallback
+    if grab_h <= 0:
+        grab_h = 1080  # Fallback
+
     # Grab the screen region
     desktop_pixmap = screen.grabWindow(0, int(grab_x), int(grab_y), int(grab_w), int(grab_h))
-    
+
     if desktop_pixmap.isNull():
         return None, None
-        
+
     # Apply downscale -> upscale blur
     blur_factor = 0.06  # Very heavy blur
     small = desktop_pixmap.scaled(
         max(1, int(grab_w * blur_factor)),
         max(1, int(grab_h * blur_factor)),
         Qt.AspectRatioMode.IgnoreAspectRatio,
-        Qt.TransformationMode.SmoothTransformation
+        Qt.TransformationMode.SmoothTransformation,
     )
     blurred = small.scaled(
-        int(grab_w), int(grab_h),
-        Qt.AspectRatioMode.IgnoreAspectRatio,
-        Qt.TransformationMode.SmoothTransformation
+        int(grab_w), int(grab_h), Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation
     )
-    
+
     return blurred, QPoint(int(grab_x), int(grab_y))

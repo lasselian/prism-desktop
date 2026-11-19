@@ -1,15 +1,20 @@
-from PyQt6.QtWidgets import (
-    QFrame, QVBoxLayout, QLabel, QApplication, QGraphicsDropShadowEffect, QMenu,
-    QGraphicsEffect
-)
+from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QApplication, QGraphicsDropShadowEffect, QMenu, QGraphicsEffect
 from PyQt6.QtCore import (
-    Qt, QPoint, pyqtSignal, QPropertyAnimation, QEasingCurve,
-    QMimeData, QByteArray, QDataStream, QIODevice, pyqtProperty, QRectF, QTimer, QRect
+    Qt,
+    QPoint,
+    pyqtSignal,
+    QPropertyAnimation,
+    QEasingCurve,
+    QMimeData,
+    QByteArray,
+    QDataStream,
+    QIODevice,
+    pyqtProperty,
+    QRectF,
+    QTimer,
+    QRect,
 )
-from PyQt6.QtGui import (
-    QColor, QFont, QDrag, QPixmap, QPainter, QCursor,
-    QPainterPath
-)
+from PyQt6.QtGui import QColor, QFont, QDrag, QPixmap, QPainter, QCursor, QPainterPath
 from ui.icons import get_icon, get_mdi_font, Icons, get_icon_for_type
 from core.utils import SYSTEM_FONT
 from core.localization_manager import t
@@ -26,9 +31,7 @@ MIME_TYPE = "application/x-hatray-slot"
 
 # A number optionally followed by a unit. The unit may not start with a character that
 # would make the number just the front of something else ("12:34", "2024-05-01", "1.2.3").
-_SENSOR_VALUE_RE = re.compile(
-    r"([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)(\s*[^\s\d:.\-/+].*|\s*)$"
-)
+_SENSOR_VALUE_RE = re.compile(r"([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)(\s*[^\s\d:.\-/+].*|\s*)$")
 
 
 def _parse_sensor_value(raw, precision=1):
@@ -82,28 +85,35 @@ class ButtonMorphEffect(QGraphicsEffect):
 
     # --- pyqtProperty accessors so QPropertyAnimation can drive them ---
 
-    def get_sx(self): return self._sx
+    def get_sx(self):
+        return self._sx
+
     def set_sx(self, v):
         self._sx = v
         self.update()
+
     sx = pyqtProperty(float, get_sx, set_sx)
 
-    def get_sy(self): return self._sy
+    def get_sy(self):
+        return self._sy
+
     def set_sy(self, v):
         self._sy = v
         self.update()
+
     sy = pyqtProperty(float, get_sy, set_sy)
 
-    def get_opacity(self): return self._opacity
+    def get_opacity(self):
+        return self._opacity
+
     def set_opacity_prop(self, v):
         self._opacity = v
         self.update()
+
     opacity_prop = pyqtProperty(float, get_opacity, set_opacity_prop)
 
     def _refresh_enabled(self):
-        needs = (self._opacity < 0.999 or
-                 abs(self._sx - 1.0) > 0.003 or
-                 abs(self._sy - 1.0) > 0.003)
+        needs = self._opacity < 0.999 or abs(self._sx - 1.0) > 0.003 or abs(self._sy - 1.0) > 0.003
         self.setEnabled(needs)
 
     def boundingRectFor(self, source_rect):
@@ -133,28 +143,28 @@ class ButtonMorphEffect(QGraphicsEffect):
 
 class DashboardButton(QFrame):
     """Button or widget in the grid."""
-    
+
     clicked = pyqtSignal(dict)
-    dropped = pyqtSignal(int, int) # target_slot, source_slot
+    dropped = pyqtSignal(int, int)  # target_slot, source_slot
     edit_requested = pyqtSignal(int)
     duplicate_requested = pyqtSignal(int)
     clear_requested = pyqtSignal(int)
     move_to_page_requested = pyqtSignal(int, int)  # slot, target_page
-    dimmer_requested = pyqtSignal(int, QRect) # slot, geometry
-    climate_requested = pyqtSignal(int, QRect) # slot, geometry
-    weather_requested = pyqtSignal(int, QRect) # slot, geometry
-    printer_requested = pyqtSignal(int, QRect, dict) # slot, geometry, config
-    camera_requested = pyqtSignal(int, QRect, dict) # slot, geometry, config
-    pip_requested = pyqtSignal(str, str) # camera entity_id, title
-    volume_requested = pyqtSignal(int, QRect) # slot, geometry (for volume overlay)
-    mower_requested = pyqtSignal(int, QRect) # slot, geometry (for mower overlay)
-    vacuum_requested = pyqtSignal(int, QRect) # slot, geometry (for vacuum overlay)
-    alarm_requested = pyqtSignal(int, QRect) # slot, geometry (for alarm control panel overlay)
-    volume_scroll = pyqtSignal(str, float) # entity_id, new_volume (for scroll wheel)
+    dimmer_requested = pyqtSignal(int, QRect)  # slot, geometry
+    climate_requested = pyqtSignal(int, QRect)  # slot, geometry
+    weather_requested = pyqtSignal(int, QRect)  # slot, geometry
+    printer_requested = pyqtSignal(int, QRect, dict)  # slot, geometry, config
+    camera_requested = pyqtSignal(int, QRect, dict)  # slot, geometry, config
+    pip_requested = pyqtSignal(str, str)  # camera entity_id, title
+    volume_requested = pyqtSignal(int, QRect)  # slot, geometry (for volume overlay)
+    mower_requested = pyqtSignal(int, QRect)  # slot, geometry (for mower overlay)
+    vacuum_requested = pyqtSignal(int, QRect)  # slot, geometry (for vacuum overlay)
+    alarm_requested = pyqtSignal(int, QRect)  # slot, geometry (for alarm control panel overlay)
+    volume_scroll = pyqtSignal(str, float)  # entity_id, new_volume (for scroll wheel)
     media_command_requested = pyqtSignal(dict)
-    resize_requested = pyqtSignal(int, int, int) # slot, span_x, span_y
+    resize_requested = pyqtSignal(int, int, int)  # slot, span_x, span_y
     resize_finished = pyqtSignal()
-    
+
     def __init__(self, slot: int, config: dict | None = None, theme_manager=None, parent=None):
         super().__init__(parent)
         self.slot = slot
@@ -162,7 +172,7 @@ class DashboardButton(QFrame):
         # Load span from config or default to 1
         self.span_x = self.config.get('span_x', 1)
         self.span_y = self.config.get('span_y', 1)
-        
+
         self._page_count = 1
         self._current_page = 0
 
@@ -172,7 +182,7 @@ class DashboardButton(QFrame):
         self.refresh_indicators_enabled = False
         self._brightness = 255
         self.temperature_unit_preference = "celsius"
-        
+
         # Internal state
         self._state = "off"
         self._value = None
@@ -190,7 +200,7 @@ class DashboardButton(QFrame):
         self._drag_start_pos = None
         self._is_resizing = False
         self._resize_start_span = (1, 1)
-        
+
         # input_number interaction state
         self._input_changing = False
         self._input_scrub_mode = False
@@ -199,17 +209,17 @@ class DashboardButton(QFrame):
         self._hovering = False
         self.setMouseTracking(True)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
-        
+
         # Camera resize optimization
         self._last_camera_pixmap = None
         self._cached_display_pixmap = None
-        
+
         # Resize handle animation
         self._resize_handle_opacity = 0.0
         self.resize_anim = QPropertyAnimation(self, b"resize_handle_opacity")
-        self.resize_anim.setDuration(200) # Fast fade
+        self.resize_anim.setDuration(200)  # Fast fade
         self.resize_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
-        
+
         # Input number blink animation
         self._input_blink_opacity = 0.0
         self.input_blink_anim = QPropertyAnimation(self, b"input_blink_opacity")
@@ -217,20 +227,20 @@ class DashboardButton(QFrame):
         self.input_blink_anim.setKeyValueAt(0, 0.0)
         self.input_blink_anim.setKeyValueAt(0.5, 0.3)
         self.input_blink_anim.setKeyValueAt(1, 0.0)
-        
+
         # Input number arrow hover animation
         self._arrow_opacity = 0.0
         self.arrow_anim = QPropertyAnimation(self, b"arrow_opacity")
         self.arrow_anim.setDuration(200)
         self.arrow_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
-        
+
         # Click feedback animation
         self._content_opacity = 0.0
         self._anim_progress = 0.0
         self.anim = QPropertyAnimation(self, b"anim_progress")
-        self.anim.setDuration(1500) # Slower, more elegant
+        self.anim.setDuration(1500)  # Slower, more elegant
         self.anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
-        
+
         # Script pulse animation
         self._pulse_opacity = 0.0
         self.pulse_anim = QPropertyAnimation(self, b"pulse_opacity")
@@ -243,10 +253,14 @@ class DashboardButton(QFrame):
         # a quick fade marking a live push from Home Assistant landed on this tile.
         self._refresh_flash_opacity = 0.0  # current dot opacity (0 = invisible, 1 = fully lit); animated below
         self.refresh_flash_anim = QPropertyAnimation(self, b"refresh_flash_opacity")
-        self.refresh_flash_anim.setDuration(500)  # <-- HOW LONG THE FLASH LASTS, in milliseconds. Raise this to make it linger longer (e.g. 10000 = 10s for screenshots), lower it for a quicker blink.
+        self.refresh_flash_anim.setDuration(
+            500
+        )  # <-- HOW LONG THE FLASH LASTS, in milliseconds. Raise this to make it linger longer (e.g. 10000 = 10s for screenshots), lower it for a quicker blink.
         self.refresh_flash_anim.setStartValue(1.0)  # opacity at the moment of the flash: 1.0 = fully visible
         self.refresh_flash_anim.setEndValue(0.0)  # opacity once the fade finishes: 0.0 = fully faded out
-        self.refresh_flash_anim.setEasingCurve(QEasingCurve.Type.OutCubic)  # shape of the fade over time: OutCubic = fast at first, then eases out gently (not a constant/linear fade)
+        self.refresh_flash_anim.setEasingCurve(
+            QEasingCurve.Type.OutCubic
+        )  # shape of the fade over time: OutCubic = fast at first, then eases out gently (not a constant/linear fade)
 
         # Perimeter progress animation
         self._perimeter_fraction = 0.0
@@ -269,11 +283,11 @@ class DashboardButton(QFrame):
         # Bounce animation on click
         self._bounce_offset = 0.0
         self.bounce_anim = QPropertyAnimation(self, b"bounce_offset")
-        
+
         # Long press timer
         self._long_press_timer = QTimer(self)
         self._long_press_timer.setSingleShot(True)
-        self._long_press_timer.setInterval(300) # 300ms hold
+        self._long_press_timer.setInterval(300)  # 300ms hold
         self._long_press_timer.timeout.connect(self._on_long_press)
         self._ignore_release = False
 
@@ -313,7 +327,7 @@ class DashboardButton(QFrame):
         # Context menu
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
-        
+
         # Single compositing effect — handles both drag-fade and spring-resize
         self._morph_eff = ButtonMorphEffect(self)
         self._morph_eff.setEnabled(False)
@@ -330,7 +344,7 @@ class DashboardButton(QFrame):
         self.morph_y_anim.setEasingCurve(_morph_easing)
         self.morph_x_anim.finished.connect(self._on_morph_finished)
         self.morph_y_anim.finished.connect(self._on_morph_finished)
-        
+
     def set_faded(self, opacity: float):
         """Set drag-fade level (0.0–1.0). Auto-enables the morph effect when needed."""
         if not hasattr(self, '_morph_eff'):
@@ -343,27 +357,27 @@ class DashboardButton(QFrame):
         # making the fade look stepped/janky.
         self._morph_eff.set_opacity_prop(max(0.0, min(1.0, opacity)))
         self._morph_eff._refresh_enabled()
-            
+
     def set_opacity(self, opacity: float):
         """Standard public method for setting overall button opacity."""
         self.set_faded(opacity)
-        
+
     def get_anim_progress(self):
         return self._anim_progress
-        
+
     def set_anim_progress(self, val):
         self._anim_progress = val
-        self.update() # Trigger repaint
-        
+        self.update()  # Trigger repaint
+
     anim_progress = pyqtProperty(float, get_anim_progress, set_anim_progress)
 
     def get_pulse_opacity(self):
         return self._pulse_opacity
-        
+
     def set_pulse_opacity(self, val):
         self._pulse_opacity = val
-        self.update() 
-        
+        self.update()
+
     pulse_opacity = pyqtProperty(float, get_pulse_opacity, set_pulse_opacity)
 
     def get_refresh_flash_opacity(self):
@@ -396,16 +410,16 @@ class DashboardButton(QFrame):
         self.update()
 
     resize_handle_opacity = pyqtProperty(float, get_resize_handle_opacity, set_resize_handle_opacity)
-    
+
     def get_input_blink_opacity(self):
         return self._input_blink_opacity
-        
+
     def set_input_blink_opacity(self, val):
         self._input_blink_opacity = val
         self.update()
-        
+
     input_blink_opacity = pyqtProperty(float, get_input_blink_opacity, set_input_blink_opacity)
-    
+
     def get_arrow_opacity(self):
         return self._arrow_opacity
 
@@ -461,7 +475,7 @@ class DashboardButton(QFrame):
         self.layout().setContentsMargins(left, m + int(val), m, m - int(val))
 
     bounce_offset = pyqtProperty(float, get_bounce_offset, set_bounce_offset)
-    
+
     def get_show_dimming(self):
         return self._show_dimming
 
@@ -512,7 +526,7 @@ class DashboardButton(QFrame):
 
         # Re-apply camera image to fit new size immediately
         if self._last_camera_pixmap and not self._last_camera_pixmap.isNull():
-             self.set_camera_image(self._last_camera_pixmap)
+            self.set_camera_image(self._last_camera_pixmap)
 
         # Force content update to adapt layout (1x1 -> 2x1 etc)
         self.update_content()
@@ -530,8 +544,10 @@ class DashboardButton(QFrame):
 
     def _on_morph_finished(self):
         """Disable the morph effect once both animations have settled to 1.0."""
-        if (self.morph_x_anim.state() != QPropertyAnimation.State.Running and
-                self.morph_y_anim.state() != QPropertyAnimation.State.Running):
+        if (
+            self.morph_x_anim.state() != QPropertyAnimation.State.Running
+            and self.morph_y_anim.state() != QPropertyAnimation.State.Running
+        ):
             self._morph_eff._sx = 1.0
             self._morph_eff._sy = 1.0
             self._morph_eff._refresh_enabled()
@@ -546,56 +562,55 @@ class DashboardButton(QFrame):
         self.anim.setStartValue(0.0)
         self.anim.setEndValue(1.0)
         self.anim.start()
-    
+
     def setup_ui(self):
         """Setup the button UI."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(4)
-        
+
         # Value label (for widgets) or icon area
         self.value_label = QLabel()
         self.value_label.setObjectName("valueLabel")
         self.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.value_label.setTextFormat(Qt.TextFormat.PlainText) # Security: Prevent HTML injection
+        self.value_label.setTextFormat(Qt.TextFormat.PlainText)  # Security: Prevent HTML injection
         font = QFont(SYSTEM_FONT, 16, QFont.Weight.Bold)
         self.value_label.setFont(font)
         self.value_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        
+
         # Name label
         self.name_label = QLabel()
         self.name_label.setObjectName("nameLabel")
         self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.name_label.setTextFormat(Qt.TextFormat.PlainText) # Security: Prevent HTML injection
+        self.name_label.setTextFormat(Qt.TextFormat.PlainText)  # Security: Prevent HTML injection
         self.name_label.setWordWrap(True)  # Enable text wrapping for long labels
         self.name_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         name_font = QFont(SYSTEM_FONT, 9)
         self.name_label.setFont(name_font)
-        
+
         # Add drop shadows for readability on colored backgrounds
         self._shadow_val = QGraphicsDropShadowEffect()
         self._shadow_val.setBlurRadius(4)
         self._shadow_val.setColor(QColor(0, 0, 0, 140))
         self._shadow_val.setOffset(0, 1)
         self.value_label.setGraphicsEffect(self._shadow_val)
-        
+
         self._shadow_name = QGraphicsDropShadowEffect()
         self._shadow_name.setBlurRadius(4)
         self._shadow_name.setColor(QColor(0, 0, 0, 140))
         self._shadow_name.setOffset(0, 1)
         self.name_label.setGraphicsEffect(self._shadow_name)
-        
+
         layout.addStretch(1)
         layout.addWidget(self.value_label)
         layout.addWidget(self.name_label)
         layout.addStretch(1)
-        
 
         self.setFixedSize(90 * self.span_x + (8 * (self.span_x - 1)), 80 * self.span_y + (8 * (self.span_y - 1)))
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        
+
         self.update_content()
-    
+
     def play_entry_animation(self):
         """Sweep gauge/perimeter/sun from zero to their current value."""
         style = self.config.get('display_style', '')
@@ -664,7 +679,7 @@ class DashboardButton(QFrame):
             return
 
         btn_type = self.config.get('type', 'switch')
-        
+
         # Dispatch to specific view updaters
         if btn_type == 'weather':
             self._update_weather_view()
@@ -702,7 +717,7 @@ class DashboardButton(QFrame):
             self._update_pin_window_view()
         else:
             self._update_default_view(btn_type)
-            
+
         self.style().unpolish(self)
         self.style().polish(self)
         self._update_anim_bg_timer()
@@ -717,9 +732,8 @@ class DashboardButton(QFrame):
     def _update_anim_bg_timer(self):
         """Start or stop the animated background timer based on current state."""
         should_run = (
-            (self.config.get('type') == 'media_player' and self.config.get('animated_bg', True))
-            or self.config.get('type') == 'sun'
-        )
+            self.config.get('type') == 'media_player' and self.config.get('animated_bg', True)
+        ) or self.config.get('type') == 'sun'
         if should_run and not self._anim_bg_timer.isActive():
             self._anim_bg_timer.start()
         elif not should_run and self._anim_bg_timer.isActive():
@@ -734,13 +748,12 @@ class DashboardButton(QFrame):
 
     def _ensure_anim_bg_layers(self, seed: int):
         """Regenerate animated background layers if cache is stale."""
-        light_mode = bool(
-            self.theme_manager and self.theme_manager.get_effective_theme() == 'light'
-        )
+        light_mode = bool(self.theme_manager and self.theme_manager.get_effective_theme() == 'light')
         cache_key = (seed, self.width(), self.height(), light_mode)
         if self._anim_bg_cache_key == cache_key and self._anim_bg_layers is not None:
             return
         from ui.visuals.background_generator import BackgroundGenerator
+
         self._anim_bg_layers = BackgroundGenerator.generate_layers(
             self.width(), self.height(), seed=seed, light_mode=light_mode
         )
@@ -767,11 +780,7 @@ class DashboardButton(QFrame):
 
         # Gauge 2x1+ reserves a left margin sized from the current width/height.
         # Recompute on resize so the right-hand QLabels don't overlap the arc.
-        if (
-            self.config.get('type') == 'widget'
-            and self.config.get('display_style') == 'gauge'
-            and self.span_x >= 2
-        ):
+        if self.config.get('type') == 'widget' and self.config.get('display_style') == 'gauge' and self.span_x >= 2:
             arc_size = max(min(self.height() - 16, self.width() // 2 - 10), 32)
             new_left = arc_size + 16
             if new_left != getattr(self, '_content_left_margin', 8):
@@ -808,7 +817,7 @@ class DashboardButton(QFrame):
         state_obj = self._value if isinstance(self._value, dict) else {}
         state_str = state_obj.get('state', 'unknown')
         attrs = state_obj.get('attributes', {})
-        
+
         temp = attrs.get('temperature', '--')
         emoji = self._get_weather_emoji(state_str)
         temp_str = format_temperature(
@@ -817,15 +826,15 @@ class DashboardButton(QFrame):
             self.temperature_unit_preference,
             precision=1,
         )
-        
+
         is_huge = self.span_x >= 2 and self.span_y >= 2
         is_wide = self.span_x >= 2
         is_tall = self.span_y >= 2
-        
+
         # On Linux, we use MDI icons which need to be in a specific font family
         # We wrap them in a span with the correct font family
         is_linux = sys.platform.startswith('linux')
-        
+
         if is_huge:
             humidity = attrs.get('humidity', '--')
             wind = attrs.get('wind_speed', '--')
@@ -837,7 +846,11 @@ class DashboardButton(QFrame):
 
             # Use different font size/styling for MDI vs Emoji
             mdi_family = get_mdi_font().family()
-            emoji_html = f"<span style='font-family: \"{mdi_family}\"; font-size: 40px;'>{emoji}</span>" if is_linux else f"{emoji}"
+            emoji_html = (
+                f"<span style='font-family: \"{mdi_family}\"; font-size: 40px;'>{emoji}</span>"
+                if is_linux
+                else f"{emoji}"
+            )
 
             # Escape HA-derived values before interpolating into RichText (emoji
             # is from a fixed internal mapping, so it's safe as-is).
@@ -848,12 +861,14 @@ class DashboardButton(QFrame):
             )
             self.value_label.setTextFormat(Qt.TextFormat.RichText)
             self.value_label.setText(text)
-            self.value_label.setFont(QFont(SYSTEM_FONT, 12)) 
+            self.value_label.setFont(QFont(SYSTEM_FONT, 12))
         elif is_tall and not is_wide:
             self.value_label.setTextFormat(Qt.TextFormat.RichText if is_linux else Qt.TextFormat.PlainText)
             if is_linux:
                 mdi_family = get_mdi_font().family()
-                emoji_html = f"<div style='font-family: \"{mdi_family}\"; font-size: 40px; margin-bottom: 5px;'>{emoji}</div>"
+                emoji_html = (
+                    f"<div style='font-family: \"{mdi_family}\"; font-size: 40px; margin-bottom: 5px;'>{emoji}</div>"
+                )
                 self.value_label.setText(f"{emoji_html}{html.escape(str(temp_str))}")
             else:
                 self.value_label.setText(f"{emoji}\n{temp_str}")
@@ -872,13 +887,13 @@ class DashboardButton(QFrame):
             # Small buttons: just temp
             self.value_label.setText(temp_str)
             self.value_label.setFont(QFont(SYSTEM_FONT, 22, QFont.Weight.Bold))
-        
+
         if label:
             self.name_label.setText(label)
             self.name_label.show()
         else:
             self.name_label.hide()
-            
+
         self.setProperty("type", "weather")
         self.value_label.show()
 
@@ -908,9 +923,9 @@ class DashboardButton(QFrame):
         self.name_label.setText(label)
         self.setProperty("type", "widget")
 
-        gauge_tall_1col = (style == 'gauge' and self.span_x == 1 and self.span_y >= 2)
-        gauge_2xplus = (style == 'gauge' and self.span_x >= 2)
-        gauge_1x1 = (style == 'gauge' and not gauge_2xplus and not gauge_tall_1col)
+        gauge_tall_1col = style == 'gauge' and self.span_x == 1 and self.span_y >= 2
+        gauge_2xplus = style == 'gauge' and self.span_x >= 2
+        gauge_1x1 = style == 'gauge' and not gauge_2xplus and not gauge_tall_1col
 
         # Default stretch config (top-stretch + labels + bottom-stretch centers content).
         top_stretch, bottom_stretch = 1, 1
@@ -972,12 +987,12 @@ class DashboardButton(QFrame):
         """Update view for input_number entities."""
         label = self.config.get('label', '')
         self.value_label.setFont(QFont(SYSTEM_FONT, 18, QFont.Weight.Bold))
-        
+
         state_obj = self._value if isinstance(self._value, dict) else {}
         val = state_obj.get('state', '--')
         attrs = state_obj.get('attributes', {})
         unit = attrs.get('unit_of_measurement', '')
-        
+
         try:
             f_val = float(val)
             step = float(attrs.get('step', 1.0))
@@ -994,7 +1009,7 @@ class DashboardButton(QFrame):
                 display_val = f"{formatted_num}{unit}"
         except (ValueError, TypeError):
             display_val = f"{val}{unit}"
-            
+
         self.value_label.setText(display_val)
         self.name_label.setText(label)
         self.setProperty("type", "input_number")
@@ -1013,15 +1028,15 @@ class DashboardButton(QFrame):
     def _update_curtain_view(self):
         label = self.config.get('label', '')
         self.value_label.setFont(get_mdi_font(26))
-        
+
         icon_name = self.config.get('icon') or self._ha_icon
         icon_char = get_icon(icon_name) if icon_name else None
-        
+
         if icon_char:
             icon = icon_char
         else:
             icon = Icons.BLINDS_OPEN if self._state == "open" else Icons.BLINDS
-            
+
         self.value_label.setText(icon)
         self.name_label.setText(label)
         self.setProperty("type", "curtain")
@@ -1050,10 +1065,10 @@ class DashboardButton(QFrame):
         """Helper for simple icon+label buttons."""
         label = self.config.get('label', '')
         self.value_label.setFont(get_mdi_font(26))
-        
+
         icon_name = self.config.get('icon') or self._ha_icon
         icon_char = get_icon(icon_name) if icon_name else None
-        
+
         self.value_label.setText(icon_char if icon_char else default_icon)
         self.name_label.setText(label)
         self.setProperty("type", type_name)
@@ -1070,7 +1085,7 @@ class DashboardButton(QFrame):
         self.value_label.hide()
         self.name_label.hide()
         self.setProperty("type", "camera")
-        
+
         if not self._cached_display_pixmap or self._cached_display_pixmap.isNull():
             self.value_label.show()
             self.value_label.setFont(get_mdi_font(26))
@@ -1146,27 +1161,27 @@ class DashboardButton(QFrame):
         """Default view for switch, light, lock, etc."""
         label = self.config.get('label', '')
         self.value_label.setFont(get_mdi_font(26))
-        
+
         icon_name = self.config.get('icon') or self._ha_icon
         icon_char = get_icon(icon_name) if icon_name else None
-        
+
         if icon_char:
             icon = icon_char
         else:
             icon = get_icon_for_type(btn_type, self._state)
-            
+
         self.value_label.setText(icon)
         self.name_label.setText(label)
-        self.setProperty("type", btn_type) 
+        self.setProperty("type", btn_type)
         self.value_label.show()
         self.name_label.show()
-    
+
     def set_state(self, state: str):
         """Set the state (on/off) for switches."""
         self._state = state
         self.update_content()
         self.update_style()
-    
+
     def set_value(self, value):
         """Update button value (sensor reading, etc)."""
         if self._value != value:
@@ -1180,14 +1195,12 @@ class DashboardButton(QFrame):
             # Only update content if we are NOT using a custom icon
             if not self.config.get('icon'):
                 self.update_content()
-    
+
     def set_media_state(self, state: dict):
         """Set the full media player state."""
         self._media_state = state
         self._state = state.get('state', 'idle')
-        
 
-        
         # Update tooltip
         attrs = state.get('attributes', {})
         title = attrs.get('media_title', '')
@@ -1198,7 +1211,7 @@ class DashboardButton(QFrame):
             self.setToolTip(t("dashboard_button.media.now_playing", info=title))
         else:
             self.setToolTip('')
-        
+
         self.update_content()
         self.update_style()
         self.update()  # Trigger repaint for custom painting
@@ -1222,13 +1235,13 @@ class DashboardButton(QFrame):
         # Stop animations and reset counters
         self.anim.stop()
         self._anim_progress = 0.0
-        
+
         self.input_blink_anim.stop()
         self._input_blink_opacity = 0.0
-        
+
         self.arrow_anim.stop()
         self._arrow_opacity = 0.0
-        
+
         self.pulse_anim.stop()
         self._pulse_opacity = 0.0
 
@@ -1237,10 +1250,10 @@ class DashboardButton(QFrame):
 
         self.resize_anim.stop()
         self._resize_handle_opacity = 0.0
-        
+
         self.bounce_anim.stop()
         self.set_bounce_offset(0.0)
-        
+
         self.update_content()
         self.update_style()
 
@@ -1251,12 +1264,12 @@ class DashboardButton(QFrame):
 
         attributes = state.get('attributes', {})
         btn_type = self.config.get('type', 'switch')
-        
+
         # Pass HA icon to button (if available)
         icon = attributes.get('icon')
         if icon:
             self.set_ha_icon(icon)
-        
+
         if btn_type == 'widget':
             # Update sensor value
             value = state.get('state', '--')
@@ -1320,10 +1333,10 @@ class DashboardButton(QFrame):
         elif btn_type == 'sun':
             self.sun_state = state.get('state', 'unknown')
             attrs = state.get('attributes', {})
-            self.sun_next_rising  = attrs.get('next_rising')
+            self.sun_next_rising = attrs.get('next_rising')
             self.sun_next_setting = attrs.get('next_setting')
-            self.sun_elevation    = float(attrs.get('elevation', 0.0))
-            self.sun_rising       = bool(attrs.get('rising', False))
+            self.sun_elevation = float(attrs.get('elevation', 0.0))
+            self.sun_rising = bool(attrs.get('rising', False))
             self.update()
         elif btn_type == 'automation':
             # Update automation state (on/off)
@@ -1331,7 +1344,7 @@ class DashboardButton(QFrame):
         else:
             # Update switch/light/fan/script/scene/lock state
             self.set_state(state.get('state', 'off'))
-            
+
             # Capture brightness for dimming effect
             self._brightness = attributes.get('brightness', 255)
             # Re-apply style if dimming enabled and brightness changed
@@ -1347,7 +1360,7 @@ class DashboardButton(QFrame):
     def _get_weather_emoji(self, state: str) -> str:
         """Map HA weather state to emoji (or MDI icon on Linux)."""
         is_linux = sys.platform.startswith('linux')
-        
+
         if is_linux:
             # Map to MDI icons
             mapping = {
@@ -1365,9 +1378,9 @@ class DashboardButton(QFrame):
                 'sunny': Icons.WEATHER_SUNNY,
                 'windy': Icons.WEATHER_WINDY,
                 'windy-variant': Icons.WEATHER_WINDY_VARIANT,
-                'exceptional': Icons.ALERT_CIRCLE
+                'exceptional': Icons.ALERT_CIRCLE,
             }
-            return mapping.get(state, Icons.WEATHER_CLOUDY) # Default to cloudy/unknown
+            return mapping.get(state, Icons.WEATHER_CLOUDY)  # Default to cloudy/unknown
         else:
             # Simple mapping
             mapping = {
@@ -1385,29 +1398,29 @@ class DashboardButton(QFrame):
                 'sunny': '☀️',
                 'windy': '💨',
                 'windy-variant': '🌬️',
-                'exceptional': '⚠️'
+                'exceptional': '⚠️',
             }
             return mapping.get(state, 'Unknown')
-    
+
     def set_camera_image(self, pixmap):
         """Set camera image from QPixmap."""
         self._last_camera_pixmap = pixmap
-        
+
         if not pixmap or pixmap.isNull():
             return
-        
+
         # Scale and crop to fill button with rounded corners
         btn_size = self.size()
         if btn_size.isEmpty():
             return
-            
+
         # 1. Cache Path (Avoid QPainterPath recreation)
         if not hasattr(self, '_cached_path') or getattr(self, '_cached_path_size', None) != btn_size:
             self._cached_path = QPainterPath()
             self._cached_path.addRoundedRect(QRectF(0, 0, btn_size.width(), btn_size.height()), 12, 12)
             self._cached_path_size = btn_size
             # Invalidate pixmap cache if size changed
-            self._cached_display_pixmap = None 
+            self._cached_display_pixmap = None
 
         # 2. Reuse Pixmap (Avoid QPixmap recreation)
         if self._cached_display_pixmap and self._cached_display_pixmap.size() == btn_size:
@@ -1417,44 +1430,37 @@ class DashboardButton(QFrame):
             self._cached_display_pixmap = rounded
 
         rounded.fill(Qt.GlobalColor.transparent)
-        
+
         # 3. Direct Draw (Avoid scaled/cropped intermediate Pixmaps)
         # Calculate aspect-ratio-preserving crop (Cover mode)
         img_w = pixmap.width()
         img_h = pixmap.height()
         btn_w = btn_size.width()
         btn_h = btn_size.height()
-        
+
         # Scale to strictly cover the button
         scale = max(btn_w / img_w, btn_h / img_h)
-        
+
         # Calculate the source rectangle (portion of image to use)
         src_w = btn_w / scale
         src_h = btn_h / scale
         src_x = (img_w - src_w) / 2
         src_y = (img_h - src_h) / 2
-        
+
         painter = QPainter(rounded)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setClipPath(self._cached_path)
         # Draw directly from source to target, letting QPainter handle scaling/cropping
-        painter.drawPixmap(
-            QRectF(0, 0, btn_w, btn_h), 
-            pixmap, 
-            QRectF(src_x, src_y, src_w, src_h)
-        )
+        painter.drawPixmap(QRectF(0, 0, btn_w, btn_h), pixmap, QRectF(src_x, src_y, src_w, src_h))
         painter.end()
-        
+
         self.value_label.hide()
         self.name_label.hide()
         self.update()
-    
+
     def update_style(self):
         """Update visual style based on state and theme."""
-        effective_theme = (
-            self.theme_manager.get_effective_theme()
-            if self.theme_manager else 'dark'
-        )
+        effective_theme = self.theme_manager.get_effective_theme() if self.theme_manager else 'dark'
         fp = (
             self.config.get('type'),
             self.config.get('color'),
@@ -1474,10 +1480,10 @@ class DashboardButton(QFrame):
     def invalidate_style_cache(self):
         self._style_fp = None
         self._content_fp = None
-    
+
     def _update_label_shadows(self):
         """Adjust drop shadow intensity for light vs dark theme."""
-        is_light = (self.theme_manager and self.theme_manager.get_effective_theme() == 'light')
+        is_light = self.theme_manager and self.theme_manager.get_effective_theme() == 'light'
         if is_light:
             # Light mode: very subtle shadow to avoid blurry text
             shadow_color = QColor(0, 0, 0, 30)
@@ -1486,42 +1492,43 @@ class DashboardButton(QFrame):
             # Dark mode: stronger shadow for readability on colored backgrounds
             shadow_color = QColor(0, 0, 0, 140)
             blur = 4
-        
+
         if hasattr(self, '_shadow_val'):
             self._shadow_val.setColor(shadow_color)
             self._shadow_val.setBlurRadius(blur)
         if hasattr(self, '_shadow_name'):
             self._shadow_name.setColor(shadow_color)
             self._shadow_name.setBlurRadius(blur)
-    
+
     def paintEvent(self, event):
         """Custom paint event for effects."""
         # First draw normal style (background)
         super().paintEvent(event)
         # Delegate painting logic to helper
         DashboardButtonPainter.paint(self, event)
-    
+
     def set_border_effect(self, effect: str):
         self._border_effect = effect
         self.update()
 
     def _on_long_press(self):
         """Handle long press: Start dimmer, climate, or volume if applicable."""
-        if not self.config: return
-        
+        if not self.config:
+            return
+
         btn_type = self.config.get('type', 'switch')
-        
+
         if hasattr(self, 'bounce_anim') and self._bounce_offset > 0:
             self.bounce_anim.stop()
             self.bounce_anim.setDuration(300)
             self.bounce_anim.setEasingCurve(QEasingCurve.Type.OutBack)
             self.bounce_anim.setEndValue(0.0)
             self.bounce_anim.start()
-        
+
         # Get absolute coordinates
-        global_pos = self.mapToGlobal(QPoint(0,0))
+        global_pos = self.mapToGlobal(QPoint(0, 0))
         rect = QRect(global_pos, self.size())
-        
+
         if btn_type == 'switch':
             # Lights show dimmer overlay
             entity_id = self.config.get('entity_id', '')
@@ -1599,12 +1606,12 @@ class DashboardButton(QFrame):
         if event.button() == Qt.MouseButton.LeftButton:
             # Use global position for resizing to handle widget movement reflow
             self._drag_start_pos = event.globalPosition().toPoint()
-            
+
             # Check if clicking functionality (handle)
             rect = self.rect()
             size = 28
             in_corner = (event.pos().x() >= rect.width() - size) and (event.pos().y() >= rect.height() - size)
-            
+
             if in_corner and self._resize_handle_opacity > 0.0:
                 self._is_resizing = True
                 self._resize_start_span = (self.span_x, self.span_y)
@@ -1612,18 +1619,18 @@ class DashboardButton(QFrame):
             else:
                 self._is_resizing = False
                 self._ignore_release = False
-                
+
                 # Setup input_number drag
                 if self.config and self.config.get('type') == 'input_number':
                     state_obj = self._value if isinstance(self._value, dict) else {}
                     try:
                         self._input_start_val = float(state_obj.get('state', 0.0))
-                        
+
                         y_pos = event.pos().y()
                         x_pos = event.pos().x()
                         h = self.height()
                         w = self.width()
-                        
+
                         if self.span_y == 1:
                             if self.span_x == 1:
                                 # 1x1: no click zones, pure drag interaction
@@ -1631,11 +1638,11 @@ class DashboardButton(QFrame):
                             else:
                                 # 1x height uses left/right arrows
                                 if x_pos < w * 0.25:
-                                    self._step_input_number(-1) # left = down
+                                    self._step_input_number(-1)  # left = down
                                     self._ignore_release = True
                                     return
                                 elif x_pos > w * 0.75:
-                                    self._step_input_number(1) # right = up
+                                    self._step_input_number(1)  # right = up
                                     self._ignore_release = True
                                     return
                         else:
@@ -1648,7 +1655,7 @@ class DashboardButton(QFrame):
                                 self._step_input_number(-1)
                                 self._ignore_release = True
                                 return
-                            
+
                     except (ValueError, TypeError):
                         pass
 
@@ -1687,50 +1694,57 @@ class DashboardButton(QFrame):
         """Handle drag start and hover effects."""
         # Check for resize handle hover (only for configured buttons, not Add buttons)
         is_configured = self.config and (self.config.get('entity_id') or self.config.get('type') == 'pin_window')
-        
+
         if not self._drag_start_pos:
             rect = self.rect()
-            size = 28 
-            in_corner = is_configured and (event.pos().x() >= rect.width() - size) and (event.pos().y() >= rect.height() - size)
-            
+            size = 28
+            in_corner = (
+                is_configured and (event.pos().x() >= rect.width() - size) and (event.pos().y() >= rect.height() - size)
+            )
+
             # Simplified Logic: If in corner, fade in. If not, fade out.
             # Only trigger if not already at target state or moving towards it.
-            
+
             if in_corner:
-                 self._fade_resize_handle(1.0)
-                 self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+                self._fade_resize_handle(1.0)
+                self.setCursor(Qt.CursorShape.SizeFDiagCursor)
             else:
-                 self._fade_resize_handle(0.0)
-                 self.unsetCursor() # Use unsetCursor to revert to parent/default instead of forcing Hand
-        
+                self._fade_resize_handle(0.0)
+                self.unsetCursor()  # Use unsetCursor to revert to parent/default instead of forcing Hand
+
         if not (event.buttons() & Qt.MouseButton.LeftButton):
             return
         if not self._drag_start_pos:
             return
-            
+
         # Prevent dragging "Add" buttons (empty config)
         if not self.config:
             return
-            
+
         # Input Number Drag (only after long press activates scrub mode)
-        if self.config.get('type') == 'input_number' and getattr(self, '_input_scrub_mode', False) and not self._is_resizing and not self._ignore_release:
+        if (
+            self.config.get('type') == 'input_number'
+            and getattr(self, '_input_scrub_mode', False)
+            and not self._is_resizing
+            and not self._ignore_release
+        ):
             current_global_pos = event.globalPosition().toPoint()
-            
+
             # Allow both horizontal and vertical scrubbing
-            dy = self._drag_start_pos.y() - current_global_pos.y() # Invert: drag up = positive
-            dx = current_global_pos.x() - self._drag_start_pos.x() # Right = positive
-            
+            dy = self._drag_start_pos.y() - current_global_pos.y()  # Invert: drag up = positive
+            dx = current_global_pos.x() - self._drag_start_pos.x()  # Right = positive
+
             # Use whichever delta is larger
             delta = dy if abs(dy) > abs(dx) else dx
-            
+
             if not self._input_changing and max(abs(dx), abs(dy)) > QApplication.startDragDistance():
                 self._input_changing = True
                 self._long_press_timer.stop()
-                
+
                 if hasattr(self, 'bounce_anim') and self._bounce_offset > 0:
                     self.bounce_anim.stop()
                     self.set_bounce_offset(0.0)
-            
+
             if self._input_changing:
                 state_obj = self._value if isinstance(self._value, dict) else {}
                 attrs = state_obj.get('attributes', {})
@@ -1738,43 +1752,43 @@ class DashboardButton(QFrame):
                     step = float(attrs.get('step', 1.0))
                     min_val = float(attrs.get('min', 0.0))
                     max_val = float(attrs.get('max', 100.0))
-                    
+
                     # 1 step per 15 pixels dragged
                     steps = int(delta / 15.0)
                     new_val = self._input_start_val + (steps * step)
                     new_val = max(min_val, min(max_val, new_val))
-                    
+
                     current_val = float(state_obj.get('state', 0.0))
-                    if abs(new_val - current_val) > 0.0001: # Check if actually changed
+                    if abs(new_val - current_val) > 0.0001:  # Check if actually changed
                         # Update local state
                         new_state_obj = dict(state_obj)
                         new_state_obj['state'] = str(new_val)
                         self._value = new_state_obj
                         self.update_content()
-                        
+
                         # Trigger blink
                         self.input_blink_anim.stop()
                         self.input_blink_anim.start()
                 except (ValueError, TypeError):
                     pass
             return
-            
+
         # Resize Logic
         if self._is_resizing:
             # Use distinct global pos diff
             current_global_pos = event.globalPosition().toPoint()
             diff = current_global_pos - self._drag_start_pos
-            
-            dx_steps = round(diff.x() / 90.0) # Approx cell width + gap
-            dy_steps = round(diff.y() / 90.0) 
-            
+
+            dx_steps = round(diff.x() / 90.0)  # Approx cell width + gap
+            dy_steps = round(diff.y() / 90.0)
+
             # Clamp per type
             btn_type = self.config.get('type', '')
             max_x = 2 if btn_type == 'sun' else 4
             max_y = 1 if btn_type == 'sun' else 2
             new_span_x = max(1, min(max_x, self._resize_start_span[0] + dx_steps))
             new_span_y = max(1, min(max_y, self._resize_start_span[1] + dy_steps))
-            
+
             if new_span_x != self.span_x or new_span_y != self.span_y:
                 self.resize_requested.emit(self.slot, new_span_x, new_span_y)
             return
@@ -1782,7 +1796,7 @@ class DashboardButton(QFrame):
         dist = (event.globalPosition().toPoint() - self._drag_start_pos).manhattanLength()
         if dist < QApplication.startDragDistance():
             return
-            
+
         # Drag started -> Cancel long press
         self._long_press_timer.stop()
         if self._lock_holding:
@@ -1790,19 +1804,19 @@ class DashboardButton(QFrame):
 
         if hasattr(self, 'bounce_anim') and self._bounce_offset > 0:
             self.bounce_anim.stop()
-            self.set_bounce_offset(0.0) # immediate snap back for drag
-        
+            self.set_bounce_offset(0.0)  # immediate snap back for drag
+
         # Proceed with drag
         drag = QDrag(self)
         mime_data = QMimeData()
-        
+
         data = QByteArray()
         stream = QDataStream(data, QIODevice.OpenModeFlag.WriteOnly)
         stream.writeInt32(self.slot)
         mime_data.setData(MIME_TYPE, data)
-        
+
         drag.setMimeData(mime_data)
-        
+
         # Build ghost pixmap: button content clipped to rounded rect
 
         ghost = QPixmap(self.size())
@@ -1821,6 +1835,7 @@ class DashboardButton(QFrame):
 
         # Gradually fade the original button to 50% over 400 ms
         import time as _time
+
         _fade_start = _time.monotonic()
         _fade_duration = 0.4
         _fade_timer = QTimer(self)
@@ -1840,19 +1855,19 @@ class DashboardButton(QFrame):
         _fade_timer.stop()
         self.set_faded(1.0)
         self.repaint()
-        
+
     def mouseReleaseEvent(self, event):
         """Handle click."""
         self._long_press_timer.stop()
         self._input_scrub_mode = False
-        
+
         if hasattr(self, 'bounce_anim') and self._bounce_offset > 0:
             self.bounce_anim.stop()
             self.bounce_anim.setDuration(300)
             self.bounce_anim.setEasingCurve(QEasingCurve.Type.OutBack)
             self.bounce_anim.setEndValue(0.0)
             self.bounce_anim.start()
-        
+
         if self._ignore_release:
             # Long press or arrow click consumed the event
             self._ignore_release = False
@@ -1883,103 +1898,103 @@ class DashboardButton(QFrame):
             return
 
         if self._drag_start_pos and event.button() == Qt.MouseButton.LeftButton:
-             if self.config:
-                 self.trigger_feedback() # Show feedback BEFORE emit
+            if self.config:
+                self.trigger_feedback()  # Show feedback BEFORE emit
 
-             # Sun is informational only — show feedback but no service call
-             if self.config and self.config.get('type') == 'sun':
-                 self._drag_start_pos = None
-                 super().mouseReleaseEvent(event)
-                 return
+            # Sun is informational only — show feedback but no service call
+            if self.config and self.config.get('type') == 'sun':
+                self._drag_start_pos = None
+                super().mouseReleaseEvent(event)
+                return
 
-             # Media Player Logic
-             if self.config and self.config.get('type') == 'media_player':
-                 x = event.pos().x()
-                 y = event.pos().y()
-                 w = self.width()
-                 h = self.height()
-                 is_huge = self.span_x >= 2 and self.span_y >= 2
-                 is_tall = self.span_y >= 2 and self.span_x < 2
-                 is_wide = self.span_x >= 2
-                 
-                 if is_huge:
-                     # 2x2: Controls in center (redesigned)
-                     # Hit area: +/- 30px from center
-                     center_y = h // 2
-                     if center_y - 30 <= y <= center_y + 30:
-                         if x < w / 3:
-                             self.clicked.emit({**self.config, 'action': 'media_previous_track'})
-                         elif x > (w / 3) * 2:
-                             self.clicked.emit({**self.config, 'action': 'media_next_track'})
-                         else:
-                             self.clicked.emit({**self.config, 'action': 'media_play_pause'})
-                     else:
-                         # Top/Bottom click -> play/pause (or future detail view)
-                         self.clicked.emit({**self.config, 'action': 'media_play_pause'})
-                 elif is_tall:
-                     # 1x2: Top half = play/pause, bottom half = prev/next
-                     if y < h / 2:
-                         self.clicked.emit({**self.config, 'action': 'media_play_pause'})
-                     else:
-                         if x < w / 2:
-                             self.clicked.emit({**self.config, 'action': 'media_previous_track'})
-                         else:
-                             self.clicked.emit({**self.config, 'action': 'media_next_track'})
-                 elif is_wide:
-                     # 2x1: Thirds
-                     if x < w / 3:
-                         self.clicked.emit({**self.config, 'action': 'media_previous_track'})
-                     elif x > (w / 3) * 2:
-                         self.clicked.emit({**self.config, 'action': 'media_next_track'})
-                     else:
-                         self.clicked.emit({**self.config, 'action': 'media_play_pause'})
-                 else:
-                     # 1x1: Play/Pause
-                     self.clicked.emit({**self.config, 'action': 'media_play_pause'})
-                 
-                 self._drag_start_pos = None
-                 super().mouseReleaseEvent(event)
-                 return
+            # Media Player Logic
+            if self.config and self.config.get('type') == 'media_player':
+                x = event.pos().x()
+                y = event.pos().y()
+                w = self.width()
+                h = self.height()
+                is_huge = self.span_x >= 2 and self.span_y >= 2
+                is_tall = self.span_y >= 2 and self.span_x < 2
+                is_wide = self.span_x >= 2
 
-             # Script/Scene: Trigger pulse animation
-             if self.config and self.config.get('type') in ['script', 'scene']:
-                 self.pulse_anim.stop()
-                 self.pulse_anim.start()
-             
-             # Climate widgets open overlay on normal click
-             if self.config and self.config.get('type') == 'climate':
-                 global_pos = self.mapToGlobal(QPoint(0,0))
-                 rect = QRect(global_pos, self.size())
-                 self.climate_requested.emit(self.slot, rect)
-             elif self.config and self.config.get('type') == 'weather':
-                 global_pos = self.mapToGlobal(QPoint(0,0))
-                 rect = QRect(global_pos, self.size())
-                 self.weather_requested.emit(self.slot, rect)
-             elif self.config and self.config.get('type') == 'camera':
-                 global_pos = self.mapToGlobal(QPoint(0,0))
-                 rect = QRect(global_pos, self.size())
-                 self.camera_requested.emit(self.slot, rect, self.config)
-             elif self.config and self.config.get('type') == '3d_printer':
-                 global_pos = self.mapToGlobal(QPoint(0,0))
-                 rect = QRect(global_pos, self.size())
-                 self.printer_requested.emit(self.slot, rect, self.config)
-             elif self.config and self.config.get('type') == 'lawn_mower':
-                 global_pos = self.mapToGlobal(QPoint(0,0))
-                 rect = QRect(global_pos, self.size())
-                 self.mower_requested.emit(self.slot, rect)
-             elif self.config and self.config.get('type') == 'vacuum':
-                 global_pos = self.mapToGlobal(QPoint(0,0))
-                 rect = QRect(global_pos, self.size())
-                 self.vacuum_requested.emit(self.slot, rect)
-             elif self.config and self.config.get('type') == 'alarm_control_panel':
-                 global_pos = self.mapToGlobal(QPoint(0,0))
-                 rect = QRect(global_pos, self.size())
-                 self.alarm_requested.emit(self.slot, rect)
-             elif self.config and self.config.get('type') == 'lock':
-                 # Toggle lock state
-                 self.clicked.emit({**self.config, 'action': self._lock_resolve_action()})
-             else:
-                 self.clicked.emit(self.config)
+                if is_huge:
+                    # 2x2: Controls in center (redesigned)
+                    # Hit area: +/- 30px from center
+                    center_y = h // 2
+                    if center_y - 30 <= y <= center_y + 30:
+                        if x < w / 3:
+                            self.clicked.emit({**self.config, 'action': 'media_previous_track'})
+                        elif x > (w / 3) * 2:
+                            self.clicked.emit({**self.config, 'action': 'media_next_track'})
+                        else:
+                            self.clicked.emit({**self.config, 'action': 'media_play_pause'})
+                    else:
+                        # Top/Bottom click -> play/pause (or future detail view)
+                        self.clicked.emit({**self.config, 'action': 'media_play_pause'})
+                elif is_tall:
+                    # 1x2: Top half = play/pause, bottom half = prev/next
+                    if y < h / 2:
+                        self.clicked.emit({**self.config, 'action': 'media_play_pause'})
+                    else:
+                        if x < w / 2:
+                            self.clicked.emit({**self.config, 'action': 'media_previous_track'})
+                        else:
+                            self.clicked.emit({**self.config, 'action': 'media_next_track'})
+                elif is_wide:
+                    # 2x1: Thirds
+                    if x < w / 3:
+                        self.clicked.emit({**self.config, 'action': 'media_previous_track'})
+                    elif x > (w / 3) * 2:
+                        self.clicked.emit({**self.config, 'action': 'media_next_track'})
+                    else:
+                        self.clicked.emit({**self.config, 'action': 'media_play_pause'})
+                else:
+                    # 1x1: Play/Pause
+                    self.clicked.emit({**self.config, 'action': 'media_play_pause'})
+
+                self._drag_start_pos = None
+                super().mouseReleaseEvent(event)
+                return
+
+            # Script/Scene: Trigger pulse animation
+            if self.config and self.config.get('type') in ['script', 'scene']:
+                self.pulse_anim.stop()
+                self.pulse_anim.start()
+
+            # Climate widgets open overlay on normal click
+            if self.config and self.config.get('type') == 'climate':
+                global_pos = self.mapToGlobal(QPoint(0, 0))
+                rect = QRect(global_pos, self.size())
+                self.climate_requested.emit(self.slot, rect)
+            elif self.config and self.config.get('type') == 'weather':
+                global_pos = self.mapToGlobal(QPoint(0, 0))
+                rect = QRect(global_pos, self.size())
+                self.weather_requested.emit(self.slot, rect)
+            elif self.config and self.config.get('type') == 'camera':
+                global_pos = self.mapToGlobal(QPoint(0, 0))
+                rect = QRect(global_pos, self.size())
+                self.camera_requested.emit(self.slot, rect, self.config)
+            elif self.config and self.config.get('type') == '3d_printer':
+                global_pos = self.mapToGlobal(QPoint(0, 0))
+                rect = QRect(global_pos, self.size())
+                self.printer_requested.emit(self.slot, rect, self.config)
+            elif self.config and self.config.get('type') == 'lawn_mower':
+                global_pos = self.mapToGlobal(QPoint(0, 0))
+                rect = QRect(global_pos, self.size())
+                self.mower_requested.emit(self.slot, rect)
+            elif self.config and self.config.get('type') == 'vacuum':
+                global_pos = self.mapToGlobal(QPoint(0, 0))
+                rect = QRect(global_pos, self.size())
+                self.vacuum_requested.emit(self.slot, rect)
+            elif self.config and self.config.get('type') == 'alarm_control_panel':
+                global_pos = self.mapToGlobal(QPoint(0, 0))
+                rect = QRect(global_pos, self.size())
+                self.alarm_requested.emit(self.slot, rect)
+            elif self.config and self.config.get('type') == 'lock':
+                # Toggle lock state
+                self.clicked.emit({**self.config, 'action': self._lock_resolve_action()})
+            else:
+                self.clicked.emit(self.config)
         self._drag_start_pos = None
         super().mouseReleaseEvent(event)
 
@@ -1992,21 +2007,21 @@ class DashboardButton(QFrame):
             step = float(attrs.get('step', 1.0))
             min_val = float(attrs.get('min', 0.0))
             max_val = float(attrs.get('max', 100.0))
-            
+
             new_val = current_val + (direction * step)
             new_val = max(min_val, min(max_val, new_val))
-            
+
             if abs(new_val - current_val) > 0.0001:
                 # Update local state
                 new_state_obj = dict(state_obj)
                 new_state_obj['state'] = str(new_val)
                 self._value = new_state_obj
                 self.update_content()
-                
+
                 # Trigger blink
                 self.input_blink_anim.stop()
                 self.input_blink_anim.start()
-                
+
                 # Emit API call
                 self.clicked.emit({**self.config, 'action': 'set_input_number', 'value': new_val})
         except (ValueError, TypeError):
@@ -2038,7 +2053,7 @@ class DashboardButton(QFrame):
                 self.arrow_anim.setEndValue(0.0)
                 self.arrow_anim.start()
             self.update()
-            
+
         if hasattr(self, 'bounce_anim') and self._bounce_offset > 0:
             self.bounce_anim.stop()
             self.bounce_anim.setDuration(300)
@@ -2062,23 +2077,21 @@ class DashboardButton(QFrame):
                 self.arrow_anim.setEndValue(1.0)
                 self.arrow_anim.start()
             self.update()
-            
+
         # We need to check if mouse is already in the corner
         pos = self.mapFromGlobal(QCursor.pos())
         rect = self.rect()
         size = 28
         in_corner = (pos.x() >= rect.width() - size) and (pos.y() >= rect.height() - size)
-        
+
         if in_corner:
-             # Fast restore if we just dropped or entered directly
-             self.resize_anim.stop()
-             self.resize_anim.setEndValue(1.0)
-             self.resize_anim.start()
-             self.setCursor(Qt.CursorShape.SizeFDiagCursor)
-        
+            # Fast restore if we just dropped or entered directly
+            self.resize_anim.stop()
+            self.resize_anim.setEndValue(1.0)
+            self.resize_anim.start()
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+
         super().enterEvent(event)
-
-
 
     def show_context_menu(self, pos):
         """Show context menu for right click."""
@@ -2107,7 +2120,7 @@ class DashboardButton(QFrame):
                 color: white;
             }
         """)
-        
+
         if self.config:
             pip_entity = self._pip_camera_entity()
             if pip_entity:
@@ -2118,7 +2131,7 @@ class DashboardButton(QFrame):
 
             edit_action = menu.addAction(t("context_menu.edit"))
             edit_action.triggered.connect(lambda: self.edit_requested.emit(self.slot))
-            
+
             dup_action = menu.addAction(t("context_menu.duplicate"))
             dup_action.triggered.connect(lambda: self.duplicate_requested.emit(self.slot))
 
@@ -2130,9 +2143,7 @@ class DashboardButton(QFrame):
                     if p == self._current_page:
                         continue
                     action = move_menu.addAction(t("context_menu.page", num=p + 1))
-                    action.triggered.connect(
-                        lambda checked, page=p: self.move_to_page_requested.emit(self.slot, page)
-                    )
+                    action.triggered.connect(lambda checked, page=p: self.move_to_page_requested.emit(self.slot, page))
             else:
                 move_action = menu.addAction(t("context_menu.move_to"))
                 move_action.setEnabled(False)
@@ -2141,8 +2152,8 @@ class DashboardButton(QFrame):
             clear_action.triggered.connect(lambda: self.clear_requested.emit(self.slot))
         else:
             add_action = menu.addAction(t("context_menu.add"))
-            add_action.triggered.connect(lambda: self.clicked.emit(self.config)) # Trigger click (add)
-        
+            add_action.triggered.connect(lambda: self.clicked.emit(self.config))  # Trigger click (add)
+
         menu.exec(self.mapToGlobal(pos))
 
     def _pip_camera_entity(self) -> str:
@@ -2162,36 +2173,36 @@ class DashboardButton(QFrame):
             return
 
         self.trigger_feedback()
-        
+
         # Script/Scene: Trigger pulse animation
         if self.config.get('type') in ['script', 'scene']:
-             self.pulse_anim.stop()
-             self.pulse_anim.start()
-        
+            self.pulse_anim.stop()
+            self.pulse_anim.start()
+
         # Climate widgets open overlay
         if self.config.get('type') == 'climate':
-             global_pos = self.mapToGlobal(QPoint(0,0))
-             rect = QRect(global_pos, self.size())
-             self.climate_requested.emit(self.slot, rect)
+            global_pos = self.mapToGlobal(QPoint(0, 0))
+            rect = QRect(global_pos, self.size())
+            self.climate_requested.emit(self.slot, rect)
         elif self.config.get('type') == 'weather':
-             global_pos = self.mapToGlobal(QPoint(0,0))
-             rect = QRect(global_pos, self.size())
-             self.weather_requested.emit(self.slot, rect)
+            global_pos = self.mapToGlobal(QPoint(0, 0))
+            rect = QRect(global_pos, self.size())
+            self.weather_requested.emit(self.slot, rect)
         elif self.config.get('type') == '3d_printer':
-             global_pos = self.mapToGlobal(QPoint(0,0))
-             rect = QRect(global_pos, self.size())
-             self.printer_requested.emit(self.slot, rect, self.config)
+            global_pos = self.mapToGlobal(QPoint(0, 0))
+            rect = QRect(global_pos, self.size())
+            self.printer_requested.emit(self.slot, rect, self.config)
         elif self.config.get('type') == 'lawn_mower':
-             global_pos = self.mapToGlobal(QPoint(0,0))
-             rect = QRect(global_pos, self.size())
-             self.mower_requested.emit(self.slot, rect)
+            global_pos = self.mapToGlobal(QPoint(0, 0))
+            rect = QRect(global_pos, self.size())
+            self.mower_requested.emit(self.slot, rect)
         elif self.config.get('type') == 'vacuum':
-             global_pos = self.mapToGlobal(QPoint(0,0))
-             rect = QRect(global_pos, self.size())
-             self.vacuum_requested.emit(self.slot, rect)
+            global_pos = self.mapToGlobal(QPoint(0, 0))
+            rect = QRect(global_pos, self.size())
+            self.vacuum_requested.emit(self.slot, rect)
         elif self.config.get('type') == 'alarm_control_panel':
-             global_pos = self.mapToGlobal(QPoint(0,0))
-             rect = QRect(global_pos, self.size())
-             self.alarm_requested.emit(self.slot, rect)
+            global_pos = self.mapToGlobal(QPoint(0, 0))
+            rect = QRect(global_pos, self.size())
+            self.alarm_requested.emit(self.slot, rect)
         else:
-             self.clicked.emit(self.config)
+            self.clicked.emit(self.config)

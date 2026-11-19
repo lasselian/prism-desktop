@@ -1,24 +1,26 @@
-
 import re
 import requests
 from PyQt6.QtCore import QThread, pyqtSignal
+
 
 class UpdateCheckerThread(QThread):
     """
     Checks for updates from GitHub releases.
     """
-    update_available = pyqtSignal(str) # Emits new version tag if available
+
+    update_available = pyqtSignal(str)  # Emits new version tag if available
     up_to_date = pyqtSignal()
     error_occurred = pyqtSignal(str)
-    
+
     def __init__(self, current_version: str):
         super().__init__()
         self.current_version = current_version
         self.repo_url = "https://api.github.com/repos/lasselian/prism-desktop/releases/latest"
-        
+
     def _extract_version(self, text):
         """Extract first version-like pattern (e.g. 1.0, v1.2.3)."""
-        if not text: return ""
+        if not text:
+            return ""
         match = re.search(r'v?(\d+(?:\.\d+)+)', text)
         return match.group(1) if match else text.strip()
 
@@ -54,6 +56,6 @@ class UpdateCheckerThread(QThread):
                 self.update_available.emit(remote_ver)
             else:
                 self.up_to_date.emit()
-                
+
         except Exception as e:
             self.error_occurred.emit(str(e))

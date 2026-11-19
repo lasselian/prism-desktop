@@ -48,6 +48,7 @@ _keyring_available = False
 # Keyring probe
 # ---------------------------------------------------------------------------
 
+
 def _probe_keyring() -> bool:
     """Test whether the OS keyring actually works by doing a write/read/delete cycle."""
     global _keyring_probed, _keyring_available
@@ -100,6 +101,7 @@ def _probe_keyring() -> bool:
 # Encrypted file helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_enc_dir() -> Path:
     """Get the directory where encrypted token files are stored (same as config.json)."""
     return get_config_path().parent
@@ -108,7 +110,7 @@ def _get_enc_dir() -> Path:
 def _get_machine_seed() -> bytes:
     """
     Derive a machine-specific seed for key generation.
-    
+
     Uses (in order of preference):
       - Linux:   /etc/machine-id
       - Windows: MachineGuid from the registry
@@ -130,6 +132,7 @@ def _get_machine_seed() -> bytes:
     elif sys.platform == "win32":
         try:
             import winreg
+
             key = winreg.OpenKey(
                 winreg.HKEY_LOCAL_MACHINE,
                 r"SOFTWARE\Microsoft\Cryptography",
@@ -142,9 +145,13 @@ def _get_machine_seed() -> bytes:
     elif sys.platform == "darwin":
         try:
             import subprocess
+
             result = subprocess.run(
                 ["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
-                capture_output=True, text=True, timeout=5, check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
             )
             for line in result.stdout.splitlines():
                 if "IOPlatformUUID" in line:
@@ -264,6 +271,7 @@ def _enc_delete() -> None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def store_token(token: str) -> None:
     """Store the HA token securely. Tries keyring first, then encrypted file."""

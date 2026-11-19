@@ -21,6 +21,7 @@ except ImportError:
 def _run_git_command(*args: str) -> str:
     """Return git command output, or an empty string when unavailable."""
     import sys
+
     if getattr(sys, "frozen", False):
         return ""
     try:

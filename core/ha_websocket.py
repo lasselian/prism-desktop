@@ -33,14 +33,14 @@ def websocket_url(base_url: str) -> str:
 
 class HAWebSocket(QObject):
     """WebSocket client for Home Assistant real-time updates."""
-    
+
     # Signals
     connected = pyqtSignal()
     disconnected = pyqtSignal()
     state_changed = pyqtSignal(str, dict)  # entity_id, new_state
     notification_received = pyqtSignal(dict)  # full notification payload dict
     error = pyqtSignal(str)
-    
+
     def __init__(self, url: str = "", token: str = ""):
         super().__init__()
         self.url = url.rstrip('/')
@@ -52,63 +52,60 @@ class HAWebSocket(QObject):
         self._subscribed_entities: set[str] = set()
         self._config_lock = threading.Lock()
         self._webhook_id: str = ""  # Set after Mobile App registration
-        self._push_channel_id: int = 0   # WS message ID for push_notification_channel
+        self._push_channel_id: int = 0  # WS message ID for push_notification_channel
         self._pending_results: dict[int, asyncio.Future] = {}
         self._pending_pipeline_runs: dict[int, asyncio.Queue] = {}
         self._auth_failed = False  # token rejected: retrying can't help (and risks an IP ban)
         self.logger = logging.getLogger(__name__)
-    
+
     def set_webhook_id(self, webhook_id: str):
         """Set the Mobile App webhook_id for push notification delivery."""
         self._webhook_id = webhook_id
-    
+
     def subscribe_entity(self, entity_id: str):
         """Add entity to subscription list."""
         self._subscribed_entities.add(entity_id)
-    
+
     def _next_id(self) -> int:
         """Get next message ID."""
         self._message_id += 1
         return self._message_id
-    
+
     def request_stop(self):
         """Thread-safe stop request."""
         self._running = False
         self._should_stop_loop = True  # Signal the reconnect loop to stop
-    
+
     async def _send(self, data: dict):
         """Send message to WebSocket."""
         if self._ws and not self._ws.closed:
             await self._ws.send_json(data)
-    
+
     async def connect(self):
         """Connect to Home Assistant WebSocket."""
         # Capture config under lock
         with self._config_lock:
             current_url = self.url
             current_token = self.token
-            
+
         if not current_url or not current_token:
             self.error.emit("URL and token are required")
             return
-        
+
         ws_url = websocket_url(current_url)
 
         try:
             self._session = aiohttp.ClientSession()
             self._ws = await self._session.ws_connect(ws_url)
             self._running = True
-            
+
             # Wait for auth_required (bounded — a proxy can accept the socket
             # while HA itself never answers, which would hang the reconnect loop)
             msg = await asyncio.wait_for(self._ws.receive_json(), timeout=10)
             if msg.get('type') != 'auth_required':
                 raise Exception("Unexpected message type")
 
-            await self._send({
-                "type": "auth",
-                "access_token": current_token
-            })
+            await self._send({"type": "auth", "access_token": current_token})
 
             msg = await asyncio.wait_for(self._ws.receive_json(), timeout=10)
             if msg.get('type') != 'auth_ok':
@@ -116,34 +113,28 @@ class HAWebSocket(QObject):
 
             self.connected.emit()
 
-            await self._send({
-                "id": self._next_id(),
-                "type": "subscribe_events",
-                "event_type": "state_changed"
-            })
-            
+            await self._send({"id": self._next_id(), "type": "subscribe_events", "event_type": "state_changed"})
+
             # Subscribe to call_service events (for catching notification creates)
-            await self._send({
-                "id": self._next_id(),
-                "type": "subscribe_events",
-                "event_type": "call_service"
-            })
+            await self._send({"id": self._next_id(), "type": "subscribe_events", "event_type": "call_service"})
 
             # Subscribe to Mobile App push notifications via WebSocket channel
             # This delivers notify.mobile_app_* calls over the WebSocket instead of HTTP webhook
             if self._webhook_id:
                 push_id = self._next_id()
                 self._push_channel_id = push_id
-                await self._send({
-                    "id": push_id,
-                    "type": "mobile_app/push_notification_channel",
-                    "webhook_id": self._webhook_id,
-                    "support_confirm": False,
-                })
+                await self._send(
+                    {
+                        "id": push_id,
+                        "type": "mobile_app/push_notification_channel",
+                        "webhook_id": self._webhook_id,
+                        "support_confirm": False,
+                    }
+                )
                 self.logger.info(f"[HAWebSocket] Subscribed to push_notification_channel (id={push_id})")
 
             await self._message_loop()
-            
+
         except asyncio.CancelledError:
             self._running = False
             raise
@@ -155,16 +146,16 @@ class HAWebSocket(QObject):
             self.error.emit(detail)
         finally:
             await self._cleanup()
-    
+
     async def _message_loop(self):
         """Process incoming WebSocket messages."""
         while self._running and self._ws and not self._ws.closed:
             try:
                 msg = await asyncio.wait_for(
                     self._ws.receive(),
-                    timeout=5  # Short timeout to check _running flag more often
+                    timeout=5,  # Short timeout to check _running flag more often
                 )
-                
+
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     data = json.loads(msg.data)
                     await self._handle_message(data)
@@ -172,7 +163,7 @@ class HAWebSocket(QObject):
                     break
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     break
-                    
+
             except asyncio.TimeoutError:
                 if not self._running:
                     break
@@ -186,7 +177,7 @@ class HAWebSocket(QObject):
                 if self._running:
                     self.error.emit(str(e))
                 break
-    
+
     async def _handle_message(self, data: dict):
         """Handle incoming message."""
         msg_type = data.get('type', '')
@@ -200,13 +191,15 @@ class HAWebSocket(QObject):
             # Ack for a streaming command — only surface it if HA rejected the command outright.
             if msg_id in self._pending_pipeline_runs and not data.get('success', True):
                 error = data.get('error', {}) or {}
-                await self._pending_pipeline_runs[msg_id].put({
-                    'type': 'error',
-                    'data': {
-                        'code': error.get('code', 'unknown'),
-                        'message': error.get('message', 'assist_pipeline/run failed'),
-                    },
-                })
+                await self._pending_pipeline_runs[msg_id].put(
+                    {
+                        'type': 'error',
+                        'data': {
+                            'code': error.get('code', 'unknown'),
+                            'message': error.get('message', 'assist_pipeline/run failed'),
+                        },
+                    }
+                )
             return
 
         if msg_type == 'event' and msg_id in self._pending_pipeline_runs:
@@ -230,14 +223,14 @@ class HAWebSocket(QObject):
             event = data.get('event', {})
             event_type = event.get('event_type', '')
             event_data = event.get('data', {})
-            
+
             if event_type == 'state_changed':
                 entity_id = event_data.get('entity_id', '')
                 # HA sends new_state: null (not a missing key) when an entity is removed;
                 # `.get(key, {})` only substitutes the default for a missing key, so an
                 # explicit null would reach `state_changed.emit()` and fail its `dict` type.
                 new_state = event_data.get('new_state') or {}
-                
+
                 if entity_id.startswith('persistent_notification.'):
                     # New notification created
                     if new_state:
@@ -245,30 +238,34 @@ class HAWebSocket(QObject):
                         title = attrs.get('title', 'Home Assistant')
                         message = attrs.get('message', new_state.get('state', ''))
                         if message:
-                            self.notification_received.emit({
-                                'title': title,
-                                'message': message,
-                            })
-                
+                            self.notification_received.emit(
+                                {
+                                    'title': title,
+                                    'message': message,
+                                }
+                            )
+
                 # Only emit state changes for subscribed entities or all if none specified
                 if not self._subscribed_entities or entity_id in self._subscribed_entities:
                     self.state_changed.emit(entity_id, new_state)
-            
+
             elif event_type == 'call_service':
                 # Check for persistent_notification.create service calls
                 domain = event_data.get('domain', '')
                 service = event_data.get('service', '')
                 service_data = event_data.get('service_data', {})
-                
+
                 if domain == 'persistent_notification' and service == 'create':
                     title = service_data.get('title', 'Home Assistant')
                     message = service_data.get('message', '')
                     if message:
-                        self.notification_received.emit({
-                            'title': title,
-                            'message': message,
-                        })
-    
+                        self.notification_received.emit(
+                            {
+                                'title': title,
+                                'message': message,
+                            }
+                        )
+
     async def _cleanup(self):
         """Clean up WebSocket connection."""
         self._running = False
@@ -295,7 +292,7 @@ class HAWebSocket(QObject):
         except RuntimeError:
             # Object was deleted
             pass
-    
+
     async def conversation_process(
         self,
         text: str,
@@ -402,15 +399,15 @@ class HAWebSocket(QObject):
         self._should_stop_loop = False
         backoff = 1
         max_backoff = 30
-        
+
         while not self._should_stop_loop:
             try:
                 # Reset backoff on successful run
                 start_time = time.time()
-                
+
                 # Run client connection
                 await self.connect()
-                
+
                 # If we are here, connect() returned
                 if self._should_stop_loop:
                     break
@@ -421,19 +418,19 @@ class HAWebSocket(QObject):
                     # (saving settings builds a fresh client).
                     self.logger.error("WebSocket authentication failed; not retrying with the same token")
                     break
-                    
+
                 if time.time() - start_time > 10:
                     backoff = 1  # Reset backoff if we were connected for >10s
-                
+
                 self.logger.warning(f"WebSocket disconnected. Reconnecting in {backoff}s...")
                 self.error.emit(f"Disconnected. Reconnecting in {backoff}s...")
-                
+
                 # Wait for backoff
                 for _ in range(backoff * 10):
                     if self._should_stop_loop:
                         break
                     await asyncio.sleep(0.1)
-                
+
                 backoff = min(backoff * 2, max_backoff)
 
             except Exception as e:

@@ -18,6 +18,7 @@ from PyQt6.QtCore import QObject, Qt, pyqtSignal, QRect
 
 class TraySignals(QObject):
     """Qt signals for tray icon events."""
+
     left_clicked = pyqtSignal()
     quit_clicked = pyqtSignal()
 
@@ -64,23 +65,23 @@ class TrayManager:
         h_span = int(radius * 0.866)
         v_half = int(radius * 0.5)
 
-        p_center    = (cx, cy)
-        p_top       = (cx, cy - radius)
-        p_bot_left  = (cx - h_span, cy + v_half)
+        p_center = (cx, cy)
+        p_top = (cx, cy - radius)
+        p_bot_left = (cx - h_span, cy + v_half)
         p_bot_right = (cx + h_span, cy + v_half)
 
-        color_left   = (0, 229, 255, 255)
-        color_right  = (213, 0, 249, 255)
+        color_left = (0, 229, 255, 255)
+        color_right = (213, 0, 249, 255)
         color_bottom = (41, 98, 255, 255)
-        bg_color     = (30, 30, 30, 255)
+        bg_color = (30, 30, 30, 255)
 
         if self.theme != 'dark':
-            color_left   = (0, 180, 210, 255)
-            color_right  = (180, 0, 200, 255)
+            color_left = (0, 180, 210, 255)
+            color_right = (180, 0, 200, 255)
             color_bottom = (25, 60, 200, 255)
-            bg_color     = (255, 255, 255, 255)
+            bg_color = (255, 255, 255, 255)
 
-        bg_pad    = 1 * scale
+        bg_pad = 1 * scale
         bg_radius = 10 * scale
         if hasattr(draw, 'rounded_rectangle'):
             draw.rounded_rectangle(
@@ -94,7 +95,7 @@ class TrayManager:
                 fill=bg_color,
             )
 
-        draw.polygon([p_center, p_top, p_bot_left],  fill=color_left)
+        draw.polygon([p_center, p_top, p_bot_left], fill=color_left)
         draw.polygon([p_center, p_top, p_bot_right], fill=color_right)
         draw.polygon([p_center, p_bot_left, p_bot_right], fill=color_bottom)
 
@@ -191,18 +192,18 @@ class TrayManager:
     def _menu_stylesheet(self) -> str:
         """Return a theme-aware stylesheet for the tray context menu."""
         if self.theme == 'dark':
-            bg        = '#1e1e1e'
-            fg        = '#ffffff'
+            bg = '#1e1e1e'
+            fg = '#ffffff'
             highlight = '#0078d4'
-            hl_text   = '#ffffff'
-            border    = '#555555'
+            hl_text = '#ffffff'
+            border = '#555555'
             separator = '#444444'
         else:
-            bg        = '#ffffff'
-            fg        = '#1e1e1e'
+            bg = '#ffffff'
+            fg = '#1e1e1e'
             highlight = '#0078d4'
-            hl_text   = '#ffffff'
-            border    = '#d1d1d1'
+            hl_text = '#ffffff'
+            border = '#d1d1d1'
             separator = '#e0e0e0'
 
         return (

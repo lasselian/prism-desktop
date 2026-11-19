@@ -54,12 +54,12 @@ class AutoUpdateThread(QThread):
     """
 
     progress = pyqtSignal(str)
-    success = pyqtSignal(str)   # "updated" | "already_up_to_date"
+    success = pyqtSignal(str)  # "updated" | "already_up_to_date"
     error = pyqtSignal(str)
 
     _GIT_TIMEOUT = 60
     _PIP_TIMEOUT = 120
-    _NET_TIMEOUT = (10, 120)   # (connect, read) seconds for HTTP requests
+    _NET_TIMEOUT = (10, 120)  # (connect, read) seconds for HTTP requests
 
     def run(self):
         global _update_in_progress
@@ -146,9 +146,7 @@ class AutoUpdateThread(QThread):
             self.progress.emit("Downloading update…")
             total = asset.get("size", 0)
             done = 0
-            with requests.get(
-                asset["browser_download_url"], stream=True, timeout=self._NET_TIMEOUT
-            ) as dl:
+            with requests.get(asset["browser_download_url"], stream=True, timeout=self._NET_TIMEOUT) as dl:
                 dl.raise_for_status()
                 with open(tmp_path, "wb") as f:
                     for chunk in dl.iter_content(chunk_size=65536):
@@ -156,14 +154,14 @@ class AutoUpdateThread(QThread):
                             f.write(chunk)
                             done += len(chunk)
                             if total:
-                                self.progress.emit(
-                                    f"Downloading update… {done * 100 // total}%"
-                                )
+                                self.progress.emit(f"Downloading update… {done * 100 // total}%")
 
             # 3. Verify checksum if a SHA256SUMS asset is present in the release
             if not self._verify_checksum(tmp_path, asset_name, assets):
-                self.error.emit("Checksum verification failed — the download is missing from "
-                                "or does not match the release's SHA256SUMS. Aborting.")
+                self.error.emit(
+                    "Checksum verification failed — the download is missing from "
+                    "or does not match the release's SHA256SUMS. Aborting."
+                )
                 return
 
             # 4. Apply the downloaded asset
@@ -192,15 +190,11 @@ class AutoUpdateThread(QThread):
         opportunistic, not mandatory, until checksums are part of every release.
         Returns False when the sums file exists but has no line for asset_name.
         """
-        sums_asset = next(
-            (a for a in assets if a["name"] in ("SHA256SUMS", "sha256sums.txt")), None
-        )
+        sums_asset = next((a for a in assets if a["name"] in ("SHA256SUMS", "sha256sums.txt")), None)
         if not sums_asset:
             return True
 
-        resp = requests.get(
-            sums_asset["browser_download_url"], headers=_GH_HEADERS, timeout=self._NET_TIMEOUT
-        )
+        resp = requests.get(sums_asset["browser_download_url"], headers=_GH_HEADERS, timeout=self._NET_TIMEOUT)
         resp.raise_for_status()
 
         expected = None
@@ -259,9 +253,7 @@ class AutoUpdateThread(QThread):
             os.replace(staged, current)
         except PermissionError as exc:
             staged.unlink(missing_ok=True)
-            raise OSError(
-                f"Cannot replace {current} — check that you own the file or have write permission."
-            ) from exc
+            raise OSError(f"Cannot replace {current} — check that you own the file or have write permission.") from exc
         except BaseException:
             staged.unlink(missing_ok=True)
             raise
@@ -272,6 +264,7 @@ class AutoUpdateThread(QThread):
         the running application bundle in /Applications (or current bundle dir).
         """
         import zipfile
+
         current_app = None
         for p in Path(sys.executable).parents:
             if p.suffix == ".app":
@@ -318,8 +311,7 @@ class AutoUpdateThread(QThread):
             shutil.move(str(current_app), str(backup_app))
         except OSError as exc:
             raise OSError(
-                f"Cannot replace {current_app} — check that you own the bundle "
-                f"or have write permission ({exc})."
+                f"Cannot replace {current_app} — check that you own the bundle " f"or have write permission ({exc})."
             ) from exc
 
         try:
@@ -338,9 +330,7 @@ class AutoUpdateThread(QThread):
                     f"{backup_app} — rename it back to {current_app.name} to "
                     f"recover ({exc})."
                 ) from exc
-            raise OSError(
-                f"Update failed; the previous version has been restored ({exc})."
-            ) from exc
+            raise OSError(f"Update failed; the previous version has been restored ({exc}).") from exc
 
         shutil.rmtree(backup_app, ignore_errors=True)
 
@@ -394,6 +384,7 @@ def consume_update_flag() -> str | None:
 
 
 # ── App restart ───────────────────────────────────────────────────────────────
+
 
 def restart_app() -> None:
     """Restart the application after a successful update."""

@@ -7,10 +7,11 @@ import certifi
 
 _LINUX_CA_BUNDLES = [
     "/etc/ssl/certs/ca-certificates.crt",  # Debian / Ubuntu / Arch
-    "/etc/pki/tls/certs/ca-bundle.crt",    # RHEL / CentOS / Fedora
-    "/etc/ssl/ca-bundle.pem",              # openSUSE
-    "/etc/pki/tls/cert.pem",              # Amazon Linux
+    "/etc/pki/tls/certs/ca-bundle.crt",  # RHEL / CentOS / Fedora
+    "/etc/ssl/ca-bundle.pem",  # openSUSE
+    "/etc/pki/tls/cert.pem",  # Amazon Linux
 ]
+
 
 def configure_ssl() -> None:
     """Pin the CA bundle used for TLS verification (aiohttp/requests).
@@ -29,7 +30,7 @@ def configure_ssl() -> None:
                 break
     if not system_bundle:
         system_bundle = certifi.where()
-    os.environ.setdefault("SSL_CERT_FILE", system_bundle)      # ssl module (aiohttp/websockets)
+    os.environ.setdefault("SSL_CERT_FILE", system_bundle)  # ssl module (aiohttp/websockets)
     os.environ.setdefault("REQUESTS_CA_BUNDLE", system_bundle)  # requests / urllib3
 
 
@@ -43,7 +44,9 @@ def get_system_font() -> str:
     else:  # Linux
         return 'Ubuntu'
 
+
 SYSTEM_FONT = get_system_font()
+
 
 def get_resource_path(relative_path: str) -> Path:
     """Get absolute path to a resource, works for dev and for PyInstaller."""

@@ -12,9 +12,9 @@ from PyQt6.QtCore import QObject, pyqtSignal
 
 class ThemeManager(QObject):
     """Manages application theming with cross-platform system integration."""
-    
+
     theme_changed = pyqtSignal(str)  # Emits 'light' or 'dark'
-    
+
     # Dark mode color palette
     DARK_COLORS = {
         'window': '#1e1e1e',
@@ -29,7 +29,7 @@ class ThemeManager(QObject):
         'border': '#555555',
         'accent': '#0078d4',
     }
-    
+
     # Light mode color palette
     LIGHT_COLORS = {
         'window': '#eaeaea',
@@ -44,111 +44,123 @@ class ThemeManager(QObject):
         'border': '#bebebe',
         'accent': '#0078d4',
     }
-    
+
     def __init__(self):
         super().__init__()
         self._current_theme = 'system'
         self._effective_theme = 'dark'
-    
+
     def get_system_theme(self) -> str:
         """Detect system theme preference across platforms."""
         system = platform.system()
-        
+
         if system == 'Windows':
             try:
                 import winreg
+
                 key = winreg.OpenKey(
-                    winreg.HKEY_CURRENT_USER,
-                    r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+                    winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
                 )
                 value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
                 winreg.CloseKey(key)
                 return 'light' if value == 1 else 'dark'
             except Exception:
                 return 'dark'
-        
+
         elif system == 'Linux':
             # Try KDE Plasma first
             try:
                 result = subprocess.run(
                     ['kreadconfig5', '--group', 'General', '--key', 'ColorScheme'],
-                    capture_output=True, text=True, timeout=2, check=False
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                    check=False,
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     scheme = result.stdout.strip().lower()
                     return 'dark' if 'dark' in scheme else 'light'
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 pass
-            
+
             # Try GNOME
             try:
                 result = subprocess.run(
                     ['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'],
-                    capture_output=True, text=True, timeout=2, check=False
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                    check=False,
                 )
                 if result.returncode == 0:
                     return 'dark' if 'dark' in result.stdout.lower() else 'light'
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 pass
-            
+
             # Fallback: check GTK theme name
             try:
                 result = subprocess.run(
                     ['gsettings', 'get', 'org.gnome.desktop.interface', 'gtk-theme'],
-                    capture_output=True, text=True, timeout=2, check=False
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                    check=False,
                 )
                 if result.returncode == 0:
                     return 'dark' if 'dark' in result.stdout.lower() else 'light'
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 pass
-            
+
             return 'dark'  # Default to dark
-        
+
         elif system == 'Darwin':
             # macOS
             try:
                 result = subprocess.run(
                     ['defaults', 'read', '-g', 'AppleInterfaceStyle'],
-                    capture_output=True, text=True, timeout=2, check=False
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                    check=False,
                 )
                 return 'dark' if result.returncode == 0 else 'light'
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 return 'light'
-        
+
         return 'dark'  # Default for unknown platforms
-    
+
     def set_theme(self, theme: str):
         """Set the application theme ('light', 'dark', or 'system')."""
         self._current_theme = theme
-        
+
         if theme == 'system':
             effective = self.get_system_theme()
         else:
             effective = theme
-        
+
         if effective != self._effective_theme:
             self._effective_theme = effective
             self._apply_theme(effective)
             self.theme_changed.emit(effective)
-    
+
     def get_effective_theme(self) -> str:
         """Get the actual applied theme ('light' or 'dark')."""
         return self._effective_theme
-    
+
     def get_colors(self) -> dict:
         """Get the current color palette."""
         if self._effective_theme == 'dark':
             return self.DARK_COLORS
         return self.LIGHT_COLORS
-    
+
     def _apply_theme(self, theme: str):
         """Apply the theme to the Qt application."""
         app = QApplication.instance()
         if not app:
             return
-        
+
         colors = self.DARK_COLORS if theme == 'dark' else self.LIGHT_COLORS
-        
+
         palette = QPalette()
         palette.setColor(QPalette.ColorRole.Window, QColor(colors['window']))
         palette.setColor(QPalette.ColorRole.WindowText, QColor(colors['window_text']))
@@ -159,6 +171,5 @@ class ThemeManager(QObject):
         palette.setColor(QPalette.ColorRole.ButtonText, QColor(colors['button_text']))
         palette.setColor(QPalette.ColorRole.Highlight, QColor(colors['highlight']))
         palette.setColor(QPalette.ColorRole.HighlightedText, QColor(colors['highlight_text']))
-        
+
         app.setPalette(palette)
-    

@@ -13,8 +13,7 @@ import urllib.request
 from pathlib import Path
 
 MDI_CSS_URL = (
-    "https://raw.githubusercontent.com/Templarian/"
-    "MaterialDesign-Webfont/master/css/materialdesignicons.css"
+    "https://raw.githubusercontent.com/Templarian/" "MaterialDesign-Webfont/master/css/materialdesignicons.css"
 )
 OUTPUT = Path(__file__).parent / "mdi_mapping.json"
 
@@ -31,6 +30,7 @@ def generate(force: bool = False) -> bool:
         # verification is on either way.
         try:
             import certifi
+
             cafile = certifi.where()
         except ImportError:
             cafile = None

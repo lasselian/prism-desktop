@@ -10,6 +10,7 @@ import uuid
 import logging
 import aiohttp
 import psutil
+
 psutil.cpu_percent(interval=None)  # prime baseline; first real call always returns 0.0 otherwise
 from typing import Optional
 
@@ -59,6 +60,7 @@ def get_system_metrics() -> dict:
         "cpu_usage": round(psutil.cpu_percent(interval=None), 1),
         "ram_usage": round(psutil.virtual_memory().percent, 1),
     }
+
 
 APP_NAME = "Prism Desktop"
 MANUFACTURER = "lasselian"
@@ -221,11 +223,13 @@ def build_notification_action_event_data(
     action id and device identity; reserved keys win over action_data collisions.
     """
     event_data = dict(action_data) if isinstance(action_data, dict) else {}
-    event_data.update({
-        "action": action,
-        "device_id": device_id,
-        "device_name": device_name,
-    })
+    event_data.update(
+        {
+            "action": action,
+            "device_id": device_id,
+            "device_name": device_name,
+        }
+    )
     return event_data
 
 
@@ -286,7 +290,9 @@ async def register_sensors(ha_url: str, webhook_id: str) -> None:
                     if resp.status in (200, 201):
                         logger.info(f"[MobileApp] Sensor '{sensor['unique_id']}' registered (HTTP {resp.status})")
                     else:
-                        logger.warning(f"[MobileApp] Sensor '{sensor['unique_id']}' registration returned HTTP {resp.status}")
+                        logger.warning(
+                            f"[MobileApp] Sensor '{sensor['unique_id']}' registration returned HTTP {resp.status}"
+                        )
     except Exception as e:
         logger.warning(f"[MobileApp] Sensor registration error (non-critical): {e}")
 

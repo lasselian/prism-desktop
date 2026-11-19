@@ -30,7 +30,7 @@ from ui.widgets.camera_pip import CameraPipWindow
 logger = logging.getLogger(__name__)
 
 CONFIG_KEY = "camera_pip"
-READ_TIMEOUT = 45          # seconds of silence before a quiet reconnect
+READ_TIMEOUT = 45  # seconds of silence before a quiet reconnect
 BACKOFF = (2, 5, 10, 30, 60)
 
 
@@ -67,8 +67,7 @@ def decode_frame(data: bytes, target: QSize) -> Optional[QImage]:
         return None
     reader = QImageReader(buf)
     size = reader.size()
-    if (size.isValid() and target.isValid()
-            and size.width() > target.width() and size.height() > target.height()):
+    if size.isValid() and target.isValid() and size.width() > target.width() and size.height() > target.height():
         # libjpeg decodes straight to 1/2, 1/4 or 1/8 size, which is far
         # cheaper than decoding a 4K frame and scaling it afterwards.
         reader.setScaledSize(size.scaled(target, Qt.AspectRatioMode.KeepAspectRatioByExpanding))
@@ -181,6 +180,7 @@ class CameraPipManager:
         def start():
             if self._windows.get(entity_id) is win and entity_id not in self._tasks:
                 self._tasks[entity_id] = asyncio.ensure_future(self._run(entity_id, win))
+
         QTimer.singleShot(0, start)
 
     async def _run(self, entity_id: str, win: CameraPipWindow):

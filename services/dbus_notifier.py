@@ -64,14 +64,16 @@ class DBusNotifier:
                 return False
             try:
                 bus = await MessageBus(bus_type=BusType.SESSION).connect()
-                reply = await bus.call(Message(
-                    destination=NOTIFY_BUS_NAME,
-                    path=NOTIFY_OBJECT_PATH,
-                    interface=NOTIFY_IFACE,
-                    member="GetCapabilities",
-                    signature="",
-                    body=[],
-                ))
+                reply = await bus.call(
+                    Message(
+                        destination=NOTIFY_BUS_NAME,
+                        path=NOTIFY_OBJECT_PATH,
+                        interface=NOTIFY_IFACE,
+                        member="GetCapabilities",
+                        signature="",
+                        body=[],
+                    )
+                )
                 if reply.message_type == MessageType.ERROR:
                     text = reply.body[0] if reply.body else reply.error_name
                     raise RuntimeError(f"GetCapabilities failed: {text}")
@@ -80,13 +82,16 @@ class DBusNotifier:
 
                 bus.add_message_handler(self._handle_message)
                 for member in ("ActionInvoked", "NotificationClosed"):
-                    await self._add_match(bus, (
-                        "type='signal',"
-                        f"sender='{NOTIFY_BUS_NAME}',"
-                        f"interface='{NOTIFY_IFACE}',"
-                        f"member='{member}',"
-                        f"path='{NOTIFY_OBJECT_PATH}'"
-                    ))
+                    await self._add_match(
+                        bus,
+                        (
+                            "type='signal',"
+                            f"sender='{NOTIFY_BUS_NAME}',"
+                            f"interface='{NOTIFY_IFACE}',"
+                            f"member='{member}',"
+                            f"path='{NOTIFY_OBJECT_PATH}'"
+                        ),
+                    )
 
                 self._bus = bus
                 logger.info(f"[DBusNotifier] Connected (actions supported: {self._actions_supported})")
@@ -98,14 +103,16 @@ class DBusNotifier:
                 return False
 
     async def _add_match(self, bus: MessageBus, rule: str):
-        reply = await bus.call(Message(
-            destination=DBUS_IFACE,
-            path=DBUS_OBJECT_PATH,
-            interface=DBUS_IFACE,
-            member="AddMatch",
-            signature="s",
-            body=[rule],
-        ))
+        reply = await bus.call(
+            Message(
+                destination=DBUS_IFACE,
+                path=DBUS_OBJECT_PATH,
+                interface=DBUS_IFACE,
+                member="AddMatch",
+                signature="s",
+                body=[rule],
+            )
+        )
         if reply.message_type == MessageType.ERROR:
             text = reply.body[0] if reply.body else reply.error_name
             raise RuntimeError(f"AddMatch failed: {text}")
@@ -128,7 +135,7 @@ class DBusNotifier:
             return None
 
         action_list: list[str] = []
-        for key, label in (actions or []):
+        for key, label in actions or []:
             action_list += [key, label]
         hints: dict = {}
         app_icon = ""
@@ -137,14 +144,16 @@ class DBusNotifier:
             app_icon = image_path
 
         try:
-            reply = await self._bus.call(Message(
-                destination=NOTIFY_BUS_NAME,
-                path=NOTIFY_OBJECT_PATH,
-                interface=NOTIFY_IFACE,
-                member="Notify",
-                signature="susssasa{sv}i",
-                body=[app_name, 0, app_icon, summary, body, action_list, hints, -1],
-            ))
+            reply = await self._bus.call(
+                Message(
+                    destination=NOTIFY_BUS_NAME,
+                    path=NOTIFY_OBJECT_PATH,
+                    interface=NOTIFY_IFACE,
+                    member="Notify",
+                    signature="susssasa{sv}i",
+                    body=[app_name, 0, app_icon, summary, body, action_list, hints, -1],
+                )
+            )
             if reply.message_type == MessageType.ERROR:
                 text = reply.body[0] if reply.body else reply.error_name
                 logger.warning(f"[DBusNotifier] Notify failed: {text}")
