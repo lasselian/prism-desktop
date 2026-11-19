@@ -21,8 +21,7 @@ class UpdateCheckerThread(QThread):
         """Extract first version-like pattern (e.g. 1.0, v1.2.3)."""
         if not text:
             return ""
-        match = re.search(r'v?(?<!\d)(\d++(?:\.\d++)++)', text)  # possessive: no backtracking
-        return match.group(1) if match else text.strip()
+        return _first_version(text) or text.strip()
 
     def _parse_version(self, ver: str) -> tuple:
         """Convert version string to comparable tuple, e.g. '1.5' == '1.5.0'."""
@@ -59,3 +58,23 @@ class UpdateCheckerThread(QThread):
 
         except Exception as e:
             self.error_occurred.emit(str(e))
+
+
+def _first_version(text: str):
+    """The first dotted number in text, such as 1.7 or 1.2.3, or None.
+
+    A linear scan instead of a regex: each run of digits and dots is split on
+    its dots, and the first stretch of two or more numbers wins.
+    """
+    for token in re.findall(r"[\d.]+", text):
+        run = []
+        for part in token.split("."):
+            if part:
+                run.append(part)
+                continue
+            if len(run) >= 2:
+                return ".".join(run)
+            run = []
+        if len(run) >= 2:
+            return ".".join(run)
+    return None
