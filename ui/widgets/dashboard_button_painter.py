@@ -194,152 +194,98 @@ class DashboardButtonPainter:
     @staticmethod
     def paint(button, event):
         """Main paint method."""
-        # Media Player (Apple-like)
-        if button.config.get('type') == 'media_player':
-            DashboardButtonPainter._paint_media_player(button)
-
-        # 3D Printer
-        if button.config.get('type') == '3d_printer':
-            DashboardButtonPainter._paint_3d_printer(button)
-
-        # Sun
-        if button.config.get('type') == 'sun':
-            DashboardButtonPainter._draw_sun_button(button)
-
-        # Sensor widget with gauge/bar/perimeter display style
-        if button.config.get('type') == 'widget' and button.config.get('display_style') in (
-            'gauge',
-            'bar',
-            'perimeter',
-        ):
-            DashboardButtonPainter._paint_widget_sensor(button)
-
-        # Lock hold-to-unlock progress ring
-        if button.config.get('type') == 'lock' and getattr(button, '_lock_hold_progress', 0.0) > 0.0:
-            DashboardButtonPainter._paint_lock_hold_ring(button)
-
-        # Draw Camera Image (if applicable)
-        if button.config and button.config.get('type') == 'camera':
-            # Use cached rounded pixmap if available (Performance + Style)
-            if (
-                hasattr(button, '_cached_display_pixmap')
-                and button._cached_display_pixmap
-                and not button._cached_display_pixmap.isNull()
-            ):
-                painter = QPainter(button)
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-                # Ensure clipping even when using cached pixmap (for the edge effects)
-                path = QPainterPath()
-                path.addRoundedRect(QRectF(button.rect()), 12, 12)
-                painter.setClipPath(path)
-
-                painter.drawPixmap(0, 0, button._cached_display_pixmap)
-                DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(button.rect()), is_top_clamped=False)
-                painter.end()
-
-            # Fallback to direct scaling if cache missing (e.g. first frame or resize race condition)
-            elif hasattr(button, '_last_camera_pixmap') and button._last_camera_pixmap:
-                painter = QPainter(button)
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-                # Clip to rounded rect
-                path = QPainterPath()
-                path.addRoundedRect(QRectF(button.rect()), 12, 12)
-                painter.setClipPath(path)
-
-                # Scale to fill button while maintaining aspect ratio (crop if needed)
-                scaled = button._last_camera_pixmap.scaled(
-                    button.width(),
-                    button.height(),
-                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-
-                # Center crop
-                x = (scaled.width() - button.width()) // 2
-                y = (scaled.height() - button.height()) // 2
-
-                # Draw cropped
-                painter.drawPixmap(0, 0, scaled, x, y, button.width(), button.height())
-                DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(button.rect()), is_top_clamped=False)
-                painter.end()
-
-        # === Camera Pill Label ===
-        if button.config and button.config.get('type') == 'camera':
-            label = button.config.get('label')
-            if label:
-                # Re-open painter for overlay
-                painter = QPainter(button)
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-                # Prepare background for blur
-                bg_pix = None
-                x_off = 0
-                y_off = 0
-
-                if (
-                    hasattr(button, '_cached_display_pixmap')
-                    and button._cached_display_pixmap
-                    and not button._cached_display_pixmap.isNull()
-                ):
-                    bg_pix = button._cached_display_pixmap
-                elif hasattr(button, '_last_camera_pixmap') and button._last_camera_pixmap:
-                    # For fallback, we need to replicate the scale/crop to get correct blur source
-                    # This is expensive but fallback is rare
-                    scaled = button._last_camera_pixmap.scaled(
-                        button.width(),
-                        button.height(),
-                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
-                    bg_pix = scaled
-                    x_off = (scaled.width() - button.width()) // 2
-                    y_off = (scaled.height() - button.height()) // 2
-
-                DashboardButtonPainter._draw_pill_label(painter, button.rect(), label, bg_pix, x_off, y_off)
-                painter.end()
-
-        # Pulse Animation (Script)
-        if button._pulse_opacity > 0.01:
-            DashboardButtonPainter._paint_pulse(button)
-
-        # Only draw special border if animating or if progress > 0
-        if button.anim.state() == QPropertyAnimation.State.Running or button._anim_progress > 0.0:
-            DashboardButtonPainter._paint_border_animation(button)
-
-        # Draw input_number blink feedback
-        if getattr(button, '_input_blink_opacity', 0.0) > 0.01 and button.config.get('type') == 'input_number':
-            DashboardButtonPainter._paint_input_blink(button)
-
-        # Draw input_number hover arrows
-        if getattr(button, '_arrow_opacity', 0.0) > 0.01 and button.config.get('type') == 'input_number':
-            DashboardButtonPainter._paint_input_arrows(button)
-
-        # Per-tile refresh indicator (opt-in, Settings > Appearance > Options):
-        # painted last among these overlays so a simultaneous full-tile flash
-        # (script pulse, input_number blink) never hides the corner dot.
-        if getattr(button, '_refresh_flash_opacity', 0.0) > 0.01:
-            DashboardButtonPainter._paint_refresh_indicator(button)
-
+        cls = DashboardButtonPainter
+        btn_type = button.config.get('type')
+        cls._paint_type_content(button, btn_type)
+        cls._paint_feedback(button, btn_type)
         if not button.config:
-            DashboardButtonPainter._paint_empty_slot(button)
-
-        # Draw Resize Handle (Glass-like)
+            cls._paint_empty_slot(button)
         if button._resize_handle_opacity > 0.01:
-            DashboardButtonPainter._paint_resize_handle(button)
+            cls._paint_resize_handle(button)
+        cls._paint_bevel(button, btn_type)
 
-        # UNIVERSAL EDGE BEVEL HIGHLIGHT
-        # Gives ALL configured buttons a subtle physical lip, making them feel like 3D glass/plastic tiles
-        button_style = getattr(button, 'button_style', 'Gradient')
-        if button.config and button.config.get('type') != 'forbidden' and button_style == 'Gradient':
-            is_light = button.theme_manager and button.theme_manager.get_effective_theme() == 'light'
+    @staticmethod
+    def _paint_type_content(button, btn_type):
+        """What only some tile types draw themselves."""
+        cls = DashboardButtonPainter
+        if btn_type == 'media_player':
+            cls._paint_media_player(button)
+        elif btn_type == '3d_printer':
+            cls._paint_3d_printer(button)
+        elif btn_type == 'sun':
+            cls._draw_sun_button(button)
+        elif btn_type == 'widget' and button.config.get('display_style') in ('gauge', 'bar', 'perimeter'):
+            cls._paint_widget_sensor(button)
+        elif btn_type == 'lock' and getattr(button, '_lock_hold_progress', 0.0) > 0.0:
+            cls._paint_lock_hold_ring(button)  # hold-to-unlock progress
+        elif btn_type == 'camera':
+            cls._paint_camera(button)
+
+    @staticmethod
+    def _paint_camera(button):
+        """The latest camera frame, cropped to fill the tile, and the label pill over it."""
+        cached = getattr(button, '_cached_display_pixmap', None)
+        has_cached = bool(cached) and not cached.isNull()
+        raw = getattr(button, '_last_camera_pixmap', None)
+        # Without the cached rounded frame (first frame, or a resize race), scale the raw one.
+        crop = None if has_cached or not raw else _cover_crop(raw, button.width(), button.height())
+
+        if has_cached or crop:
             painter = QPainter(button)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            DashboardButtonPainter.draw_button_bevel_edge(
-                painter, QRectF(button.rect()), intensity_modifier=0.25, is_light=is_light
-            )
+            path = QPainterPath()
+            path.addRoundedRect(QRectF(button.rect()), 12, 12)
+            painter.setClipPath(path)  # also for the edge effects
+            if has_cached:
+                painter.drawPixmap(0, 0, cached)
+            else:
+                scaled, x, y = crop
+                painter.drawPixmap(0, 0, scaled, x, y, button.width(), button.height())
+            DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(button.rect()), is_top_clamped=False)
             painter.end()
+
+        label = button.config.get('label')
+        if label:
+            if has_cached:
+                bg_pix, x_off, y_off = cached, 0, 0
+            else:
+                bg_pix, x_off, y_off = crop or (None, 0, 0)
+            painter = QPainter(button)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            DashboardButtonPainter._draw_pill_label(painter, button.rect(), label, bg_pix, x_off, y_off)
+            painter.end()
+
+    @staticmethod
+    def _paint_feedback(button, btn_type):
+        """Transient overlays: script pulse, border animation, input_number blink and arrows, refresh dot."""
+        cls = DashboardButtonPainter
+        if button._pulse_opacity > 0.01:
+            cls._paint_pulse(button)
+        # Only draw special border if animating or if progress > 0
+        if button.anim.state() == QPropertyAnimation.State.Running or button._anim_progress > 0.0:
+            cls._paint_border_animation(button)
+        if btn_type == 'input_number':
+            if getattr(button, '_input_blink_opacity', 0.0) > 0.01:
+                cls._paint_input_blink(button)
+            if getattr(button, '_arrow_opacity', 0.0) > 0.01:
+                cls._paint_input_arrows(button)
+        # The opt-in refresh indicator comes last, so a full-tile flash at the
+        # same moment (script pulse, input_number blink) never hides the dot.
+        if getattr(button, '_refresh_flash_opacity', 0.0) > 0.01:
+            cls._paint_refresh_indicator(button)
+
+    @staticmethod
+    def _paint_bevel(button, btn_type):
+        """A subtle edge lip on every configured tile, so it reads as a glass/plastic tile."""
+        if not button.config or btn_type == 'forbidden' or getattr(button, 'button_style', 'Gradient') != 'Gradient':
+            return
+        is_light = button.theme_manager and button.theme_manager.get_effective_theme() == 'light'
+        painter = QPainter(button)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        DashboardButtonPainter.draw_button_bevel_edge(
+            painter, QRectF(button.rect()), intensity_modifier=0.25, is_light=is_light
+        )
+        painter.end()
 
     @staticmethod
     def _paint_media_player(button):
@@ -1734,3 +1680,11 @@ class DashboardButtonPainter:
                 painter.drawText(bottom_rect, Qt.AlignmentFlag.AlignCenter, time_str)
 
         painter.end()
+
+
+def _cover_crop(pixmap, width: int, height: int):
+    """(scaled, x, y): pixmap scaled to cover width x height, and the offsets that centre the crop."""
+    scaled = pixmap.scaled(
+        width, height, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
+    )
+    return scaled, (scaled.width() - width) // 2, (scaled.height() - height) // 2
