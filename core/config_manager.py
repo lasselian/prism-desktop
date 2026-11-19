@@ -19,45 +19,44 @@ class ConfigManager:
         self.save_config()  # Scrub sensitive data (tokens) from disk immediately
 
     def load_config(self) -> dict:
-        """Load configuration from file."""
+        """Load configuration from file, or the defaults when there is none or it is corrupt."""
         if self.config_path.exists():
             try:
                 with open(self.config_path, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-
-                    ha_config = config.get('home_assistant', {})
-                    token_in_file = ha_config.get('token', '')
-
-                    # Load token from secure storage (keyring or encrypted file)
-                    stored_token = load_token()
-
-                    if stored_token:
-                        # Token found in secure storage — use it
-                        ha_config['token'] = stored_token
-                    elif token_in_file:
-                        # Legacy: plaintext token in config.json — migrate it
-                        logger.info("[ConfigManager] Migrating plaintext token to secure storage...")
-                        store_token(token_in_file)
-                        ha_config['token'] = token_in_file
-
-                    # --- Auto-migrate legacy slot-only configs to (row, col) ---
-                    cols = config.get('appearance', {}).get('cols', 4)
-                    for btn_cfg in config.get('buttons', []):
-                        if 'row' not in btn_cfg and 'slot' in btn_cfg:
-                            slot = btn_cfg['slot']
-                            btn_cfg['row'] = slot // cols
-                            btn_cfg['col'] = slot % cols
-
-                    # --- Migrate buttons without a page key to page 0 ---
-                    for btn_cfg in config.get('buttons', []):
-                        if 'page' not in btn_cfg:
-                            btn_cfg['page'] = 0
-
-                    return config
+                self._apply_stored_token(config.get('home_assistant', {}))
+                self._migrate_buttons(config)
+                return config
             except Exception as e:
                 logger.error(f"Error loading config: {e}")
                 self._backup_corrupt_config()
+        return self._default_config()
 
+    @staticmethod
+    def _apply_stored_token(ha_config: dict) -> None:
+        """Take the token from secure storage, migrating a legacy plaintext one there first."""
+        stored_token = load_token()  # keyring or encrypted file
+        token_in_file = ha_config.get('token', '')
+        if stored_token:
+            ha_config['token'] = stored_token
+        elif token_in_file:
+            logger.info("[ConfigManager] Migrating plaintext token to secure storage...")
+            store_token(token_in_file)
+            ha_config['token'] = token_in_file
+
+    @staticmethod
+    def _migrate_buttons(config: dict) -> None:
+        """Give legacy buttons a (row, col) position and a page."""
+        cols = config.get('appearance', {}).get('cols', 4)
+        for btn_cfg in config.get('buttons', []):
+            if 'row' not in btn_cfg and 'slot' in btn_cfg:
+                slot = btn_cfg['slot']
+                btn_cfg['row'] = slot // cols
+                btn_cfg['col'] = slot % cols
+            btn_cfg.setdefault('page', 0)
+
+    @staticmethod
+    def _default_config() -> dict:
         return {
             "home_assistant": {"url": "", "token": ""},
             "appearance": {

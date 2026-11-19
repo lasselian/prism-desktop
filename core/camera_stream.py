@@ -52,13 +52,8 @@ class MjpegParser:
     # -- headers ---------------------------------------------------------------
 
     def _read_headers(self) -> bool:
+        self._skip_part_separator()
         buf = self._buf
-        # Skip the CRLF that ends the previous part.
-        start = 0
-        while start < len(buf) and buf[start] in b"\r\n \t":
-            start += 1
-        if start:
-            del buf[:start]
         if not buf:
             return False
 
@@ -67,16 +62,8 @@ class MjpegParser:
             self._in_body, self._length = True, None
             return True
 
-        if self._delim and not buf.startswith(self._delim):
-            # Out of step (a wrong Content-Length, say): skip to the next
-            # delimiter, keeping a tail that might be its first bytes.
-            idx = buf.find(self._delim)
-            if idx < 0:
-                keep = len(self._delim) - 1
-                if len(buf) > keep:
-                    del buf[: len(buf) - keep]
-                return False
-            del buf[:idx]
+        if not self._resync_to_delimiter():
+            return False
 
         end, sep = _find_header_end(buf)
         if end < 0:
@@ -86,27 +73,67 @@ class MjpegParser:
         if end > self.max_header:
             raise MjpegError("part headers too long")
 
-        length = None
-        for raw in bytes(buf[:end]).splitlines():
-            line = raw.strip()
-            if not line:
-                continue
-            if line.startswith(b"--"):
-                if self._delim is None and len(line) > 2:
-                    # A closing delimiter ends in an extra "--".
-                    self._delim = line[:-2] if line.endswith(b"--") and len(line) > 4 else line
-                continue
-            name, colon, value = line.partition(b":")
-            if colon and name.strip().lower() == b"content-length":
-                value = value.strip()
-                if not value.isdigit():
-                    raise MjpegError("bad Content-Length")
-                length = int(value)
-                if length > self.max_frame:
-                    raise MjpegError("frame too large")
+        length = self._parse_headers(bytes(buf[:end]))
         del buf[: end + sep]
         self._in_body, self._length = True, length
         return True
+
+    def _skip_part_separator(self) -> None:
+        """Drop the CRLF (and stray whitespace) that ends the previous part."""
+        buf = self._buf
+        start = 0
+        while start < len(buf) and buf[start] in b"\r\n \t":
+            start += 1
+        if start:
+            del buf[:start]
+
+    def _resync_to_delimiter(self) -> bool:
+        """Skip to the next delimiter when out of step (a wrong Content-Length, say).
+
+        Returns False when more data is needed first.
+        """
+        buf, delim = self._buf, self._delim
+        if not delim or buf.startswith(delim):
+            return True
+        idx = buf.find(delim)
+        if idx < 0:
+            # Keep a tail that might be the delimiter's first bytes.
+            keep = len(delim) - 1
+            if len(buf) > keep:
+                del buf[: len(buf) - keep]
+            return False
+        del buf[:idx]
+        return True
+
+    def _parse_headers(self, block: bytes) -> int | None:
+        """Learn the delimiter from the first part; return the part's Content-Length, if any."""
+        length = None
+        for raw in block.splitlines():
+            line = raw.strip()
+            if line.startswith(b"--"):
+                self._learn_delimiter(line)
+            elif line:
+                found = self._content_length(line)
+                if found is not None:
+                    length = found
+        return length
+
+    def _learn_delimiter(self, line: bytes) -> None:
+        if self._delim is None and len(line) > 2:
+            # A closing delimiter ends in an extra "--".
+            self._delim = line[:-2] if line.endswith(b"--") and len(line) > 4 else line
+
+    def _content_length(self, line: bytes) -> int | None:
+        name, colon, value = line.partition(b":")
+        if not colon or name.strip().lower() != b"content-length":
+            return None
+        value = value.strip()
+        if not value.isdigit():
+            raise MjpegError("bad Content-Length")
+        length = int(value)
+        if length > self.max_frame:
+            raise MjpegError("frame too large")
+        return length
 
     # -- body ------------------------------------------------------------------
 
