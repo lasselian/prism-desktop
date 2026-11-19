@@ -1274,9 +1274,11 @@ class PrinterOverlay(BaseOverlay):
         painter.drawText(QRect(x, y, pill_w, 16), Qt.AlignmentFlag.AlignCenter, label)
 
     def _draw_temp_cards(self, painter, x, y, w, h, alpha):
-        _fmt = lambda v: format_temperature(
-            v, self._printer_source_unit, self._temperature_unit_preference, precision=0, fallback="0"
-        )
+        def _fmt(value):
+            return format_temperature(
+                value, self._printer_source_unit, self._temperature_unit_preference, precision=0, fallback="0"
+            )
+
         gap = 8
         card_w = (w - gap) // 2
         icon_colors = [QColor("#FF6D00"), QColor("#42A5F5")]  # orange nozzle, blue bed
@@ -2152,26 +2154,10 @@ class AlarmOverlay(PressableOverlay):
             return
 
         if self._pending_action:
-            for rect_btn, kind, value in self._keypad_btns:
-                if not rect_btn.contains(pos):
-                    continue
-                self._trigger_press_anim(rect_btn)
-                if kind == 'digit':
-                    if len(self._entered_code) < 8:
-                        self._entered_code += value
-                        self.update()
-                elif kind == 'back':
-                    if self._entered_code:
-                        self._entered_code = self._entered_code[:-1]
-                        self.update()
-                    else:
-                        # Nothing to erase — treat as "back" out of the keypad.
-                        self._set_pending_action(None)
-                elif kind == 'submit' and self._entered_code:
-                    self.action_requested.emit(self._pending_action, self._entered_code)
-                    self._entered_code = ''
-                    self._set_pending_action(None)
-                return
+            key = next(((rect, kind, value) for rect, kind, value in self._keypad_btns if rect.contains(pos)), None)
+            if key:
+                self._trigger_press_anim(key[0])
+                self._press_keypad_key(key[1], key[2])
             return
 
         if self._btn_disarm.contains(pos):
@@ -2184,6 +2170,23 @@ class AlarmOverlay(PressableOverlay):
                 self._trigger_press_anim(rect_btn)
                 self._request_action(action)
                 return
+
+    def _press_keypad_key(self, kind: str, value):
+        if kind == 'digit':
+            if len(self._entered_code) < 8:
+                self._entered_code += value
+                self.update()
+        elif kind == 'back':
+            if self._entered_code:
+                self._entered_code = self._entered_code[:-1]
+                self.update()
+            else:
+                # Nothing to erase — treat as "back" out of the keypad.
+                self._set_pending_action(None)
+        elif kind == 'submit' and self._entered_code:
+            self.action_requested.emit(self._pending_action, self._entered_code)
+            self._entered_code = ''
+            self._set_pending_action(None)
 
     # ── Painting ──
 
