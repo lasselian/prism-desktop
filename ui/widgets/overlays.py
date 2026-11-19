@@ -1482,6 +1482,7 @@ class WeatherOverlay(BaseOverlay):
 
 class CameraOverlay(BaseOverlay):
     """Dynamic overlay for full camera view."""
+    pip_requested = pyqtSignal()   # pop the feed out into picture-in-picture
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1490,6 +1491,8 @@ class CameraOverlay(BaseOverlay):
         self._text          = "Camera"
         self._base_color    = QColor("#2d2d2d")
         self._btn_close     = QRect()
+        self._btn_pip       = QRect()
+        self._pip_available = False
 
     def on_anim_finished(self):
         if self._is_closing:
@@ -1501,9 +1504,13 @@ class CameraOverlay(BaseOverlay):
         if self.isVisible():
             self.update()
 
-    def start_morph(self, start_geo: QRect, target_geo: QRect, text: str, base_color: QColor = None):
-        self._text       = text
-        self._base_color = base_color or QColor("#2d2d2d")
+    def start_morph(self, start_geo: QRect, target_geo: QRect, text: str, base_color: QColor = None,
+                    pip_available: bool = False):
+        self._text          = text
+        self._base_color    = base_color or QColor("#2d2d2d")
+        # Only camera.* entities have a stream; image.* tiles get no PiP button.
+        self._pip_available = pip_available
+        self._btn_pip       = QRect()
         self._start_morph_animations(start_geo, target_geo)
 
     def paintEvent(self, event):
@@ -1563,21 +1570,31 @@ class CameraOverlay(BaseOverlay):
         close_x         = rect_int.width() - close_size - 12
         close_y         = 12
         self._btn_close = QRect(close_x, close_y, close_size, close_size)
+        if self._pip_available:
+            self._btn_pip = QRect(close_x - close_size - 8, close_y, close_size, close_size)
 
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setBrush(pill_bg)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(QRectF(self._btn_close), 14, 14)
+        if self._pip_available:
+            painter.drawRoundedRect(QRectF(self._btn_pip), 14, 14)
         painter.restore()
 
         painter.setFont(get_mdi_font(18))
         painter.setPen(pill_fg)
         painter.drawText(self._btn_close, Qt.AlignmentFlag.AlignCenter, get_icon('close'))
+        if self._pip_available:
+            painter.setFont(get_mdi_font(16))
+            painter.drawText(self._btn_pip, Qt.AlignmentFlag.AlignCenter,
+                             get_icon('picture-in-picture-bottom-right'))
 
     def mousePressEvent(self, event):
         if self._btn_close.contains(event.pos()):
             self.close_morph()
+        elif self._pip_available and self._btn_pip.contains(event.pos()):
+            self.pip_requested.emit()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

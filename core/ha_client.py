@@ -1,8 +1,16 @@
 import asyncio
 import logging
+import re
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Optional, Tuple
+
 import aiohttp
-from typing import Optional, Tuple
 from yarl import URL
+
+# Characters Home Assistant allows in a camera entity id. Checked before the id
+# goes into a URL path, so a hand-edited config cannot point the authenticated
+# request at another endpoint.
+CAMERA_ENTITY_RE = re.compile(r"camera\.[a-z0-9_]+")
 
 class HAClient:
     """Asynchronous client for Home Assistant REST API."""
@@ -237,7 +245,38 @@ class HAClient:
         except Exception as e:
             self.logger.error(f"Error fetching camera image for {entity_id}: {e}")
             return None
-            
+
+    @asynccontextmanager
+    async def camera_stream(
+        self, entity_id: str, read_timeout: float = 45
+    ) -> AsyncIterator[aiohttp.ClientResponse]:
+        """Open Home Assistant's MJPEG stream for a camera and yield the response.
+
+        The caller checks the status and reads the body. Works for every
+        camera: HA passes native MJPEG through and builds a stream from stills
+        for the rest. A still stream only sends a frame when the picture
+        changes, so a quiet static camera hits `read_timeout`; callers should
+        treat that as "reconnect", not as a failure.
+        """
+        if not isinstance(entity_id, str) or not CAMERA_ENTITY_RE.fullmatch(entity_id):
+            raise ValueError("not a camera entity id")
+        if not self.url or not self.token:
+            raise ValueError("Home Assistant URL and token are required")
+        # The session is fetched per call: configure() and close() replace it
+        # when the settings change, and the next reconnect must pick that up.
+        session = await self._get_session()
+        # A stream runs for hours, so no total limit (the session default is
+        # five minutes); sock_read catches a connection that has gone silent.
+        timeout = aiohttp.ClientTimeout(total=None, sock_connect=10, sock_read=read_timeout)
+        async with session.get(
+            f"{self.url}/api/camera_proxy_stream/{entity_id}",
+            timeout=timeout,
+            # HA does not redirect here; following one could carry the token
+            # to another host.
+            allow_redirects=False,
+        ) as response:
+            yield response
+
     # Artwork/audio is decorative; cap it so a hostile host cannot stream
     # unbounded data into memory.
     MAX_MEDIA_BYTES = 16 * 1024 * 1024

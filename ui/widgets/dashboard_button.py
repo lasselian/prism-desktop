@@ -144,6 +144,7 @@ class DashboardButton(QFrame):
     weather_requested = pyqtSignal(int, QRect) # slot, geometry
     printer_requested = pyqtSignal(int, QRect, dict) # slot, geometry, config
     camera_requested = pyqtSignal(int, QRect, dict) # slot, geometry, config
+    pip_requested = pyqtSignal(str, str) # camera entity_id, title
     volume_requested = pyqtSignal(int, QRect) # slot, geometry (for volume overlay)
     mower_requested = pyqtSignal(int, QRect) # slot, geometry (for mower overlay)
     vacuum_requested = pyqtSignal(int, QRect) # slot, geometry (for vacuum overlay)
@@ -2106,6 +2107,13 @@ class DashboardButton(QFrame):
         """)
         
         if self.config:
+            pip_entity = self._pip_camera_entity()
+            if pip_entity:
+                pip_action = menu.addAction(t("context_menu.picture_in_picture"))
+                pip_action.triggered.connect(
+                    lambda: self.pip_requested.emit(pip_entity, self.config.get('label') or '')
+                )
+
             edit_action = menu.addAction(t("context_menu.edit"))
             edit_action.triggered.connect(lambda: self.edit_requested.emit(self.slot))
             
@@ -2134,6 +2142,17 @@ class DashboardButton(QFrame):
             add_action.triggered.connect(lambda: self.clicked.emit(self.config)) # Trigger click (add)
         
         menu.exec(self.mapToGlobal(pos))
+
+    def _pip_camera_entity(self) -> str:
+        """The camera this tile can pop out into picture-in-picture, or ''."""
+        cfg = self.config or {}
+        if cfg.get('type') == 'camera':
+            entity_id = cfg.get('entity_id') or ''
+        elif cfg.get('type') == '3d_printer':
+            entity_id = cfg.get('printer_camera_entity') or ''
+        else:
+            return ''
+        return entity_id if entity_id.startswith('camera.') else ''
 
     def simulate_click(self):
         """Programmatically trigger a click."""

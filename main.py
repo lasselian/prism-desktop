@@ -94,6 +94,7 @@ from ui.tray_manager import TrayManager
 from services.notifications import NotificationManager
 from services.input_manager import InputManager, ButtonShortcutManager
 from services.assist_controller import AssistController
+from services.camera_pip import CameraPipManager
 from services.local_ipc import LocalCommandServer
 from services.mobile_app import register_mobile_app, send_location_update, register_sensors, update_sensor_states, build_sensor_state_payload, get_system_metrics
 from services.system_sensors import FAST_SENSORS, collect as collect_system_sensors, enabled_sensor_ids
@@ -175,7 +176,15 @@ class PrismDesktopApp(QObject):
         self._camera_cache = {}
         # image.* entity_picture path cache (change detection)
         self._image_pic_paths = {}
-        
+
+        # Floating camera windows that outlive the dashboard
+        self.camera_pip = CameraPipManager(
+            self.ha_client,
+            get_config=lambda: self.config,
+            save_config=self.save_config,
+            cached_pixmap=lambda entity_id: (self._camera_cache.get(entity_id) or (None, None))[1],
+        )
+
         # Initialize
         self.init_theme()
         self.init_ha_client()
@@ -429,6 +438,7 @@ class PrismDesktopApp(QObject):
         self.dashboard.media_command_requested.connect(self.on_media_command)
         self.dashboard.weather_forecast_requested.connect(self.on_weather_forecast_requested)
         self.dashboard.move_to_page_requested.connect(self.on_move_to_page_requested)
+        self.dashboard.camera_pip_requested.connect(self.camera_pip.open)
 
         self.dashboard._init_settings_widget(self.config, self.input_manager, self.assist_input_manager)
         sw = self.dashboard.settings_widget
@@ -769,6 +779,8 @@ class PrismDesktopApp(QObject):
     def _quit(self):
         """Quit the application."""
         self._push_sensor_state_sync(False)
+        # Before stop_all_threads closes the HA session the streams read from.
+        self.camera_pip.close_all()
         self.stop_all_threads()
         if self.local_command_server:
             self.local_command_server.close()
@@ -855,6 +867,7 @@ class PrismDesktopApp(QObject):
             await self.ha_client.close()
 
             self.init_ha_client()
+            self.camera_pip.reconnect_all()
             self.start_websocket()
             self.fetch_initial_states()
         else:

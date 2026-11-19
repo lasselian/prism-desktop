@@ -17,7 +17,8 @@ class OverlayManager(QObject):
     # Signals
     service_request = pyqtSignal(dict)  # Emit service calls (to be connected to HAClient or Dashboard)
     morph_changed = pyqtSignal(float) # Optional: if dashboard needs to know global animation progress
-    
+    camera_pip_requested = pyqtSignal(str, str)  # camera entity_id, title
+
     def __init__(self, parent: QWidget, theme_manager=None):
         super().__init__(parent)
         self.parent_widget = parent
@@ -51,6 +52,7 @@ class OverlayManager(QObject):
         self.camera_overlay = CameraOverlay(parent)
         self.camera_overlay.finished.connect(self.on_camera_finished)
         self.camera_overlay.morph_changed.connect(self.on_morph_changed)
+        self.camera_overlay.pip_requested.connect(self.on_camera_pip_requested)
 
         self.mower_overlay = MowerOverlay(parent)
         self.mower_overlay.action_requested.connect(self.on_mower_action)
@@ -1317,8 +1319,17 @@ class OverlayManager(QObject):
         self.camera_overlay.set_border_effect(self._border_effect)
         label = config.get('label', 'Camera')
         self.camera_overlay.start_morph(
-            start_rect, target_rect, label, base_color=base_color
+            start_rect, target_rect, label, base_color=base_color,
+            pip_available=entity_id.startswith('camera.'),
         )
+
+    def on_camera_pip_requested(self):
+        """Pop the open camera out into picture-in-picture and close the overlay."""
+        entity_id = self._active_camera_entity
+        if self.camera_overlay._is_closing or not entity_id:
+            return
+        self.camera_pip_requested.emit(entity_id, self.camera_overlay._text)
+        self.camera_overlay.close_morph()
 
     def on_camera_finished(self):
         self._active_camera_entity = None

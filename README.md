@@ -47,6 +47,7 @@ Built on Home Assistant's WebSocket API, it keeps your dashboard in **real-time 
 - **Customizable Appearance** — Choose border effects (Rainbow, Aurora, and more) and customize button colors.
 - **Keyboard Shortcuts** — Bind global shortcuts to toggle the app or trigger individual entities.
 - **Assist (beta)** — Talk or type to Home Assistant's Assist pipeline from the dashboard. Off by default; turn it on under *Settings → Assist (Beta)*.
+- **Camera Picture-in-Picture** — Pop a camera out into a small floating window that stays on top while the dashboard is closed. See [Camera Picture-in-Picture](#camera-picture-in-picture).
 ---
  
 ## Supported Entity Types
@@ -76,6 +77,18 @@ Dedicated tile for 3D printer monitoring:
 ## Widget Overlays
  
 ![gif-overlay](https://github.com/user-attachments/assets/244bb7a7-be80-499e-a343-ec8773bb1307)
+ 
+## Camera Picture-in-Picture
+ 
+Right-click a camera tile (or a 3D printer tile with a camera) and choose *Picture in picture*, or press the picture-in-picture button next to the close button in the camera view. The feed opens in its own small window that stays on top of other apps and keeps running when the dashboard closes.
+ 
+- **Move** it by dragging anywhere; it snaps to screen edges.
+- **Resize** it from any corner; the camera's shape is kept.
+- **Close** it with the × that appears when you hover over it.
+ 
+Clicking or dragging the window never takes focus away from the app you're typing in. Each camera remembers where you last put its window. The feed is Home Assistant's live MJPEG stream (cameras without one update about twice a second).
+ 
+**KDE Plasma:** KWin puts a focused fullscreen window above every "keep above" window, so the camera window hides behind fullscreen video. To keep it on top, add a window rule: *System Settings → Window Management → Window Rules → Add New*. Use *Add Property* to add *Window role*, set to *Exact Match* and `prism-camera-pip`, then *Add Property* again to add *Layer*, set to *Force* and *Popup*. Click *Apply*.
  
 ---
  

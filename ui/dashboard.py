@@ -79,6 +79,7 @@ class Dashboard(QWidget):
     volume_scroll_requested = pyqtSignal(str, float)  # entity_id, new_volume (for scroll wheel)
     media_command_requested = pyqtSignal(int, str)    # slot, command
     weather_forecast_requested = pyqtSignal(int, QRect, dict) # slot, geometry, config
+    camera_pip_requested = pyqtSignal(str, str)  # camera entity_id, title
     settings_saved = pyqtSignal(dict)
     
     def __init__(self, config: dict, theme_manager=None, input_manager=None, version: str = "Unknown", rows: int = 2, cols: int = DEFAULT_COLS, parent=None):
@@ -118,6 +119,7 @@ class Dashboard(QWidget):
         self.overlay_manager.update_states(self._entity_states)
         self.overlay_manager.service_request.connect(self.button_clicked.emit)
         self.overlay_manager.morph_changed.connect(self._on_overlay_morph)
+        self.overlay_manager.camera_pip_requested.connect(self.camera_pip_requested)
 
         self.assist_overlay = AssistOverlay(self)
         self.assist_overlay.content_changed.connect(self._on_assist_content_changed)
@@ -730,6 +732,7 @@ class Dashboard(QWidget):
         button.climate_requested.connect(self._on_climate_requested)
         button.weather_requested.connect(self._on_weather_requested)
         button.camera_requested.connect(self._on_camera_requested)
+        button.pip_requested.connect(self.camera_pip_requested)
         button.printer_requested.connect(self._on_printer_requested)
         button.mower_requested.connect(self._on_mower_requested)
         button.vacuum_requested.connect(self._on_vacuum_requested)

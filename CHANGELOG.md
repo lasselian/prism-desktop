@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Camera picture-in-picture
+
+- New: pop a camera out into a floating window that stays on top and keeps playing while the dashboard is closed. Right-click a camera or 3D printer tile and choose "Picture in picture", or use the new button in the camera view.
+- The window never takes focus, so you can keep typing in another app while you move or resize it. It snaps to screen edges, keeps the camera's shape when resized, and remembers its position for each camera.
+- On KDE Plasma it hides behind fullscreen windows unless you add a window rule; the README explains how.
+
 ### Assist (beta)
 
 - Typed messages now go through your preferred Assist pipeline, the same as voice, so they reach the same conversation agent (for example an LLM agent) and share one conversation.
