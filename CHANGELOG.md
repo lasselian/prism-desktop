@@ -26,8 +26,11 @@
 - `--toggle` and `--assist` now reach the running app on Windows, where they previously found no instance.
 - On large media tiles with album art, the label's frosted background now shows the part of the art that is behind it.
 - An empty or relative `XDG_CONFIG_HOME` (or an empty `APPDATA` on Windows) no longer puts the config in the folder Prism was started from.
+- Media tiles keep the same generated background for a track after a restart.
 
 ### Security
 
+- Only your own user account can send commands such as `--toggle` to a running Prism.
+- The flag that triggers the post-update check now lives next to your config instead of the shared temp folder.
 - Raised minimum dependency versions so source installs don't pull in releases with known vulnerabilities. Running from source now needs Python 3.11 or newer.
 - Updated the workflow actions.
