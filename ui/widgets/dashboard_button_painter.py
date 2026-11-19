@@ -292,235 +292,51 @@ class DashboardButtonPainter:
     def _paint_media_player(button):
         painter = QPainter(button)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
         rect = button.rect()
-        is_playing = button._state == "playing"
-        is_huge = button.span_x >= 2 and button.span_y >= 2  # 2x2+
-        is_wide = button.span_x >= 2
-        is_tall = button.span_y >= 2 and button.span_x < 2  # 1x2
+        w, h = rect.width(), rect.height()
+        is_huge = button.span_x >= 2 and button.span_y >= 2
+        accent = _media_accent(button)
 
-        # Resolve accent color
-        btn_color = button.config.get('color')
-        if not btn_color and button.theme_manager:
-            colors = button.theme_manager.get_colors()
-            btn_color = colors.get('accent', '#4285F4')
-        elif not btn_color:
-            btn_color = "#4285F4"
-
-        # --- Background ---
         clip_path = QPainterPath()
         clip_path.addRoundedRect(QRectF(rect).adjusted(1, 1, -1, -1), 12, 12)
         painter.setClipPath(clip_path)
 
-        # Album art background (any size except 1x1, if enabled)
+        # Album art fills every size but 1x1 (when enabled); else a generated light field.
         has_art = button._album_art and not button._album_art.isNull()
-        show_art = button.config.get('show_album_art', True)
-        if (is_huge or is_tall or is_wide) and has_art and show_art:
-            # Draw blurred/dimmed album art
-            scaled = button._album_art.scaled(
-                rect.width(),
-                rect.height(),
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            # Center crop
-            x_off = (scaled.width() - rect.width()) // 2
-            y_off = (scaled.height() - rect.height()) // 2
-            painter.drawPixmap(0, 0, scaled, x_off, y_off, rect.width(), rect.height())
-
-            # Gradient overlay: user color at bottom -> transparent at top
-            # FIX: Use explicit TopLeft/BottomLeft for full coverage
-            grad = QLinearGradient(QPointF(rect.topLeft()), QPointF(rect.bottomLeft()))
-            grad.setColorAt(0.0, QColor(0, 0, 0, 0))  # Top: transparent
-            overlay_color = QColor(btn_color)
-            overlay_color.setAlpha(255)
-            grad.setColorAt(1.0, overlay_color)  # Bottom: user color
-            painter.fillRect(rect, grad)
+        art = None
+        if (button.span_x >= 2 or button.span_y >= 2) and has_art and button.config.get('show_album_art', True):
+            art = _cover_crop(button._album_art, w, h)
+            scaled, x_off, y_off = art
+            painter.drawPixmap(0, 0, scaled, x_off, y_off, w, h)
+            _fill_bottom_gradient(painter, rect, accent, 255)
         else:
-            # No Art -> Procedural Background
+            _draw_media_background(painter, button, rect, accent)
 
-            # Generate deterministic seed based on media info or button slot
-            media_state = button._media_state or {}
-            attrs = media_state.get('attributes', {})
-
-            title = attrs.get('media_title', '')
-            artist = attrs.get('media_artist', '')
-
-            if title or artist:
-                # crc32, not hash(): str hashes change on every start, and the
-                # same track should get the same background each time.
-                seed = zlib.crc32(f"{title}{artist}".encode("utf-8"))
-            else:
-                seed = button.slot
-
-            animated = button.config.get('animated_bg', True)
-            w, h = rect.width(), rect.height()
-
-            if animated:
-                # --- Animated prismatic light field ---
-                button._ensure_anim_bg_layers(seed)
-                bg = BackgroundGenerator.render_frame(
-                    w,
-                    h,
-                    button._anim_bg_layers,
-                    button._anim_bg_frame,
-                    tiny_pixmap=button._anim_bg_tiny,
-                )
-                painter.drawPixmap(0, 0, bg)
-            else:
-                # --- Static background (original behaviour) ---
-                light_mode = bool(button.theme_manager and button.theme_manager.get_effective_theme() == 'light')
-                bg_pixmap = BackgroundGenerator.generate(w, h, seed=seed, light_mode=light_mode)
-                painter.drawPixmap(0, 0, bg_pixmap)
-
-            # Gradient overlay (for text readability)
-            grad = QLinearGradient(QPointF(rect.topLeft()), QPointF(rect.bottomLeft()))
-            grad.setColorAt(0.0, QColor(0, 0, 0, 0))
-            overlay_color = QColor(btn_color)
-            overlay_color.setAlpha(200 if is_playing else 120)
-            grad.setColorAt(1.0, overlay_color)
-            painter.fillRect(rect, grad)
-
-        # === PILL LABEL (Apple-like) ===
-        # Always show Pill if Huge 2x2+
         label = button.config.get('label')
         if is_huge and label:
-            if has_art and show_art:
-                # Same crop offsets as the art drawn above, so the frosted pill
-                # samples the part of the art that is actually behind it.
-                DashboardButtonPainter._draw_pill_label(painter, rect, label, scaled, x_off, y_off)
-            else:
-                DashboardButtonPainter._draw_pill_label(painter, rect, label)
+            # With art, the frosted pill samples the part of the art behind it.
+            DashboardButtonPainter._draw_pill_label(painter, rect, label, *(art or ()))
 
-        # --- Icons ---
-        is_playing = button._state == 'playing'
-        is_paused = button._state == 'paused'
-
-        play_icon = Icons.PLAY_PAUSE
-        if is_playing:
-            play_icon = Icons.PAUSE
-        elif is_paused:
-            play_icon = Icons.PLAY
-
+        play_icon = _media_play_icon(button._state)
         painter.setPen(QColor("white"))
-
-        # Get media info
-        attrs = button._media_state.get('attributes', {})
-        title = attrs.get('media_title', '')
-        artist = attrs.get('media_artist', '')
-
         if is_huge:
-            # === 2x2: Now Playing Layout ===
-            # Layout: album art top | transport controls middle | text bottom
-            w = rect.width()
-            h = rect.height()
-
-            # Transport controls (center area)
-            ctrl_h = 40
-            ctrl_y = h // 2 - ctrl_h // 2
+            # Transport controls across the middle, the song in a pill at the bottom
+            _draw_transport_row(painter, w, h // 2 - 20, 40, play_icon, 30)
+            attrs = (button._media_state or {}).get('attributes', {})
+            _draw_song_pill(painter, w, h, attrs.get('media_title', ''), attrs.get('media_artist', ''), art)
+        elif button.span_y >= 2:
+            # 1x2: play/pause in the upper half, previous | next below
             painter.setFont(get_mdi_font(30))
-
-            r_prev = QRect(0, ctrl_y, w // 3, ctrl_h)
-            painter.drawText(r_prev, Qt.AlignmentFlag.AlignCenter, Icons.PREVIOUS)
-
-            r_play = QRect(w // 3, ctrl_y, w // 3, ctrl_h)
-            painter.drawText(r_play, Qt.AlignmentFlag.AlignCenter, play_icon)
-
-            r_next = QRect((w // 3) * 2, ctrl_y, w // 3, ctrl_h)
-            painter.drawText(r_next, Qt.AlignmentFlag.AlignCenter, Icons.NEXT)
-
-            # === SONG INFO PILL (bottom area) ===
-            if title or artist:
-                # Build single-line display string: "Artist - Title"
-                if artist and title:
-                    info_text = f"{artist}  \u2013  {title}"
-                else:
-                    info_text = title or artist
-
-                # Measure text to determine pill size
-                info_font = QFont(SYSTEM_FONT, 8, QFont.Weight.DemiBold)
-                info_fm = QFontMetrics(info_font)
-
-                text_w = info_fm.horizontalAdvance(info_text)
-                padding_h = 20  # Horizontal padding
-                info_pill_w = min(text_w + padding_h * 2, w * 0.9)
-                info_pill_h = 28  # Single line pill
-
-                info_pill_x = (w - info_pill_w) / 2
-                info_pill_y = h - info_pill_h - 8  # 8px from bottom
-                info_pill_rect = QRectF(info_pill_x, info_pill_y, info_pill_w, info_pill_h)
-
-                # --- Pill Background ---
-                info_pill_path = QPainterPath()
-                info_pill_path.addRoundedRect(info_pill_rect, 14, 14)
-
-                if has_art and show_art:
-                    # Blurred art background
-                    from ui.utils.glass_effect import draw_frosted_pill
-
-                    info_text_color = draw_frosted_pill(
-                        painter, info_pill_rect, background_pixmap=scaled, bg_x_offset=x_off, bg_y_offset=y_off
-                    )
-                else:
-                    # No art fallback
-                    info_text_color = QColor(255, 255, 255, 220)
-                    painter.save()
-                    painter.fillPath(info_pill_path, QColor(0, 0, 0, 60))
-                    pen = QPen(QColor(255, 255, 255, 30))
-                    pen.setWidth(1)
-                    painter.setPen(pen)
-                    painter.drawRoundedRect(info_pill_rect, 14, 14)
-                    painter.restore()
-
-                # --- Draw Text ---
-                painter.setFont(info_font)
-                painter.setPen(info_text_color)
-                max_text_area = info_pill_w - padding_h * 2
-                fm = painter.fontMetrics()
-                elided = fm.elidedText(info_text, Qt.TextElideMode.ElideRight, int(max_text_area))
-                painter.drawText(info_pill_rect, Qt.AlignmentFlag.AlignCenter, elided)
-
-        elif is_tall:
-            # === 1x2: Tall Layout ===
-            w = rect.width()
-            h = rect.height()
-
-            # Play/pause (upper area)
-            painter.setFont(get_mdi_font(30))
-            play_rect = QRect(0, 0, w, h // 2)
-            painter.drawText(play_rect, Qt.AlignmentFlag.AlignCenter, play_icon)
-
-            # Prev / Next (bottom area)
-            ctrl_y = h // 2 + 8
-            ctrl_h = h // 2 - 8
+            painter.drawText(QRect(0, 0, w, h // 2), Qt.AlignmentFlag.AlignCenter, play_icon)
             painter.setFont(get_mdi_font(24))
-
-            r_prev = QRect(0, ctrl_y, w // 2, ctrl_h)
-            painter.drawText(r_prev, Qt.AlignmentFlag.AlignCenter, Icons.PREVIOUS)
-
-            r_next = QRect(w // 2, ctrl_y, w // 2, ctrl_h)
-            painter.drawText(r_next, Qt.AlignmentFlag.AlignCenter, Icons.NEXT)
-
-        elif is_wide:
-            # === 2x1: Wide Transport ===
-            w = rect.width()
-            h = rect.height()
-            painter.setFont(get_mdi_font(28))
-
-            r_prev = QRect(0, 0, w // 3, h)
-            painter.drawText(r_prev, Qt.AlignmentFlag.AlignCenter, Icons.PREVIOUS)
-
-            r_play = QRect(w // 3, 0, w // 3, h)
-            painter.drawText(r_play, Qt.AlignmentFlag.AlignCenter, play_icon)
-
-            r_next = QRect((w // 3) * 2, 0, w // 3, h)
-            painter.drawText(r_next, Qt.AlignmentFlag.AlignCenter, Icons.NEXT)
-
+            ctrl_y, ctrl_h = h // 2 + 8, h // 2 - 8
+            painter.drawText(QRect(0, ctrl_y, w // 2, ctrl_h), Qt.AlignmentFlag.AlignCenter, Icons.PREVIOUS)
+            painter.drawText(QRect(w // 2, ctrl_y, w // 2, ctrl_h), Qt.AlignmentFlag.AlignCenter, Icons.NEXT)
+        elif button.span_x >= 2:
+            _draw_transport_row(painter, w, 0, h, play_icon, 28)  # 2x1
         else:
-            # === 1x1: Compact Play/Pause ===
-            painter.setFont(get_mdi_font(28))
+            painter.setFont(get_mdi_font(28))  # 1x1: play/pause only
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, play_icon)
-
         painter.end()
 
     @staticmethod
@@ -1623,3 +1439,99 @@ def _paint_printer_compact(painter, button, view: _PrinterView):
         painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.Bold))
         painter.setPen(view.text_color)
         painter.drawText(QRectF(0, h / 2 + 20, w, 20), Qt.AlignmentFlag.AlignCenter, f"{view.progress:.0f}%")
+
+
+# ── Media player tile ──
+
+
+def _media_accent(button) -> str:
+    """The tile's colour, else the theme accent."""
+    color = button.config.get('color')
+    if color:
+        return color
+    if button.theme_manager:
+        return button.theme_manager.get_colors().get('accent', '#4285F4')
+    return "#4285F4"
+
+
+def _media_play_icon(state: str) -> str:
+    if state == 'playing':
+        return Icons.PAUSE
+    if state == 'paused':
+        return Icons.PLAY
+    return Icons.PLAY_PAUSE
+
+
+def _fill_bottom_gradient(painter, rect, color: str, alpha: int):
+    """Transparent at the top to the colour at the bottom, for readable controls."""
+    grad = QLinearGradient(QPointF(rect.topLeft()), QPointF(rect.bottomLeft()))
+    grad.setColorAt(0.0, QColor(0, 0, 0, 0))
+    bottom = QColor(color)
+    bottom.setAlpha(alpha)
+    grad.setColorAt(1.0, bottom)
+    painter.fillRect(rect, grad)
+
+
+def _draw_media_background(painter, button, rect, accent: str):
+    """A generated light field seeded by the track (or the slot), animated unless switched off."""
+    attrs = (button._media_state or {}).get('attributes', {})
+    title = attrs.get('media_title', '')
+    artist = attrs.get('media_artist', '')
+    # crc32, not hash(): str hashes change on every start, and the same track
+    # should get the same background each time.
+    seed = zlib.crc32(f"{title}{artist}".encode("utf-8")) if title or artist else button.slot
+    w, h = rect.width(), rect.height()
+    if button.config.get('animated_bg', True):
+        button._ensure_anim_bg_layers(seed)
+        bg = BackgroundGenerator.render_frame(
+            w, h, button._anim_bg_layers, button._anim_bg_frame, tiny_pixmap=button._anim_bg_tiny
+        )
+    else:
+        light_mode = bool(button.theme_manager and button.theme_manager.get_effective_theme() == 'light')
+        bg = BackgroundGenerator.generate(w, h, seed=seed, light_mode=light_mode)
+    painter.drawPixmap(0, 0, bg)
+    _fill_bottom_gradient(painter, rect, accent, 200 if button._state == "playing" else 120)
+
+
+def _draw_transport_row(painter, w: int, y: int, h: int, play_icon: str, font_size: int):
+    """Previous, play/pause and next in three equal columns."""
+    painter.setFont(get_mdi_font(font_size))
+    third = w // 3
+    for column, icon in enumerate((Icons.PREVIOUS, play_icon, Icons.NEXT)):
+        painter.drawText(QRect(third * column, y, third, h), Qt.AlignmentFlag.AlignCenter, icon)
+
+
+def _draw_song_pill(painter, w: int, h: int, title: str, artist: str, art):
+    """'Artist – Title' in a one-line pill at the bottom, frosted over the art when there is some."""
+    if not (title or artist):
+        return
+    info_text = f"{artist}  –  {title}" if artist and title else title or artist
+    info_font = QFont(SYSTEM_FONT, 8, QFont.Weight.DemiBold)
+    padding_h = 20
+    pill_w = min(QFontMetrics(info_font).horizontalAdvance(info_text) + padding_h * 2, w * 0.9)
+    pill_h = 28
+    pill_rect = QRectF((w - pill_w) / 2, h - pill_h - 8, pill_w, pill_h)
+
+    if art:
+        from ui.utils.glass_effect import draw_frosted_pill
+
+        scaled, x_off, y_off = art
+        text_color = draw_frosted_pill(
+            painter, pill_rect, background_pixmap=scaled, bg_x_offset=x_off, bg_y_offset=y_off
+        )
+    else:
+        text_color = QColor(255, 255, 255, 220)
+        pill_path = QPainterPath()
+        pill_path.addRoundedRect(pill_rect, 14, 14)
+        painter.save()
+        painter.fillPath(pill_path, QColor(0, 0, 0, 60))
+        pen = QPen(QColor(255, 255, 255, 30))
+        pen.setWidth(1)
+        painter.setPen(pen)
+        painter.drawRoundedRect(pill_rect, 14, 14)
+        painter.restore()
+
+    painter.setFont(info_font)
+    painter.setPen(text_color)
+    elided = painter.fontMetrics().elidedText(info_text, Qt.TextElideMode.ElideRight, int(pill_w - padding_h * 2))
+    painter.drawText(pill_rect, Qt.AlignmentFlag.AlignCenter, elided)
