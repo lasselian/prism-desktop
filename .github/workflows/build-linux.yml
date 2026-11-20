@@ -61,7 +61,10 @@ jobs:
         env:
           # The runner has no FUSE; let appimagetool unpack itself instead.
           APPIMAGE_EXTRACT_AND_RUN: '1'
-        run: python build_linux.py
+        # Under Xvfb: PyInstaller's pynput hook finds pynput's backends by
+        # importing them, and the X11 one needs a display. Without one the
+        # hook skips pynput.keyboard._xorg and the AppImage dies at start.
+        run: xvfb-run -a python build_linux.py
 
       - name: Check the glibc it needs
         run: |
