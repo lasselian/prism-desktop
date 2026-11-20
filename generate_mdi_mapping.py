@@ -33,6 +33,7 @@ def generate(force: bool = False) -> bool:
         except ImportError:
             cafile = None
         context = ssl.create_default_context(cafile=cafile)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
         with urllib.request.urlopen(MDI_CSS_URL, context=context, timeout=30) as resp:
             css = resp.read().decode("utf-8")
 

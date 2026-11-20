@@ -203,6 +203,7 @@ def fetch_mdi_mapping_worker():
         print("Fetching MDI mapping in background...")
         # Verified TLS; the CA bundle comes from configure_ssl() (SSL_CERT_FILE)
         context = ssl.create_default_context()
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
         with urllib.request.urlopen(MDI_CSS_URL, context=context, timeout=30) as response:
             css_content = response.read().decode('utf-8')
 
