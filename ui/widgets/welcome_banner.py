@@ -13,7 +13,10 @@ from core.localization_manager import t
 from ui.widgets.dashboard_button_painter import DashboardButtonPainter
 from ui.constants import BANNER_VERTICAL_MARGIN, GRID_MARGIN_LEFT, GRID_MARGIN_RIGHT, ROOT_MARGIN
 from ui.visuals.dashboard_effects import (
-    draw_aurora_border, draw_rainbow_border, draw_prism_shard_border, draw_liquid_mercury_border
+    draw_aurora_border,
+    draw_rainbow_border,
+    draw_prism_shard_border,
+    draw_liquid_mercury_border,
 )
 
 GAP = 5  # px gap between dashboard edge and banner
@@ -45,6 +48,7 @@ class _DotsWidget(QWidget):
 
     def sizeHint(self):
         from PyQt6.QtCore import QSize
+
         spacing = 10
         w = self._count * 6 + (self._count - 1) * (spacing - 6)
         return QSize(w, 16)
@@ -76,9 +80,15 @@ class WelcomeBanner(QWidget):
 
     finished = pyqtSignal()
 
-    def __init__(self, *, button_style: str = "Gradient", border_effect: str = "None",
-                 text_color: str = "#ffffff", glass_ui: bool = False,
-                 glass_is_light: bool = False):
+    def __init__(
+        self,
+        *,
+        button_style: str = "Gradient",
+        border_effect: str = "None",
+        text_color: str = "#ffffff",
+        glass_ui: bool = False,
+        glass_is_light: bool = False,
+    ):
         super().__init__(None)
 
         self._border_effect = border_effect
@@ -93,11 +103,7 @@ class WelcomeBanner(QWidget):
         self._above = True
 
         # Window flags — frameless, on top, no taskbar entry
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.Tool |
-            Qt.WindowType.WindowStaysOnTopHint
-        )
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
@@ -123,7 +129,7 @@ class WelcomeBanner(QWidget):
                 f"  color: #555; padding: 2px 10px; font-family: '{SYSTEM_FONT}'; font-size: 10px; }}"
                 f"QPushButton:hover {{ background: rgba(0,0,0,0.15); }}"
             )
-            next_bg       = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(0,100,200),stop:1 rgb(0,75,165))"
+            next_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(0,100,200),stop:1 rgb(0,75,165))"
             next_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(20,120,220),stop:1 rgb(0,95,185))"
         else:
             muted_style = (
@@ -131,7 +137,7 @@ class WelcomeBanner(QWidget):
                 f"  color: #ccc; padding: 2px 10px; font-family: '{SYSTEM_FONT}'; font-size: 10px; }}"
                 f"QPushButton:hover {{ background: rgba(255,255,255,0.2); }}"
             )
-            next_bg       = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(30,120,215),stop:1 rgb(0,90,180))"
+            next_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(30,120,215),stop:1 rgb(0,90,180))"
             next_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(50,140,235),stop:1 rgb(20,110,200))"
 
         next_style = (
@@ -233,12 +239,14 @@ class WelcomeBanner(QWidget):
             return None
         blur_factor = 0.06
         small = pixmap.scaled(
-            max(1, int(w * blur_factor)), max(1, int(h * blur_factor)),
+            max(1, int(w * blur_factor)),
+            max(1, int(h * blur_factor)),
             Qt.AspectRatioMode.IgnoreAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
         return small.scaled(
-            w, h,
+            w,
+            h,
             Qt.AspectRatioMode.IgnoreAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
@@ -340,7 +348,8 @@ class WelcomeBanner(QWidget):
             painter.drawRoundedRect(rect, 8, 8)
 
         DashboardButtonPainter.draw_image_edge_effects(
-            painter, rect,
+            painter,
+            rect,
             is_light=self._is_light,
             corner_radius=8,
         )

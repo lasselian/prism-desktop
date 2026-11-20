@@ -70,6 +70,7 @@ def apply_after_show(widget: QWidget) -> None:
 
 # -- macOS ---------------------------------------------------------------------
 
+
 def _macos_tweak(widget: QWidget) -> None:
     try:
         import objc
@@ -93,6 +94,7 @@ def _macos_tweak(widget: QWidget) -> None:
 
 # -- X11 -----------------------------------------------------------------------
 
+
 class _X11:
     """Just enough libX11 to edit WM_PROTOCOLS and _NET_WM_STATE."""
 
@@ -111,18 +113,29 @@ class _X11:
         x.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
         x.XGetWMProtocols.restype = ctypes.c_int
         x.XGetWMProtocols.argtypes = [
-            ctypes.c_void_p, ctypes.c_ulong,
-            ctypes.POINTER(ctypes.POINTER(ctypes.c_ulong)), ctypes.POINTER(ctypes.c_int),
+            ctypes.c_void_p,
+            ctypes.c_ulong,
+            ctypes.POINTER(ctypes.POINTER(ctypes.c_ulong)),
+            ctypes.POINTER(ctypes.c_int),
         ]
         x.XSetWMProtocols.restype = ctypes.c_int
         x.XSetWMProtocols.argtypes = [
-            ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong), ctypes.c_int,
+            ctypes.c_void_p,
+            ctypes.c_ulong,
+            ctypes.POINTER(ctypes.c_ulong),
+            ctypes.c_int,
         ]
         x.XFree.argtypes = [ctypes.c_void_p]
         x.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
         x.XChangeProperty.argtypes = [
-            ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong,
-            ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_int,
+            ctypes.c_void_p,
+            ctypes.c_ulong,
+            ctypes.c_ulong,
+            ctypes.c_ulong,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            ctypes.c_int,
         ]
         self.x = x
         # A second connection next to Qt's: window ids are server-wide, and
@@ -160,8 +173,9 @@ class _X11:
         atoms = [self.x.XInternAtom(self.dpy, n, False) for n in names]
         arr = (ctypes.c_ulong * len(atoms))(*atoms)
         xa_atom, prop_mode_append = 4, 2
-        self.x.XChangeProperty(self.dpy, wid, net_wm_state, xa_atom, 32,
-                               prop_mode_append, ctypes.cast(arr, ctypes.c_void_p), len(atoms))
+        self.x.XChangeProperty(
+            self.dpy, wid, net_wm_state, xa_atom, 32, prop_mode_append, ctypes.cast(arr, ctypes.c_void_p), len(atoms)
+        )
         self.x.XSync(self.dpy, False)
 
 

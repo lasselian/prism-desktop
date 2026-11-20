@@ -5,14 +5,27 @@ Supports toast (auto-dismiss) and confirm (Yes/No) modes.
 """
 
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QApplication
-from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, pyqtProperty, QTimer, QPropertyAnimation, QEasingCurve, QRectF, QPoint
+from PyQt6.QtCore import (
+    Qt,
+    pyqtSignal,
+    pyqtSlot,
+    pyqtProperty,
+    QTimer,
+    QPropertyAnimation,
+    QEasingCurve,
+    QRectF,
+    QPoint,
+)
 from PyQt6.QtGui import QPainter, QColor, QFont, QPainterPath, QPen
 from core.utils import SYSTEM_FONT
 from core.localization_manager import t
 from ui.widgets.dashboard_button_painter import DashboardButtonPainter
 from ui.constants import BANNER_HEIGHT, BANNER_VERTICAL_MARGIN, GRID_MARGIN_LEFT, GRID_MARGIN_RIGHT, ROOT_MARGIN
 from ui.visuals.dashboard_effects import (
-    draw_aurora_border, draw_rainbow_border, draw_prism_shard_border, draw_liquid_mercury_border
+    draw_aurora_border,
+    draw_rainbow_border,
+    draw_prism_shard_border,
+    draw_liquid_mercury_border,
 )
 
 
@@ -88,10 +101,17 @@ class NotificationBanner(QWidget):
     rejected = pyqtSignal()
     dismissed = pyqtSignal()
 
-    def __init__(self, message: str, banner_type: str = "toast", auto_dismiss_ms: int = 4000,
-                 button_style: str = "Gradient", border_effect: str = "None",
-                 text_color: str = "#ffffff", glass_ui: bool = False,
-                 glass_is_light: bool = False):
+    def __init__(
+        self,
+        message: str,
+        banner_type: str = "toast",
+        auto_dismiss_ms: int = 4000,
+        button_style: str = "Gradient",
+        border_effect: str = "None",
+        text_color: str = "#ffffff",
+        glass_ui: bool = False,
+        glass_is_light: bool = False,
+    ):
         super().__init__(None)
         self.banner_type = banner_type
         self._auto_dismiss_ms = auto_dismiss_ms
@@ -109,11 +129,7 @@ class NotificationBanner(QWidget):
         self.border_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
 
         # Window flags — frameless, on top, no taskbar entry
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.Tool |
-            Qt.WindowType.WindowStaysOnTopHint
-        )
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
@@ -164,34 +180,26 @@ class NotificationBanner(QWidget):
             if glass_is_light:
                 # Slightly desaturated for light backgrounds
                 if use_gradient:
-                    yes_bg       = ("qlineargradient(x1:0,y1:0,x2:0,y2:1,"
-                                    "stop:0 rgb(68,160,68),stop:1 rgb(48,135,48))")
-                    yes_bg_hover = ("qlineargradient(x1:0,y1:0,x2:0,y2:1,"
-                                    "stop:0 rgb(80,180,80),stop:1 rgb(60,155,60))")
-                    no_bg        = ("qlineargradient(x1:0,y1:0,x2:0,y2:1,"
-                                    "stop:0 rgb(185,58,58),stop:1 rgb(155,42,42))")
-                    no_bg_hover  = ("qlineargradient(x1:0,y1:0,x2:0,y2:1,"
-                                    "stop:0 rgb(210,68,68),stop:1 rgb(178,50,50))")
+                    yes_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(68,160,68),stop:1 rgb(48,135,48))"
+                    yes_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(80,180,80),stop:1 rgb(60,155,60))"
+                    no_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(185,58,58),stop:1 rgb(155,42,42))"
+                    no_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(210,68,68),stop:1 rgb(178,50,50))"
                 else:
-                    yes_bg       = "rgb(52,148,52)"
+                    yes_bg = "rgb(52,148,52)"
                     yes_bg_hover = "rgb(65,170,65)"
-                    no_bg        = "rgb(168,52,52)"
-                    no_bg_hover  = "rgb(195,62,62)"
+                    no_bg = "rgb(168,52,52)"
+                    no_bg_hover = "rgb(195,62,62)"
             else:
                 if use_gradient:
-                    yes_bg       = ("qlineargradient(x1:0,y1:0,x2:0,y2:1,"
-                                    "stop:0 rgb(75,175,75),stop:1 rgb(50,145,50))")
-                    yes_bg_hover = ("qlineargradient(x1:0,y1:0,x2:0,y2:1,"
-                                    "stop:0 rgb(90,200,90),stop:1 rgb(65,165,65))")
-                    no_bg        = ("qlineargradient(x1:0,y1:0,x2:0,y2:1,"
-                                    "stop:0 rgb(195,65,65),stop:1 rgb(160,45,45))")
-                    no_bg_hover  = ("qlineargradient(x1:0,y1:0,x2:0,y2:1,"
-                                    "stop:0 rgb(220,75,75),stop:1 rgb(185,55,55))")
+                    yes_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(75,175,75),stop:1 rgb(50,145,50))"
+                    yes_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(90,200,90),stop:1 rgb(65,165,65))"
+                    no_bg = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(195,65,65),stop:1 rgb(160,45,45))"
+                    no_bg_hover = "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgb(220,75,75),stop:1 rgb(185,55,55))"
                 else:
-                    yes_bg       = "rgb(55,155,55)"
+                    yes_bg = "rgb(55,155,55)"
                     yes_bg_hover = "rgb(70,180,70)"
-                    no_bg        = "rgb(175,55,55)"
-                    no_bg_hover  = "rgb(205,65,65)"
+                    no_bg = "rgb(175,55,55)"
+                    no_bg_hover = "rgb(205,65,65)"
 
             yes_style = (
                 f"QPushButton {{ background: {yes_bg}; border: none; border-radius: 6px;"
@@ -285,12 +293,14 @@ class NotificationBanner(QWidget):
             return None
         blur_factor = 0.06
         small = pixmap.scaled(
-            max(1, int(w * blur_factor)), max(1, int(h * blur_factor)),
+            max(1, int(w * blur_factor)),
+            max(1, int(h * blur_factor)),
             Qt.AspectRatioMode.IgnoreAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
         return small.scaled(
-            w, h,
+            w,
+            h,
             Qt.AspectRatioMode.IgnoreAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
@@ -323,7 +333,7 @@ class NotificationBanner(QWidget):
         if self._glass_ui:
             vis_x = x + ROOT_MARGIN
             vis_w = width - ROOT_MARGIN * 2
-            vis_y = y + 2   # matches the 2 px top inset in paintEvent
+            vis_y = y + 2  # matches the 2 px top inset in paintEvent
             vis_h = banner_h - 4
             self._glass_pixmap = self._capture_glass_background(vis_x, vis_y, vis_w, vis_h)
 
@@ -388,8 +398,10 @@ class NotificationBanner(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         rect = QRectF(self.rect()).adjusted(
-            ROOT_MARGIN, 2,
-            -ROOT_MARGIN, -2,
+            ROOT_MARGIN,
+            2,
+            -ROOT_MARGIN,
+            -2,
         )
 
         # Background — glass blur+tint or solid dark
@@ -413,7 +425,8 @@ class NotificationBanner(QWidget):
             painter.drawRoundedRect(rect, 8, 8)
 
         DashboardButtonPainter.draw_image_edge_effects(
-            painter, rect,
+            painter,
+            rect,
             is_light=self._is_light,
             corner_radius=8,
         )

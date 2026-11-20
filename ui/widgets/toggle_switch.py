@@ -14,9 +14,9 @@ class ToggleSwitch(QAbstractButton):
     Same API as QCheckBox: isChecked(), setChecked(), toggled signal.
     """
 
-    W = 34      # track width
-    H = 20      # track height
-    PAD = 2     # thumb padding inside track
+    W = 34  # track width
+    H = 20  # track height
+    PAD = 2  # thumb padding inside track
 
     def __init__(self, label: str = "", accent_color: str = "#0078d4", parent=None):
         super().__init__(parent)
@@ -24,7 +24,7 @@ class ToggleSwitch(QAbstractButton):
         self.setCheckable(True)
         self._accent = QColor(accent_color)
         self._text_color = QColor("#e0e0e0")
-        self._pos = 0.0  # 0.0 = off, 1.0 = on
+        self._pos = 0.0  # 0.0 is off, 1.0 is on
 
         self._anim = QPropertyAnimation(self, b"_slide_pos")
         self._anim.setDuration(160)
@@ -85,9 +85,9 @@ class ToggleSwitch(QAbstractButton):
         # ── Track color: gray → accent ────────────────────────────────────────
         off = QColor(120, 120, 128)  # neutral gray
         track = QColor(
-            int(off.red()   + (self._accent.red()   - off.red())   * t),
+            int(off.red() + (self._accent.red() - off.red()) * t),
             int(off.green() + (self._accent.green() - off.green()) * t),
-            int(off.blue()  + (self._accent.blue()  - off.blue())  * t),
+            int(off.blue() + (self._accent.blue() - off.blue()) * t),
         )
 
         p.setPen(Qt.PenStyle.NoPen)
@@ -107,7 +107,10 @@ class ToggleSwitch(QAbstractButton):
             p.setPen(QPen(self._text_color))
             p.setFont(self.font())
             p.drawText(
-                W + 8, 0, self.width() - W - 8, self.height(),
+                W + 8,
+                0,
+                self.width() - W - 8,
+                self.height(),
                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                 self.text(),
             )

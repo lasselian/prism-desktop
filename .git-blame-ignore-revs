@@ -1,0 +1,8 @@
+# Mechanical commits hidden from git blame:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Format the code with ruff format
+1d4742a5d6566fb4daa4b5f7d4a88b9969385354
+
+# Format services/notifications.py with ruff format
+875f0cecde4fe83d49f6e6b2fc0c458095cd4f15

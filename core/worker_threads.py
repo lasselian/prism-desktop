@@ -6,16 +6,17 @@ import asyncio
 from PyQt6.QtCore import QThread, pyqtSignal
 from core.ha_client import HAClient
 
+
 class ConnectionTestThread(QThread):
     """Background thread for testing connection."""
-    
+
     finished = pyqtSignal(bool, str)
-    
+
     def __init__(self, url: str, token: str):
         super().__init__()
         self.url = url
         self.token = token
-    
+
     def run(self):
         """Test connection in background."""
         try:

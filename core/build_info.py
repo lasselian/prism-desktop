@@ -21,6 +21,7 @@ except ImportError:
 def _run_git_command(*args: str) -> str:
     """Return git command output, or an empty string when unavailable."""
     import sys
+
     if getattr(sys, "frozen", False):
         return ""
     try:
@@ -28,7 +29,7 @@ def _run_git_command(*args: str) -> str:
         if sys.platform == "win32":
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
         return subprocess.check_output(["git", *args], **kwargs).strip()
-    except (FileNotFoundError, subprocess.CalledProcessError, OSError):
+    except (subprocess.CalledProcessError, OSError):  # OSError covers a missing git
         return ""
 
 

@@ -134,21 +134,13 @@ class WaylandGlobalShortcut:
                 future.set_result(message.body)
             return
 
-        if (
-            message.interface == GLOBAL_SHORTCUTS_IFACE
-            and message.member == "Activated"
-            and len(message.body) >= 2
-        ):
+        if message.interface == GLOBAL_SHORTCUTS_IFACE and message.member == "Activated" and len(message.body) >= 2:
             session_handle, shortcut_id = message.body[:2]
             if session_handle == self._session_handle and shortcut_id == SHORTCUT_ID:
                 self.on_trigger()
             return
 
-        if (
-            message.interface == SESSION_IFACE
-            and message.member == "Closed"
-            and message.path == self._session_handle
-        ):
+        if message.interface == SESSION_IFACE and message.member == "Closed" and message.path == self._session_handle:
             if self._task and not self._task.done():
                 self._task.cancel()
 
@@ -160,10 +152,12 @@ class WaylandGlobalShortcut:
         reply = await self._call_portal(
             member="CreateSession",
             signature="a{sv}",
-            body=[{
-                "handle_token": Variant("s", request_token),
-                "session_handle_token": Variant("s", session_token),
-            }],
+            body=[
+                {
+                    "handle_token": Variant("s", request_token),
+                    "session_handle_token": Variant("s", session_token),
+                }
+            ],
         )
 
         expected_request_path = _request_path(self._bus.unique_name, request_token)
@@ -196,13 +190,15 @@ class WaylandGlobalShortcut:
             signature="oa(sa{sv})sa{sv}",
             body=[
                 session_handle,
-                [[
-                    SHORTCUT_ID,
-                    {
-                        "description": Variant("s", "Toggle Prism Desktop"),
-                        "preferred_trigger": Variant("s", preferred_trigger),
-                    },
-                ]],
+                [
+                    [
+                        SHORTCUT_ID,
+                        {
+                            "description": Variant("s", "Toggle Prism Desktop"),
+                            "preferred_trigger": Variant("s", preferred_trigger),
+                        },
+                    ]
+                ],
                 "",
                 {"handle_token": Variant("s", request_token)},
             ],
@@ -226,14 +222,16 @@ class WaylandGlobalShortcut:
 
     async def _register_app_id(self):
         """Associate this host process with a stable portal app id."""
-        reply = await self._bus.call(Message(
-            destination=PORTAL_BUS_NAME,
-            path=PORTAL_OBJECT_PATH,
-            interface=REGISTRY_IFACE,
-            member="Register",
-            signature="sa{sv}",
-            body=[APP_ID, {}],
-        ))
+        reply = await self._bus.call(
+            Message(
+                destination=PORTAL_BUS_NAME,
+                path=PORTAL_OBJECT_PATH,
+                interface=REGISTRY_IFACE,
+                member="Register",
+                signature="sa{sv}",
+                body=[APP_ID, {}],
+            )
+        )
         if reply.message_type == MessageType.ERROR:
             # The registry helper is optional and may fail when the host app's
             # desktop file has not been indexed yet. Treat those cases as a
@@ -261,14 +259,16 @@ class WaylandGlobalShortcut:
         return future
 
     async def _call_portal(self, member: str, signature: str, body: list):
-        reply = await self._bus.call(Message(
-            destination=PORTAL_BUS_NAME,
-            path=PORTAL_OBJECT_PATH,
-            interface=GLOBAL_SHORTCUTS_IFACE,
-            member=member,
-            signature=signature,
-            body=body,
-        ))
+        reply = await self._bus.call(
+            Message(
+                destination=PORTAL_BUS_NAME,
+                path=PORTAL_OBJECT_PATH,
+                interface=GLOBAL_SHORTCUTS_IFACE,
+                member=member,
+                signature=signature,
+                body=body,
+            )
+        )
         if reply.message_type == MessageType.ERROR:
             text = reply.body[0] if reply.body else reply.error_name
             raise RuntimeError(f"{member} failed: {text}")
@@ -277,14 +277,16 @@ class WaylandGlobalShortcut:
     async def _add_match(self, rule: str):
         if not self._bus or rule in self._match_rules:
             return
-        reply = await self._bus.call(Message(
-            destination=DBUS_IFACE,
-            path=DBUS_OBJECT_PATH,
-            interface=DBUS_IFACE,
-            member="AddMatch",
-            signature="s",
-            body=[rule],
-        ))
+        reply = await self._bus.call(
+            Message(
+                destination=DBUS_IFACE,
+                path=DBUS_OBJECT_PATH,
+                interface=DBUS_IFACE,
+                member="AddMatch",
+                signature="s",
+                body=[rule],
+            )
+        )
         if reply.message_type == MessageType.ERROR:
             text = reply.body[0] if reply.body else reply.error_name
             raise RuntimeError(f"AddMatch failed: {text}")
@@ -293,26 +295,30 @@ class WaylandGlobalShortcut:
     async def _remove_match(self, rule: str):
         if not self._bus or rule not in self._match_rules:
             return
-        reply = await self._bus.call(Message(
-            destination=DBUS_IFACE,
-            path=DBUS_OBJECT_PATH,
-            interface=DBUS_IFACE,
-            member="RemoveMatch",
-            signature="s",
-            body=[rule],
-        ))
+        reply = await self._bus.call(
+            Message(
+                destination=DBUS_IFACE,
+                path=DBUS_OBJECT_PATH,
+                interface=DBUS_IFACE,
+                member="RemoveMatch",
+                signature="s",
+                body=[rule],
+            )
+        )
         if reply.message_type != MessageType.ERROR:
             self._match_rules.discard(rule)
 
     async def _close_session(self):
         if not self._bus or not self._session_handle:
             return
-        await self._bus.call(Message(
-            destination=PORTAL_BUS_NAME,
-            path=self._session_handle,
-            interface=SESSION_IFACE,
-            member="Close",
-        ))
+        await self._bus.call(
+            Message(
+                destination=PORTAL_BUS_NAME,
+                path=self._session_handle,
+                interface=SESSION_IFACE,
+                member="Close",
+            )
+        )
 
     async def _cleanup(self):
         for future in self._response_waiters.values():
@@ -330,7 +336,7 @@ class WaylandGlobalShortcut:
             self._handler_installed = False
 
         if self._bus:
-            for rule in list(self._match_rules):
+            for rule in self._match_rules.copy():  # _remove_match discards from the set
                 try:
                     await self._remove_match(rule)
                 except Exception:
@@ -417,12 +423,7 @@ def is_kde_wayland_session() -> bool:
 
     desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
     session_desktop = os.environ.get("XDG_SESSION_DESKTOP", "").upper()
-    return (
-        "KDE" in desktop
-        or "PLASMA" in desktop
-        or "KDE" in session_desktop
-        or "PLASMA" in session_desktop
-    )
+    return "KDE" in desktop or "PLASMA" in desktop or "KDE" in session_desktop or "PLASMA" in session_desktop
 
 
 def supports_wayland_global_shortcuts() -> bool:

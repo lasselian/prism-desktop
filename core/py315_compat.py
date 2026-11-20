@@ -61,6 +61,7 @@ def _patch_no_type_check_decorator() -> bool:
         @functools.wraps(decorator)
         def wrapped_decorator(*args, **kwds):
             return typing.no_type_check(decorator(*args, **kwds))
+
         return wrapped_decorator
 
     typing.no_type_check_decorator = no_type_check_decorator
@@ -69,8 +70,7 @@ def _patch_no_type_check_decorator() -> bool:
 
 def apply() -> list:
     """Apply every workaround that is needed. Returns the ones applied."""
-    applied = [name for name in ("_add_reader", "_add_writer")
-               if _patch_qasync_hook(name)]
+    applied = [name for name in ("_add_reader", "_add_writer") if _patch_qasync_hook(name)]
     if _patch_no_type_check_decorator():
         applied.append("no_type_check_decorator")
     return applied

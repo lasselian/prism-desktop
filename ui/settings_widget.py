@@ -1,4 +1,3 @@
-
 """
 Settings Widget
 Clean, minimalist, and bug-free implementation of the Settings panel.
@@ -10,12 +9,33 @@ import subprocess
 import sys
 from typing import Optional
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QLineEdit, QPushButton, QComboBox, QFormLayout,
-    QFrame, QApplication, QButtonGroup, QSizePolicy
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QComboBox,
+    QFormLayout,
+    QFrame,
+    QApplication,
+    QButtonGroup,
+    QSizePolicy,
 )
 from ui.widgets.toggle_switch import ToggleSwitch
-from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QUrl, QTimer, QThread, QSize, QPropertyAnimation, QEasingCurve, QObject, QEvent
+from PyQt6.QtCore import (
+    Qt,
+    pyqtSignal,
+    pyqtSlot,
+    QUrl,
+    QTimer,
+    QThread,
+    QSize,
+    QPropertyAnimation,
+    QEasingCurve,
+    QObject,
+    QEvent,
+)
 from PyQt6.QtGui import QColor, QDesktopServices, QIcon, QPixmap, QPainter
 from PyQt6.QtWidgets import QGraphicsOpacityEffect
 from core.localization_manager import t, current_language, supported_languages, init_localization
@@ -25,12 +45,29 @@ from core.worker_threads import ConnectionTestThread
 from ui.icons import Icons, get_mdi_font
 from services.update_checker import UpdateCheckerThread
 from services.location_manager import (
-    is_geoclue2_available, ensure_desktop_file,
-    get_distro_info, get_geoclue2_install_hint,
+    is_geoclue2_available,
+    ensure_desktop_file,
+    get_distro_info,
+    get_geoclue2_install_hint,
 )
+
+# The record button's dot (idle); a rounded square while recording
+RECORD_ICON_IDLE_STYLE = 'background-color: white; border-radius: 6px;'
+
+HINT_LABEL_STYLE = 'color: #aaa; font-size: 11px;'
+
+SHORTCUT_DISABLED_KEY = 'settings.shortcut.disabled'
+
+SHORTCUT_RECORDING_KEY = 'settings.shortcut.recording'
+
 try:
-    from services.wayland_global_shortcut import is_kde_wayland_session, is_wayland_session, supports_wayland_global_shortcuts
+    from services.wayland_global_shortcut import (
+        is_kde_wayland_session,
+        is_wayland_session,
+        supports_wayland_global_shortcuts,
+    )
 except Exception:
+
     def is_kde_wayland_session():
         return False
 
@@ -39,6 +76,7 @@ except Exception:
 
     def supports_wayland_global_shortcuts():
         return False
+
 
 class _ShortcutRow(QWidget):
     """A shortcut list row with hover-reveal edit and delete action buttons.
@@ -154,6 +192,7 @@ class _ShortcutRow(QWidget):
 
 class _IconHoverFilter(QObject):
     """Swaps a button's icon between normal and hover variants on Enter/Leave."""
+
     def __init__(self, btn: QPushButton, normal: QIcon, hover: QIcon):
         super().__init__(btn)
         self._btn = btn
@@ -183,7 +222,16 @@ class SettingsWidget(QWidget):
     request_delete_shortcut = pyqtSignal(dict)
     shortcut_deleted = pyqtSignal()
 
-    def __init__(self, config: dict, theme_manager=None, input_manager=None, current_version="0.0.0", parent=None, dashboard=None, assist_input_manager=None):
+    def __init__(
+        self,
+        config: dict,
+        theme_manager=None,
+        input_manager=None,
+        current_version="0.0.0",
+        parent=None,
+        dashboard=None,
+        assist_input_manager=None,
+    ):
         super().__init__(parent)
         self.config = config
         self.current_version = current_version
@@ -265,7 +313,7 @@ class SettingsWidget(QWidget):
         from ui.styles import Typography, Dimensions
 
         accent = colors['accent']
-        text   = colors['text']
+        text = colors['text']
         for toggle in self.findChildren(ToggleSwitch):
             toggle.set_accent(accent)
             toggle.set_text_color(text)
@@ -598,8 +646,7 @@ class SettingsWidget(QWidget):
     # -------------------------------------------------------------------------
 
     _SECTION_HEADER_STYLE = (
-        "font-size: 11px; font-weight: 600; color: #8e8e93; "
-        "letter-spacing: 0.5px; margin-bottom: 4px;"
+        "font-size: 11px; font-weight: 600; color: #8e8e93; letter-spacing: 0.5px; margin-bottom: 4px;"
     )
 
     def _make_pill_panel(self):
@@ -711,7 +758,7 @@ class SettingsWidget(QWidget):
         lang_form.addRow(_lang_lbl, self.language_combo)
 
         self._language_restart_note = QLabel(t("settings.appearance.language_restart_note"))
-        self._language_restart_note.setStyleSheet("color: #aaa; font-size: 11px;")
+        self._language_restart_note.setStyleSheet(HINT_LABEL_STYLE)
         self._language_restart_note.hide()
         lang_form.addRow("", self._language_restart_note)
         self.language_combo.currentIndexChanged.connect(self._on_language_changed)
@@ -721,15 +768,18 @@ class SettingsWidget(QWidget):
         settings_frame, form = self._make_pill_panel()
 
         self.theme_combo = QComboBox()
-        self.theme_combo.addItems([
-            t("settings.appearance.theme_system"),
-            t("settings.appearance.theme_light"),
-            t("settings.appearance.theme_dark"),
-        ])
+        self.theme_combo.addItems(
+            [
+                t("settings.appearance.theme_system"),
+                t("settings.appearance.theme_light"),
+                t("settings.appearance.theme_dark"),
+            ]
+        )
         self.theme_combo.setMinimumWidth(120)
         form.addRow(t("settings.appearance.theme_label"), self.theme_combo)
 
         from ui.widgets.effect_combobox import EffectComboBox
+
         self.border_effect_combo = EffectComboBox()
         self.border_effect_combo.addItems(["Rainbow", "Aurora Borealis", "Prism Shard", "Liquid Mercury", "None"])
         self.border_effect_combo.setMinimumWidth(120)
@@ -737,26 +787,32 @@ class SettingsWidget(QWidget):
         form.addRow(t("settings.appearance.border_label"), self.border_effect_combo)
 
         self.button_style_combo = QComboBox()
-        self.button_style_combo.addItems([
-            t("settings.appearance.button_style_gradient"),
-            t("settings.appearance.button_style_flat"),
-        ])
+        self.button_style_combo.addItems(
+            [
+                t("settings.appearance.button_style_gradient"),
+                t("settings.appearance.button_style_flat"),
+            ]
+        )
         self.button_style_combo.setMinimumWidth(120)
         form.addRow(t("settings.appearance.button_style_label"), self.button_style_combo)
 
         self.tray_position_combo = QComboBox()
-        self.tray_position_combo.addItems([
-            t("settings.appearance.tray_bottom"),
-            t("settings.appearance.tray_top"),
-        ])
+        self.tray_position_combo.addItems(
+            [
+                t("settings.appearance.tray_bottom"),
+                t("settings.appearance.tray_top"),
+            ]
+        )
         self.tray_position_combo.setMinimumWidth(120)
         form.addRow(t("settings.appearance.tray_label"), self.tray_position_combo)
 
         self.temperature_unit_combo = QComboBox()
-        self.temperature_unit_combo.addItems([
-            t("settings.appearance.temp_celsius"),
-            t("settings.appearance.temp_fahrenheit"),
-        ])
+        self.temperature_unit_combo.addItems(
+            [
+                t("settings.appearance.temp_celsius"),
+                t("settings.appearance.temp_fahrenheit"),
+            ]
+        )
         self.temperature_unit_combo.setMinimumWidth(120)
         form.addRow(t("settings.appearance.temp_label"), self.temperature_unit_combo)
 
@@ -845,7 +901,7 @@ class SettingsWidget(QWidget):
 
         self.shortcut_hint = QLabel("")
         self.shortcut_hint.setWordWrap(True)
-        self.shortcut_hint.setStyleSheet("color: #aaa; font-size: 11px;")
+        self.shortcut_hint.setStyleSheet(HINT_LABEL_STYLE)
         self.shortcut_hint.hide()
         shortcut_aux_layout.addWidget(self.shortcut_hint)
 
@@ -903,7 +959,7 @@ class SettingsWidget(QWidget):
 
         self.assist_shortcut_hint = QLabel("")
         self.assist_shortcut_hint.setWordWrap(True)
-        self.assist_shortcut_hint.setStyleSheet("color: #aaa; font-size: 11px;")
+        self.assist_shortcut_hint.setStyleSheet(HINT_LABEL_STYLE)
         self.assist_shortcut_hint.hide()
         assist_shortcut_aux_layout.addWidget(self.assist_shortcut_hint)
 
@@ -1089,9 +1145,7 @@ class SettingsWidget(QWidget):
         self.bug_btn.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl("https://github.com/lasselian/prism-desktop/issues"))
         )
-        self.bug_btn.installEventFilter(
-            _IconHoverFilter(self.bug_btn, QIcon(bug_pix), QIcon(bug_pix_hover))
-        )
+        self.bug_btn.installEventFilter(_IconHoverFilter(self.bug_btn, QIcon(bug_pix), QIcon(bug_pix_hover)))
         links_vbox.addWidget(self.bug_btn)
 
         coffee_pix = QPixmap(18, 18)
@@ -1117,12 +1171,8 @@ class SettingsWidget(QWidget):
         self.bmc_btn.setIcon(QIcon(coffee_pix))
         self.bmc_btn.setIconSize(QSize(16, 16))
         self.bmc_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.bmc_btn.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl("https://buymeacoffee.com/lasselian"))
-        )
-        self.bmc_btn.installEventFilter(
-            _IconHoverFilter(self.bmc_btn, QIcon(coffee_pix), QIcon(coffee_pix_hover))
-        )
+        self.bmc_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://buymeacoffee.com/lasselian")))
+        self.bmc_btn.installEventFilter(_IconHoverFilter(self.bmc_btn, QIcon(coffee_pix), QIcon(coffee_pix_hover)))
         links_vbox.addWidget(self.bmc_btn)
 
         vbox.addWidget(links_frame)
@@ -1152,13 +1202,14 @@ class SettingsWidget(QWidget):
 
         buttons = self.config.get('buttons', [])
         assigned = [
-            b for b in buttons
+            b
+            for b in buttons
             if b.get('custom_shortcut', {}).get('enabled') and b.get('custom_shortcut', {}).get('value')
         ]
 
         if not assigned:
             hint = QLabel(t("settings.shortcut.no_button_shortcuts"))
-            hint.setStyleSheet("color: #aaa; font-size: 11px;")
+            hint.setStyleSheet(HINT_LABEL_STYLE)
             layout.addWidget(hint)
             return
 
@@ -1178,9 +1229,11 @@ class SettingsWidget(QWidget):
     def apply_shortcut_delete(self, btn_cfg: dict):
         """Called by dashboard after the confirm banner is accepted."""
         for btn in self.config.get('buttons', []):
-            if (btn.get('row') == btn_cfg.get('row') and
-                    btn.get('col') == btn_cfg.get('col') and
-                    btn.get('page', 0) == btn_cfg.get('page', 0)):
+            if (
+                btn.get('row') == btn_cfg.get('row')
+                and btn.get('col') == btn_cfg.get('col')
+                and btn.get('page', 0) == btn_cfg.get('page', 0)
+            ):
                 btn['custom_shortcut'] = {'enabled': False, 'value': ''}
                 break
 
@@ -1196,9 +1249,11 @@ class SettingsWidget(QWidget):
             anim.setStartValue(1.0)
             anim.setEndValue(0.0)
             self._delete_anims.append(anim)
+
             def _on_done(a=anim):
                 self._delete_anims.remove(a)
                 self._refresh_button_shortcuts()
+
             anim.finished.connect(_on_done)
             anim.start()
         else:
@@ -1210,9 +1265,11 @@ class SettingsWidget(QWidget):
             w = layout.itemAt(i).widget()
             if w and hasattr(w, 'btn_cfg'):
                 bc = w.btn_cfg
-                if (bc.get('row') == btn_cfg.get('row') and
-                        bc.get('col') == btn_cfg.get('col') and
-                        bc.get('page', 0) == btn_cfg.get('page', 0)):
+                if (
+                    bc.get('row') == btn_cfg.get('row')
+                    and bc.get('col') == btn_cfg.get('col')
+                    and bc.get('page', 0) == btn_cfg.get('page', 0)
+                ):
                     return w
         return None
 
@@ -1223,8 +1280,12 @@ class SettingsWidget(QWidget):
             return ""
         result = value
         for token, display in (
-            ('<ctrl>', 'Ctrl'), ('<alt>', 'Alt'), ('<shift>', 'Shift'),
-            ('<cmd>', 'Cmd'), ('<super>', 'Super'), ('<meta>', 'Meta'),
+            ('<ctrl>', 'Ctrl'),
+            ('<alt>', 'Alt'),
+            ('<shift>', 'Shift'),
+            ('<cmd>', 'Cmd'),
+            ('<super>', 'Super'),
+            ('<meta>', 'Meta'),
         ):
             result = result.replace(token, display)
         result = result.replace('<', '').replace('>', '')
@@ -1281,13 +1342,9 @@ class SettingsWidget(QWidget):
         self.theme_combo.setCurrentIndex(idx)
 
         tray_position_map = {'bottom': 0, 'top': 1}
-        self.tray_position_combo.setCurrentIndex(
-            tray_position_map.get(app.get('tray_position', 'bottom'), 0)
-        )
+        self.tray_position_combo.setCurrentIndex(tray_position_map.get(app.get('tray_position', 'bottom'), 0))
         temperature_unit_map = {'celsius': 0, 'fahrenheit': 1}
-        self.temperature_unit_combo.setCurrentIndex(
-            temperature_unit_map.get(app.get('temperature_unit', 'celsius'), 0)
-        )
+        self.temperature_unit_combo.setCurrentIndex(temperature_unit_map.get(app.get('temperature_unit', 'celsius'), 0))
 
         effect = app.get('border_effect', 'Rainbow')
 
@@ -1321,9 +1378,7 @@ class SettingsWidget(QWidget):
         self.language_combo.blockSignals(False)
 
         if sys.platform in ('win32', 'linux'):
-            self.location_check.setChecked(
-                self.config.get('mobile_app', {}).get('location_enabled', False)
-            )
+            self.location_check.setChecked(self.config.get('mobile_app', {}).get('location_enabled', False))
 
         mobile_cfg = self.config.get('mobile_app', {})
         self.send_logged_in_check.setChecked(mobile_cfg.get('send_logged_in', True))
@@ -1356,7 +1411,8 @@ class SettingsWidget(QWidget):
         """Save and emit config."""
         self._cleanup_threads()
 
-        if 'home_assistant' not in self.config: self.config['home_assistant'] = {}
+        if 'home_assistant' not in self.config:
+            self.config['home_assistant'] = {}
         self.config['home_assistant']['url'] = self.url_input.text().strip()
         self.config['home_assistant']['token'] = self.token_input.text().strip()
 
@@ -1369,19 +1425,21 @@ class SettingsWidget(QWidget):
         new_language = self._language_codes[self.language_combo.currentIndex()]
 
         self.config.setdefault('appearance', {})
-        self.config['appearance'].update({
-            'theme': theme_map.get(self.theme_combo.currentIndex(), 'system'),
-            'tray_position': tray_position_map.get(self.tray_position_combo.currentIndex(), 'bottom'),
-            'temperature_unit': temperature_unit_map.get(self.temperature_unit_combo.currentIndex(), 'celsius'),
-            'border_effect': self.border_effect_combo.currentText(),
-            'button_style': {0: 'Gradient', 1: 'Flat'}.get(self.button_style_combo.currentIndex(), 'Gradient'),
-            'show_dimming': self.show_dimming_check.isChecked(),
-            'refresh_indicators': self.refresh_indicator_check.isChecked(),
-            'glass_ui': self.glass_ui_check.isChecked(),
-            'pin_window': self.pin_check.isChecked(),
-            'pages': self.pages_combo.currentIndex() + 1,
-            'language': new_language,
-        })
+        self.config['appearance'].update(
+            {
+                'theme': theme_map.get(self.theme_combo.currentIndex(), 'system'),
+                'tray_position': tray_position_map.get(self.tray_position_combo.currentIndex(), 'bottom'),
+                'temperature_unit': temperature_unit_map.get(self.temperature_unit_combo.currentIndex(), 'celsius'),
+                'border_effect': self.border_effect_combo.currentText(),
+                'button_style': {0: 'Gradient', 1: 'Flat'}.get(self.button_style_combo.currentIndex(), 'Gradient'),
+                'show_dimming': self.show_dimming_check.isChecked(),
+                'refresh_indicators': self.refresh_indicator_check.isChecked(),
+                'glass_ui': self.glass_ui_check.isChecked(),
+                'pin_window': self.pin_check.isChecked(),
+                'pages': self.pages_combo.currentIndex() + 1,
+                'language': new_language,
+            }
+        )
 
         if sys.platform in ('win32', 'linux'):
             new_location_enabled = self.location_check.isChecked()
@@ -1404,13 +1462,16 @@ class SettingsWidget(QWidget):
         self.config['assist']['mic_device_id'] = self.assist_mic_combo.currentData() or ""
         self.config['assist']['speaker_device_id'] = self.assist_speaker_combo.currentData() or ""
 
-        if 'shortcut' not in self.config: self.config['shortcut'] = {}
-        if 'assist_shortcut' not in self.config: self.config['assist_shortcut'] = {}
+        if 'shortcut' not in self.config:
+            self.config['shortcut'] = {}
+        if 'assist_shortcut' not in self.config:
+            self.config['assist_shortcut'] = {}
 
         self.settings_saved.emit(self.config)
 
         if new_language != old_language:
             from ui.notifications import notify_language_restart
+
             QTimer.singleShot(300, lambda: notify_language_restart(self.window()))
 
     # -------------------------------------------------------------------------
@@ -1436,6 +1497,7 @@ class SettingsWidget(QWidget):
                 dashboard = self.window()
                 if hasattr(dashboard, 'show_toast'):
                     from ui.notifications import notify_geoclue2_missing
+
                     QTimer.singleShot(350, lambda: notify_geoclue2_missing(dashboard, cmd))
             else:
                 ensure_desktop_file()
@@ -1475,13 +1537,13 @@ class SettingsWidget(QWidget):
 
         if checked:
             self.record_icon.setStyleSheet("background-color: white; border-radius: 2px;")
-            self.shortcut_display.setText(t("settings.shortcut.recording"))
+            self.shortcut_display.setText(t(SHORTCUT_RECORDING_KEY))
             self.input_manager.start_recording()
         else:
-            self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+            self.record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
             self.input_manager.restore_shortcut()
             sc = self.config.get('shortcut', {})
-            if self.shortcut_display.text() == t("settings.shortcut.recording"):
+            if self.shortcut_display.text() == t(SHORTCUT_RECORDING_KEY):
                 self.shortcut_display.setText(sc.get('value', ''))
 
     @pyqtSlot(dict)
@@ -1490,9 +1552,10 @@ class SettingsWidget(QWidget):
             return
 
         self.record_btn.setChecked(False)
-        self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+        self.record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
         self.shortcut_display.setText(shortcut.get('value', ''))
-        if 'shortcut' not in self.config: self.config['shortcut'] = {}
+        if 'shortcut' not in self.config:
+            self.config['shortcut'] = {}
         self.config['shortcut'] = shortcut
 
         self.input_manager.update_shortcut(shortcut)
@@ -1512,13 +1575,13 @@ class SettingsWidget(QWidget):
 
         if checked:
             self.assist_record_icon.setStyleSheet("background-color: white; border-radius: 2px;")
-            self.assist_shortcut_display.setText(t("settings.shortcut.recording"))
+            self.assist_shortcut_display.setText(t(SHORTCUT_RECORDING_KEY))
             self.assist_input_manager.start_recording()
         else:
-            self.assist_record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+            self.assist_record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
             self.assist_input_manager.restore_shortcut()
             sc = self.config.get('assist_shortcut', {})
-            if self.assist_shortcut_display.text() == t("settings.shortcut.recording"):
+            if self.assist_shortcut_display.text() == t(SHORTCUT_RECORDING_KEY):
                 self.assist_shortcut_display.setText(sc.get('value', ''))
 
     @pyqtSlot(dict)
@@ -1527,7 +1590,7 @@ class SettingsWidget(QWidget):
             return
 
         self.assist_record_btn.setChecked(False)
-        self.assist_record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+        self.assist_record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
         self.assist_shortcut_display.setText(shortcut.get('value', ''))
         self.config['assist_shortcut'] = shortcut
 
@@ -1541,7 +1604,7 @@ class SettingsWidget(QWidget):
             self.assist_record_btn.hide()
             self.assist_shortcut_display.setEnabled(False)
             self.assist_shortcut_display.setProperty("locked", True)
-            self.assist_shortcut_display.setText(t("settings.shortcut.disabled"))
+            self.assist_shortcut_display.setText(t(SHORTCUT_DISABLED_KEY))
             self.assist_shortcut_display.setToolTip("")
             self.assist_shortcut_hint.setText(t("settings.assist_shortcut.kde_hint"))
             self.assist_shortcut_aux.show()
@@ -1553,7 +1616,7 @@ class SettingsWidget(QWidget):
             self.assist_record_btn.hide()
             self.assist_shortcut_display.setEnabled(False)
             self.assist_shortcut_display.setProperty("locked", True)
-            self.assist_shortcut_display.setText(t("settings.shortcut.disabled"))
+            self.assist_shortcut_display.setText(t(SHORTCUT_DISABLED_KEY))
             self.assist_shortcut_display.setToolTip("")
             self.assist_shortcut_hint.setText(t("settings.assist_shortcut.wayland_hint"))
             self.assist_shortcut_aux.show()
@@ -1590,7 +1653,7 @@ class SettingsWidget(QWidget):
             self.record_btn.hide()
             self.shortcut_display.setEnabled(False)
             self.shortcut_display.setProperty("locked", True)
-            self.shortcut_display.setText(t("settings.shortcut.disabled"))
+            self.shortcut_display.setText(t(SHORTCUT_DISABLED_KEY))
             self.shortcut_display.setToolTip("")
             self.shortcut_hint.setText(t("settings.shortcut.kde_hint"))
             self.shortcut_aux.show()
@@ -1602,7 +1665,7 @@ class SettingsWidget(QWidget):
             self.record_btn.hide()
             self.shortcut_display.setEnabled(False)
             self.shortcut_display.setProperty("locked", True)
-            self.shortcut_display.setText(t("settings.shortcut.disabled"))
+            self.shortcut_display.setText(t(SHORTCUT_DISABLED_KEY))
             self.shortcut_display.setToolTip("")
             self.shortcut_hint.setText(t("settings.shortcut.wayland_hint"))
             self.shortcut_aux.show()
@@ -1683,6 +1746,7 @@ class SettingsWidget(QWidget):
             self._set_conn_status("ok" if success else "error", message)
             if not success and self.dashboard:
                 from ui.notifications import notify_connection_test_result
+
                 notify_connection_test_result(self.dashboard, success, message)
         except RuntimeError:
             pass  # slot fired after widget was destroyed (save-then-close race)
@@ -1700,13 +1764,11 @@ class SettingsWidget(QWidget):
             )
         else:
             self.update_label.setCursor(Qt.CursorShape.ArrowCursor)
-            self.update_label.setText(
-                f'<span style="color: #aaa; font-size: 11px;">v{APP_VERSION}</span>'
-            )
+            self.update_label.setText(f'<span style="color: #aaa; font-size: 11px;">v{APP_VERSION}</span>')
 
     def _set_version_label_expanded(self):
         full = get_display_version()
-        suffix = full[len(APP_VERSION):]
+        suffix = full[len(APP_VERSION) :]
         if suffix:
             self.update_label.setCursor(Qt.CursorShape.PointingHandCursor)
             commit = suffix.strip(" ()")
@@ -1726,7 +1788,7 @@ class SettingsWidget(QWidget):
         elif href == "copy":
             full = get_display_version()
             QApplication.clipboard().setText(f"v{full}")
-            suffix = full[len(APP_VERSION):]
+            suffix = full[len(APP_VERSION) :]
             commit = suffix.strip(" ()")
             self.update_label.setText(
                 f'<span style="color: #aaa; font-size: 11px;"><a href="collapse" {self._VERSION_STYLE}>v{APP_VERSION}</a>'
@@ -1759,14 +1821,13 @@ class SettingsWidget(QWidget):
 
     def _start_auto_update(self):
         from services.auto_updater import AutoUpdateThread
+
         self.update_btn.setEnabled(False)
         self.update_label.setText(t("settings.support.updating"))
-        self.update_label.setStyleSheet("color: #aaa; font-size: 11px;")
+        self.update_label.setStyleSheet(HINT_LABEL_STYLE)
 
         self._auto_update_thread = AutoUpdateThread()
-        self._auto_update_thread.progress.connect(
-            lambda msg: self.update_label.setText(msg)
-        )
+        self._auto_update_thread.progress.connect(lambda msg: self.update_label.setText(msg))
         self._auto_update_thread.success.connect(self._on_auto_update_success)
         self._auto_update_thread.error.connect(self._on_auto_update_error)
         self._auto_update_thread.start()
@@ -1779,6 +1840,7 @@ class SettingsWidget(QWidget):
         self.update_label.setText(t("settings.support.restarting"))
         self.update_label.setStyleSheet("color: #34A853; font-size: 11px;")
         from services.auto_updater import restart_app
+
         QTimer.singleShot(1200, restart_app)
 
     @pyqtSlot(str)

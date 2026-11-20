@@ -1,12 +1,31 @@
 import math
+import sys
 from contextlib import contextmanager
+from datetime import datetime
 
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import (
-    Qt, pyqtSignal, QPropertyAnimation, QEasingCurve, pyqtProperty, QRect, QPoint, QPointF, QRectF, QTimer
+    Qt,
+    pyqtSignal,
+    QPropertyAnimation,
+    QEasingCurve,
+    pyqtProperty,
+    QRect,
+    QPoint,
+    QPointF,
+    QRectF,
+    QTimer,
 )
 from PyQt6.QtGui import (
-    QColor, QFont, QFontMetrics, QPainter, QBrush, QPen, QLinearGradient, QConicalGradient, QPainterPath
+    QColor,
+    QFont,
+    QFontMetrics,
+    QPainter,
+    QBrush,
+    QPen,
+    QLinearGradient,
+    QConicalGradient,
+    QPainterPath,
 )
 from ui.icons import get_icon, get_mdi_font, Icons
 from core.utils import SYSTEM_FONT
@@ -15,17 +34,17 @@ from core.localization_manager import t
 from ui.widgets.dashboard_button_painter import DashboardButtonPainter
 
 # ── Shared Overlay Animation Constants ──────────────────────────────
-MORPH_OPEN_DURATION   = 400                          # ms – expand from button
-MORPH_OPEN_EASING     = QEasingCurve.Type.OutCubic
-MORPH_CLOSE_DURATION  = 400                          # ms – shrink back to button
-MORPH_CLOSE_EASING    = QEasingCurve.Type.InOutCubic
-CLOSE_FADE_EXPONENT   = 0.5                          # painter opacity = progress ** this
-CLOSE_FADE_START      = 0.35                          # start fading when progress drops below this
-BORDER_SPIN_DURATION  = 1300                         # ms – rainbow/aurora border animation
-BORDER_SPIN_EASING    = QEasingCurve.Type.InOutQuad
-CONTENT_FADE_DURATION = 300                          # ms – content fade-in after open
-CONTENT_FADE_EASING   = QEasingCurve.Type.OutQuad
-OVERLAY_CORNER_RADIUS = 12                           # px – rounded rect radius
+MORPH_OPEN_DURATION = 400  # ms – expand from button
+MORPH_OPEN_EASING = QEasingCurve.Type.OutCubic
+MORPH_CLOSE_DURATION = 400  # ms – shrink back to button
+MORPH_CLOSE_EASING = QEasingCurve.Type.InOutCubic
+CLOSE_FADE_EXPONENT = 0.5  # painter opacity = progress ** this
+CLOSE_FADE_START = 0.35  # start fading when progress drops below this
+BORDER_SPIN_DURATION = 1300  # ms – rainbow/aurora border animation
+BORDER_SPIN_EASING = QEasingCurve.Type.InOutQuad
+CONTENT_FADE_DURATION = 300  # ms – content fade-in after open
+CONTENT_FADE_EASING = QEasingCurve.Type.OutQuad
+OVERLAY_CORNER_RADIUS = 12  # px – rounded rect radius
 # ────────────────────────────────────────────────────────────────────
 
 
@@ -37,8 +56,9 @@ class BaseOverlay(QWidget):
     luminance-based text color, and common paint helpers.
     Subclasses implement start_morph() and paintEvent().
     """
-    finished      = pyqtSignal()
-    morph_changed = pyqtSignal(float)   # 0.0 – 1.0
+
+    finished = pyqtSignal()
+    morph_changed = pyqtSignal(float)  # 0.0 – 1.0
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -46,8 +66,8 @@ class BaseOverlay(QWidget):
         self.raise_()
         self.hide()
 
-        self._text       = ""
-        self._color      = QColor("#FFD700")
+        self._text = ""
+        self._color = QColor("#FFD700")
         self._base_color = QColor("#2d2d2d")
 
         # ── Morph animation ──
@@ -72,9 +92,9 @@ class BaseOverlay(QWidget):
         self.content_anim.setEndValue(1.0)
 
         self._border_effect = 'Rainbow'
-        self._is_closing    = False
-        self._start_geom    = QRect()
-        self._target_geom   = QRect()
+        self._is_closing = False
+        self._start_geom = QRect()
+        self._target_geom = QRect()
 
     # ── Color helpers ──
 
@@ -99,7 +119,7 @@ class BaseOverlay(QWidget):
         current_rect = QRect(
             int(self._start_geom.x() + (self._target_geom.x() - self._start_geom.x()) * val),
             int(self._start_geom.y() + (self._target_geom.y() - self._start_geom.y()) * val),
-            int(self._start_geom.width()  + (self._target_geom.width()  - self._start_geom.width())  * val),
+            int(self._start_geom.width() + (self._target_geom.width() - self._start_geom.width()) * val),
             int(self._start_geom.height() + (self._target_geom.height() - self._start_geom.height()) * val),
         )
         self.setGeometry(current_rect)
@@ -129,9 +149,9 @@ class BaseOverlay(QWidget):
 
     def _start_morph_animations(self, start_geo: QRect, target_geo: QRect):
         """Start morph + border animations. Call from subclass start_morph()."""
-        self._start_geom      = start_geo
-        self._target_geom     = target_geo
-        self._is_closing      = False
+        self._start_geom = start_geo
+        self._target_geom = target_geo
+        self._is_closing = False
         self._content_opacity = 0.0
 
         self.content_anim.stop()
@@ -154,7 +174,7 @@ class BaseOverlay(QWidget):
         self.anim_border.start()
 
     def close_morph(self):
-        self._is_closing      = True
+        self._is_closing = True
         self._content_opacity = 0.0
         self.update()
 
@@ -182,7 +202,7 @@ class BaseOverlay(QWidget):
         """Apply closing fade opacity. Call at the top of paintEvent."""
         if self._is_closing and self._morph_progress < CLOSE_FADE_START:
             ratio = self._morph_progress / CLOSE_FADE_START
-            painter.setOpacity(ratio ** CLOSE_FADE_EXPONENT)
+            painter.setOpacity(ratio**CLOSE_FADE_EXPONENT)
 
     def _draw_background(self, painter, rect):
         painter.setBrush(self._base_color)
@@ -214,7 +234,9 @@ class BaseOverlay(QWidget):
         self._draw_gradient_border(painter, rect, ["#26C6DA", "#EC407A", "#FFCA28", "#CFD8DC", "#26C6DA"])
 
     def _draw_liquid_mercury_border(self, painter, rect):
-        self._draw_gradient_border(painter, rect, ["#37474F", "#78909C", "#CFD8DC", "#ECEFF1", "#CFD8DC", "#78909C", "#37474F"])
+        self._draw_gradient_border(
+            painter, rect, ["#37474F", "#78909C", "#CFD8DC", "#ECEFF1", "#CFD8DC", "#78909C", "#37474F"]
+        )
 
     def _draw_gradient_border(self, painter, rect, colors):
         speed = 0.9 if self._border_effect == 'Prism Shard' else 1.5
@@ -237,6 +259,30 @@ class BaseOverlay(QWidget):
         painter.drawRoundedRect(QRectF(rect).adjusted(1, 1, -1, -1), OVERLAY_CORNER_RADIUS, OVERLAY_CORNER_RADIUS)
 
 
+_HVAC_MODE_ICONS = {
+    'cool': 'snowflake',
+    'heat': 'fire',
+    'off': 'power',
+    'auto': 'thermostat-auto',
+    'dry': 'water-percent',
+    'fan_only': 'fan',
+    'heat_cool': 'sun-snowflake-variant',
+}
+_FAN_SPEED_TEXT = {'low': '1', 'medium': '2', 'high': '3', 'mid': '2', 'middle': '2', 'min': '1', 'max': 'Max'}
+
+
+# The alarm keypad, row by row: (kind, digit)
+_KEYPAD_KEYS = [('digit', str(n)) for n in range(1, 10)] + [('back', None), ('digit', '0'), ('submit', None)]
+
+
+def _icon_row_layout(count: int, avail_width: float, spacing: float):
+    """(start_x, spacing) for count 32px icons right of an 80px label: centred, or squeezed to fit."""
+    total = count * 32 + (count - 1) * spacing
+    if total > avail_width:
+        return 80, (avail_width - count * 32) / (count - 1) if count > 1 else 0
+    return 80 + (avail_width - total) / 2, spacing
+
+
 class PressableOverlay(BaseOverlay):
     """BaseOverlay plus shrink-and-bounce feedback for tapped buttons.
 
@@ -253,10 +299,13 @@ class PressableOverlay(BaseOverlay):
         self._press_anim = QPropertyAnimation(self, b"press_scale_prop")
         self._press_anim.finished.connect(self._on_press_anim_finished)
 
-    def get_press_scale(self): return self._press_scale
+    def get_press_scale(self):
+        return self._press_scale
+
     def set_press_scale(self, v):
         self._press_scale = v
         self.update()
+
     press_scale_prop = pyqtProperty(float, get_press_scale, set_press_scale)
 
     def _on_press_anim_finished(self):
@@ -300,20 +349,28 @@ class PressableOverlay(BaseOverlay):
 
 class DimmerOverlay(BaseOverlay):
     """Overlay slider that morphs from a button."""
-    value_changed = pyqtSignal(int)   # 0-100
+
+    value_changed = pyqtSignal(int)  # 0-100
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._value      = 0
-        self._text       = "Dimmer"
-        self._color      = QColor("#FFD700")
+        self._value = 0
+        self._text = "Dimmer"
+        self._color = QColor("#FFD700")
         self._base_color = QColor("#2d2d2d")
 
-    def start_morph(self, start_geo: QRect, target_geo: QRect, initial_value: int, text: str,
-                    color: QColor = None, base_color: QColor = None):
-        self._value      = initial_value
-        self._text       = text
-        self._color      = color      or QColor("#FFD700")
+    def start_morph(
+        self,
+        start_geo: QRect,
+        target_geo: QRect,
+        initial_value: int,
+        text: str,
+        color: QColor = None,
+        base_color: QColor = None,
+    ):
+        self._value = initial_value
+        self._text = text
+        self._color = color or QColor("#FFD700")
         self._base_color = base_color or QColor("#2d2d2d")
         self._start_morph_animations(start_geo, target_geo)
         self.grabMouse()
@@ -362,7 +419,9 @@ class DimmerOverlay(BaseOverlay):
             painter.drawRect(QRect(0, 0, fill_width, rect.height()))
 
         painter.setClipping(False)
-        DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg())
+        DashboardButtonPainter.draw_image_edge_effects(
+            painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg()
+        )
         self._draw_border_animation(painter, rect)
 
         painter.setClipping(False)
@@ -385,36 +444,38 @@ class DimmerOverlay(BaseOverlay):
 
 class ClimateOverlay(PressableOverlay):
     """Overlay for climate control with +/- buttons."""
-    value_changed = pyqtSignal(float)   # Temperature value
-    mode_changed  = pyqtSignal(str)     # HVAC mode
-    fan_changed   = pyqtSignal(str)     # Fan mode
+
+    value_changed = pyqtSignal(float)  # Temperature value
+    mode_changed = pyqtSignal(str)  # HVAC mode
+    fan_changed = pyqtSignal(str)  # Fan mode
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._value      = 20.0
-        self._text       = "Climate"
-        self._color      = QColor("#EA4335")
+        self._value = 20.0
+        self._text = "Climate"
+        self._color = QColor("#EA4335")
         self._base_color = QColor("#2d2d2d")
 
-        self._min_temp            = 5.0
-        self._max_temp            = 35.0
-        self._step                = 0.5
-        self._display_temp_unit   = 'C'
-        self._current_hvac_mode   = 'off'
-        self._current_fan_mode    = 'auto'
-        self._hvac_modes          = []
-        self._fan_modes           = []
+        self._min_temp = 5.0
+        self._max_temp = 35.0
+        self._step = 0.5
+        self._display_temp_unit = 'C'
+        self._current_hvac_mode = 'off'
+        self._current_fan_mode = 'auto'
+        self._hvac_modes = []
+        self._fan_modes = []
 
-        self._btn_minus       = QRect()
-        self._btn_plus        = QRect()
-        self._btn_close       = QRect()
+        self._btn_minus = QRect()
+        self._btn_plus = QRect()
+        self._btn_close = QRect()
         self._btn_minus_click = QRect()
-        self._btn_plus_click  = QRect()
-        self._mode_btns       = []
-        self._fan_btns        = []
+        self._btn_plus_click = QRect()
+        self._mode_btns = []
+        self._fan_btns = []
 
-
-    def configure_temperature_range(self, min_temp: float, max_temp: float, step: float, display_unit: str | None = None):
+    def configure_temperature_range(
+        self, min_temp: float, max_temp: float, step: float, display_unit: str | None = None
+    ):
         self._min_temp = min_temp
         self._max_temp = max_temp
         self._step = step if step and step > 0 else 0.5
@@ -433,15 +494,23 @@ class ClimateOverlay(PressableOverlay):
             self._fan_modes = attrs.get('fan_modes')
         self.update()
 
-    def start_morph(self, start_geo: QRect, target_geo: QRect, initial_value: float, text: str,
-                    color: QColor = None, base_color: QColor = None, current_state: dict | None = None):
+    def start_morph(
+        self,
+        start_geo: QRect,
+        target_geo: QRect,
+        initial_value: float,
+        text: str,
+        color: QColor = None,
+        base_color: QColor = None,
+        current_state: dict | None = None,
+    ):
         self._hvac_modes = ['off', 'heat', 'cool', 'auto']
-        self._fan_modes  = ['auto', 'low', 'medium', 'high']
+        self._fan_modes = ['auto', 'low', 'medium', 'high']
         if current_state:
             self.update_state(current_state)
-        self._value      = initial_value
-        self._text       = text
-        self._color      = color      or QColor("#EA4335")
+        self._value = initial_value
+        self._text = text
+        self._color = color or QColor("#EA4335")
         self._base_color = base_color or QColor("#2d2d2d")
         self._start_morph_animations(start_geo, target_geo)
 
@@ -482,7 +551,9 @@ class ClimateOverlay(PressableOverlay):
 
         rect = self.rect()
         self._draw_background(painter, rect)
-        DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg())
+        DashboardButtonPainter.draw_image_edge_effects(
+            painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg()
+        )
         self._draw_border_animation(painter, rect)
 
         base_alpha = int(255 * self._morph_progress)
@@ -541,17 +612,17 @@ class ClimateOverlay(PressableOverlay):
 
     def _draw_control_pill(self, painter, cx, cy, alpha, compact=False):
         btn_radius = 10 if compact else 13
-        spacing    = 12 if compact else 16
+        spacing = 12 if compact else 16
 
         font_val = QFont(SYSTEM_FONT, 13 if compact else 16, QFont.Weight.Light)
         painter.setFont(font_val)
         fm = painter.fontMetrics()
         val_str = f"{self._value:.1f}".replace('.0', '')
         val_str = f"{val_str}°{self._display_temp_unit}"
-        text_w  = fm.horizontalAdvance(val_str)
+        text_w = fm.horizontalAdvance(val_str)
 
-        inner_w  = btn_radius * 2 + spacing + text_w + 10 + spacing + btn_radius * 2
-        pill_h   = 36 if compact else 46
+        inner_w = btn_radius * 2 + spacing + text_w + 10 + spacing + btn_radius * 2
+        pill_h = 36 if compact else 46
         pill_rect = QRect(0, 0, inner_w + 24, pill_h)
         pill_rect.moveCenter(QPoint(cx, cy))
 
@@ -562,13 +633,13 @@ class ClimateOverlay(PressableOverlay):
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRoundedRect(QRectF(pill_rect), pill_h // 2, pill_h // 2)
 
-        text_left  = cx - text_w // 2
+        text_left = cx - text_w // 2
         text_right = cx + text_w // 2
 
         btn_x_minus = text_left - spacing - btn_radius
         self._btn_minus_click = QRect(btn_x_minus - btn_radius, cy - btn_radius, btn_radius * 2, btn_radius * 2)
-        btn_x_plus  = text_right + spacing + btn_radius
-        self._btn_plus_click  = QRect(btn_x_plus - btn_radius, cy - btn_radius, btn_radius * 2, btn_radius * 2)
+        btn_x_plus = text_right + spacing + btn_radius
+        self._btn_plus_click = QRect(btn_x_plus - btn_radius, cy - btn_radius, btn_radius * 2, btn_radius * 2)
 
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -582,7 +653,7 @@ class ClimateOverlay(PressableOverlay):
         painter.setFont(get_mdi_font(16))
         painter.setPen(QColor(255, 255, 255, alpha))
         painter.drawText(self._btn_minus_click, Qt.AlignmentFlag.AlignCenter, get_icon('minus'))
-        painter.drawText(self._btn_plus_click,  Qt.AlignmentFlag.AlignCenter, get_icon('plus'))
+        painter.drawText(self._btn_plus_click, Qt.AlignmentFlag.AlignCenter, get_icon('plus'))
 
         # Baseline position so text is visually centered at cy
         baseline_y = cy + (fm.ascent() - fm.descent()) / 2.0
@@ -604,27 +675,34 @@ class ClimateOverlay(PressableOverlay):
 
     def _draw_advanced_controls_split(self, painter, rect, alpha):
         self._mode_btns = []
-        self._fan_btns  = []
+        self._fan_btns = []
 
-        modes     = self._hvac_modes or ['off', 'heat', 'cool']
-        fan_modes = self._fan_modes  or ['auto', 'low', 'high']
+        modes = self._hvac_modes or ['off', 'heat', 'cool']
+        fan_modes = self._fan_modes or ['auto', 'low', 'high']
 
         margin_left = 20
-        y_mode    = 45
+        y_mode = 45
         icon_size = 36
-        spacing   = 16
-        y_fan     = y_mode + icon_size + 30
+        spacing = 16
+        y_fan = y_mode + icon_size + 30
 
         painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
         painter.setPen(self._fg_color(int(alpha * 0.4)))
-        painter.drawText(QRect(rect.left() + margin_left, y_mode - 25, 60, 20),
-                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, t("overlay.climate.mode_label"))
+        painter.drawText(
+            QRect(rect.left() + margin_left, y_mode - 25, 60, 20),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            t("overlay.climate.mode_label"),
+        )
 
         start_x = rect.left() + margin_left
         mode_icons = {
-            'cool': 'snowflake', 'heat': 'fire', 'off': 'power',
-            'auto': 'thermostat-auto', 'dry': 'water-percent',
-            'fan_only': 'fan', 'heat_cool': 'sun-snowflake-variant'
+            'cool': 'snowflake',
+            'heat': 'fire',
+            'off': 'power',
+            'auto': 'thermostat-auto',
+            'dry': 'water-percent',
+            'fan_only': 'fan',
+            'heat_cool': 'sun-snowflake-variant',
         }
 
         painter.setFont(get_mdi_font(22))
@@ -634,17 +712,22 @@ class ClimateOverlay(PressableOverlay):
                 break
             btn_rect = QRect(x, y_mode, icon_size, icon_size)
             self._mode_btns.append((btn_rect, mode))
-            is_active = (mode == self._current_hvac_mode)
+            is_active = mode == self._current_hvac_mode
             with self._press_feedback(painter, btn_rect):
                 self._draw_icon_pill(painter, btn_rect, is_active, alpha)
                 painter.setPen(self._fg_color(alpha if is_active else int(alpha * 0.4)))
                 painter.setFont(get_mdi_font(22))
-                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon(mode_icons.get(mode, 'help-circle-outline')))
+                painter.drawText(
+                    btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon(mode_icons.get(mode, 'help-circle-outline'))
+                )
 
         painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
         painter.setPen(self._fg_color(int(alpha * 0.4)))
-        painter.drawText(QRect(rect.left() + margin_left, y_fan - 25, 60, 20),
-                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, t("overlay.climate.fan_label"))
+        painter.drawText(
+            QRect(rect.left() + margin_left, y_fan - 25, 60, 20),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            t("overlay.climate.fan_label"),
+        )
 
         fan_map = {'low': '1', 'medium': '2', 'high': '3', 'mid': '2', 'min': '1', 'max': 'Max'}
 
@@ -654,7 +737,7 @@ class ClimateOverlay(PressableOverlay):
                 break
             btn_rect = QRect(x, y_fan, icon_size, icon_size)
             self._fan_btns.append((btn_rect, mode))
-            is_active = (mode == self._current_fan_mode)
+            is_active = mode == self._current_fan_mode
             with self._press_feedback(painter, btn_rect):
                 self._draw_icon_pill(painter, btn_rect, is_active, alpha)
                 painter.setPen(self._fg_color(alpha if is_active else int(alpha * 0.4)))
@@ -664,91 +747,63 @@ class ClimateOverlay(PressableOverlay):
                     painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon('fan-auto'))
                 else:
                     painter.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.Bold))
-                    painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter,
-                                     fan_map.get(mode_lower, mode_lower.capitalize()[:1]))
+                    painter.drawText(
+                        btn_rect, Qt.AlignmentFlag.AlignCenter, fan_map.get(mode_lower, mode_lower.capitalize()[:1])
+                    )
 
     def _draw_advanced_controls(self, painter, rect, alpha, start_y=78):
+        """Two rows of round buttons: HVAC modes, then fan modes."""
         self._mode_btns = []
-        self._fan_btns  = []
+        self._fan_btns = []
+        modes = self._hvac_modes or ['off', 'heat', 'cool']
+        fan_modes = self._fan_modes or ['auto', 'low', 'high']
+        icon_size = 32
+        avail_width = rect.width() - 80 - 20  # right of the 80px row labels
 
-        modes     = self._hvac_modes or ['off', 'heat', 'cool']
-        fan_modes = self._fan_modes  or ['auto', 'low', 'high']
-
-        mode_icons = {
-            'cool': 'snowflake', 'heat': 'fire', 'off': 'power',
-            'auto': 'thermostat-auto', 'dry': 'water-percent',
-            'fan_only': 'fan', 'heat_cool': 'sun-snowflake-variant'
-        }
-
-        icon_size   = 32
-        spacing     = 12
-        y_pos_1     = start_y
-        label_width = 80
-        avail_width = rect.width() - label_width - 20
-
-        painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
-        painter.setPen(self._fg_color(int(alpha * 0.4)))
-        painter.drawText(QRect(20, y_pos_1, 60, icon_size),
-                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, t("overlay.climate.mode_label"))
-
-        total_items     = len(modes)
-        total_icon_width = (total_items * icon_size) + ((total_items - 1) * spacing)
-
-        if total_icon_width > avail_width:
-            spacing = (avail_width - (total_items * icon_size)) / (total_items - 1) if total_items > 1 else 0
-            start_x = label_width
-        else:
-            start_x = label_width + (avail_width - total_icon_width) / 2
-
+        self._draw_row_label(painter, start_y, t("overlay.climate.mode_label"), alpha)
+        start_x, spacing = _icon_row_layout(len(modes), avail_width, 12)
         painter.setFont(get_mdi_font(20))
         for i, mode in enumerate(modes):
-            x = int(start_x + (i * (icon_size + spacing)))
-            btn_rect = QRect(x, y_pos_1, icon_size, icon_size)
+            btn_rect = QRect(int(start_x + i * (icon_size + spacing)), start_y, icon_size, icon_size)
             self._mode_btns.append((btn_rect, mode))
-            is_active = (mode == self._current_hvac_mode)
-            with self._press_feedback(painter, btn_rect):
-                self._draw_icon_pill(painter, btn_rect, is_active, alpha)
-                painter.setPen(self._fg_color(alpha if is_active else int(alpha * 0.5)))
-                painter.setFont(get_mdi_font(20))
-                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter,
-                                 get_icon(mode_icons.get(mode, 'help-circle-outline')))
+            self._draw_mode_button(painter, btn_rect, mode, mode == self._current_hvac_mode, alpha)
 
-        y_pos_2 = y_pos_1 + icon_size + 12
-        fan_map = {'low': '1', 'medium': '2', 'high': '3', 'mid': '2', 'middle': '2', 'min': '1', 'max': 'Max'}
+        fan_y = start_y + icon_size + 12
+        self._draw_row_label(painter, fan_y, t("overlay.climate.fan_label"), alpha)
+        # The fan row starts from the mode row's spacing, which may already be squeezed.
+        start_x, fan_spacing = _icon_row_layout(len(fan_modes), avail_width, spacing)
+        for i, mode in enumerate(fan_modes):
+            btn_rect = QRect(int(start_x + i * (icon_size + fan_spacing)), fan_y, icon_size, icon_size)
+            self._fan_btns.append((btn_rect, mode))
+            self._draw_fan_button(painter, btn_rect, mode, mode == self._current_fan_mode, alpha)
 
+    def _draw_row_label(self, painter, y: int, text: str, alpha: int):
         painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
         painter.setPen(self._fg_color(int(alpha * 0.4)))
-        painter.drawText(QRect(20, y_pos_2, 60, icon_size),
-                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, t("overlay.climate.fan_label"))
+        painter.drawText(QRect(20, y, 60, 32), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
 
-        total_items      = len(fan_modes)
-        total_icon_width = (total_items * icon_size) + ((total_items - 1) * spacing)
+    def _draw_mode_button(self, painter, btn_rect: QRect, mode: str, is_active: bool, alpha: int):
+        with self._press_feedback(painter, btn_rect):
+            self._draw_icon_pill(painter, btn_rect, is_active, alpha)
+            painter.setPen(self._fg_color(alpha if is_active else int(alpha * 0.5)))
+            painter.setFont(get_mdi_font(20))
+            painter.drawText(
+                btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon(_HVAC_MODE_ICONS.get(mode, 'help-circle-outline'))
+            )
 
-        if total_icon_width > avail_width:
-            spacing_fan = (avail_width - (total_items * icon_size)) / (total_items - 1) if total_items > 1 else 0
-            start_x = label_width
-        else:
-            spacing_fan = spacing
-            start_x = label_width + (avail_width - total_icon_width) / 2
-
-        for i, mode in enumerate(fan_modes):
-            x = int(start_x + (i * (icon_size + spacing_fan)))
-            btn_rect = QRect(x, y_pos_2, icon_size, icon_size)
-            self._fan_btns.append((btn_rect, mode))
-            is_active = (mode == self._current_fan_mode)
-            with self._press_feedback(painter, btn_rect):
-                self._draw_icon_pill(painter, btn_rect, is_active, alpha)
-                painter.setPen(self._fg_color(alpha if is_active else int(alpha * 0.5)))
-                mode_lower = mode.lower()
-                if mode_lower == 'auto':
-                    painter.setFont(get_mdi_font(20))
-                    painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon('fan-auto'))
-                else:
-                    text = fan_map.get(mode_lower)
-                    if not text:
-                        text = mode_lower.capitalize() if len(mode) > 3 else mode.upper()
-                    painter.setFont(QFont(SYSTEM_FONT, 12, QFont.Weight.DemiBold))
-                    painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, text)
+    def _draw_fan_button(self, painter, btn_rect: QRect, mode: str, is_active: bool, alpha: int):
+        """'auto' as an icon; speeds as 1/2/3/Max, other names as short text."""
+        with self._press_feedback(painter, btn_rect):
+            self._draw_icon_pill(painter, btn_rect, is_active, alpha)
+            painter.setPen(self._fg_color(alpha if is_active else int(alpha * 0.5)))
+            mode_lower = mode.lower()
+            if mode_lower == 'auto':
+                painter.setFont(get_mdi_font(20))
+                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon('fan-auto'))
+                return
+            text = _FAN_SPEED_TEXT.get(mode_lower) or (mode_lower.capitalize() if len(mode) > 3 else mode.upper())
+            painter.setFont(QFont(SYSTEM_FONT, 12, QFont.Weight.DemiBold))
+            painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, text)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -756,38 +811,39 @@ class ClimateOverlay(PressableOverlay):
 
 class PrinterOverlay(BaseOverlay):
     """Overlay for 3D Printer telemetry and controls."""
-    action_requested = pyqtSignal(str)   # 'pause', 'stop'
+
+    action_requested = pyqtSignal(str)  # 'pause', 'stop'
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._text       = "3D Printer"
-        self._color      = QColor("#FF6D00")
+        self._text = "3D Printer"
+        self._color = QColor("#FF6D00")
         self._base_color = QColor("#2d2d2d")
 
-        self._state                       = "unknown"
-        self._hotend_actual               = 0.0
-        self._hotend_target               = 0.0
-        self._bed_actual                  = 0.0
-        self._bed_target                  = 0.0
-        self._progress                    = 0.0
-        self._time_remaining              = ""
-        self._camera_pixmap               = None
+        self._state = "unknown"
+        self._hotend_actual = 0.0
+        self._hotend_target = 0.0
+        self._bed_actual = 0.0
+        self._bed_target = 0.0
+        self._progress = 0.0
+        self._time_remaining = ""
+        self._camera_pixmap = None
         self._temperature_unit_preference = "celsius"
-        self._printer_source_unit         = None
+        self._printer_source_unit = None
 
         self._btn_close = QRect()
         self._btn_pause = QRect()
-        self._btn_stop  = QRect()
+        self._btn_stop = QRect()
 
         self._confirm_stop_mode = False
-        self._confirm_timer     = QTimer(self)
+        self._confirm_timer = QTimer(self)
         self._confirm_timer.setSingleShot(True)
         self._confirm_timer.setInterval(3000)
         self._confirm_timer.timeout.connect(self._reset_confirm_mode)
 
         self.setMouseTracking(True)
         self._hover_pause = False
-        self._hover_stop  = False
+        self._hover_stop = False
 
     def _state_color(self) -> QColor:
         s = self._state.lower()
@@ -817,13 +873,13 @@ class PrinterOverlay(BaseOverlay):
             except (ValueError, TypeError):
                 return 0.0
 
-        self._hotend_actual           = safe_float(attrs.get('hotend_actual', 0.0))
-        self._hotend_target           = safe_float(attrs.get('hotend_target', 0.0))
-        self._bed_actual              = safe_float(attrs.get('bed_actual', 0.0))
-        self._bed_target              = safe_float(attrs.get('bed_target', 0.0))
-        self._printer_source_unit     = attrs.get('temperature_unit')
-        self._progress                = safe_float(attrs.get('progress', 0.0))
-        self._time_remaining          = attrs.get('time_remaining', '')
+        self._hotend_actual = safe_float(attrs.get('hotend_actual', 0.0))
+        self._hotend_target = safe_float(attrs.get('hotend_target', 0.0))
+        self._bed_actual = safe_float(attrs.get('bed_actual', 0.0))
+        self._bed_target = safe_float(attrs.get('bed_target', 0.0))
+        self._printer_source_unit = attrs.get('temperature_unit')
+        self._progress = safe_float(attrs.get('progress', 0.0))
+        self._time_remaining = attrs.get('time_remaining', '')
         self.update()
 
     def set_camera_pixmap(self, pixmap):
@@ -834,13 +890,20 @@ class PrinterOverlay(BaseOverlay):
         self._temperature_unit_preference = preference
         self.update()
 
-    def start_morph(self, start_geo: QRect, target_geo: QRect, label: str,
-                    color: QColor = None, base_color: QColor = None, current_state: dict | None = None):
+    def start_morph(
+        self,
+        start_geo: QRect,
+        target_geo: QRect,
+        label: str,
+        color: QColor = None,
+        base_color: QColor = None,
+        current_state: dict | None = None,
+    ):
         if current_state:
             self.update_state(current_state)
-        self._text              = label
-        self._color             = color      or QColor("#FF6D00")
-        self._base_color        = base_color or QColor("#2d2d2d")
+        self._text = label
+        self._color = color or QColor("#FF6D00")
+        self._base_color = base_color or QColor("#2d2d2d")
         self._confirm_stop_mode = False
         self._start_morph_animations(start_geo, target_geo)
 
@@ -865,15 +928,15 @@ class PrinterOverlay(BaseOverlay):
     def mouseMoveEvent(self, event):
         pos = event.pos()
         new_hover_pause = self._btn_pause.contains(pos) if hasattr(self, '_btn_pause') else False
-        new_hover_stop  = self._btn_stop.contains(pos)  if hasattr(self, '_btn_stop')  else False
+        new_hover_stop = self._btn_stop.contains(pos) if hasattr(self, '_btn_stop') else False
         if new_hover_pause != self._hover_pause or new_hover_stop != self._hover_stop:
             self._hover_pause = new_hover_pause
-            self._hover_stop  = new_hover_stop
+            self._hover_stop = new_hover_stop
             self.update()
 
     def leaveEvent(self, event):
         self._hover_pause = False
-        self._hover_stop  = False
+        self._hover_stop = False
         self.update()
 
     def paintEvent(self, event):
@@ -883,7 +946,9 @@ class PrinterOverlay(BaseOverlay):
 
         rect = self.rect()
         self._draw_background(painter, rect)
-        DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg())
+        DashboardButtonPainter.draw_image_edge_effects(
+            painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg()
+        )
         self._draw_border_animation(painter, rect)
 
         base_alpha = int(255 * self._morph_progress)
@@ -898,7 +963,7 @@ class PrinterOverlay(BaseOverlay):
             self._draw_stacked_layout(painter, rect, alpha)
 
     def _draw_split_layout(self, painter, rect, alpha):
-        pad   = 14
+        pad = 14
         mid_x = int(rect.width() * 0.6)
 
         # Camera (left 60%)
@@ -906,7 +971,7 @@ class PrinterOverlay(BaseOverlay):
         self._draw_camera(painter, cam_rect, alpha)
 
         # Close button anchored top-right of whole overlay
-        close_size      = 20
+        close_size = 20
         self._btn_close = QRect(rect.width() - close_size - pad, pad, close_size, close_size)
         painter.setFont(get_mdi_font(18))
         painter.setPen(self._fg_color(int(alpha * 0.5)))
@@ -918,29 +983,32 @@ class PrinterOverlay(BaseOverlay):
         ry = pad
 
         # Header: title left, compact state badge right (before close)
-        _badge_pad  = 12
+        _badge_pad = 12
         badge_label = self._state.upper()
-        fm_badge    = QFontMetrics(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
-        badge_w     = fm_badge.horizontalAdvance(badge_label) + _badge_pad
-        badge_x     = max(rx + 4, rect.width() - close_size - pad - 4 - badge_w)
+        fm_badge = QFontMetrics(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
+        badge_w = fm_badge.horizontalAdvance(badge_label) + _badge_pad
+        badge_x = max(rx + 4, rect.width() - close_size - pad - 4 - badge_w)
         self._draw_state_badge(painter, badge_x, ry + 1, alpha, pill_pad=_badge_pad)
 
         title_w = badge_x - rx - 4
         if title_w > 20:
             title_font = QFont(SYSTEM_FONT, 10, QFont.Weight.Bold)
-            fm_title   = QFontMetrics(title_font)
+            fm_title = QFontMetrics(title_font)
             painter.setFont(title_font)
             painter.setPen(self._fg_color(alpha))
             elided = fm_title.elidedText(self._text, Qt.TextElideMode.ElideRight, title_w)
-            painter.drawText(QRect(rx, ry, title_w, 22),
-                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided)
-        ry += 26   # header (22px) + gap (4px)
+            painter.drawText(
+                QRect(rx, ry, title_w, 22), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided
+            )
+        ry += 26  # header (22px) + gap (4px)
 
         # Progress bar — always visible; green when printing, yellow otherwise
-        _active   = self._is_active_state()
+        _active = self._is_active_state()
         bar_color = QColor("#4CAF50") if self._state.lower() in ('printing', 'heating') else QColor("#FF9800")
-        track_col = QColor(bar_color); track_col.setAlpha(45)
-        fill_col  = QColor(bar_color); fill_col.setAlpha(220)
+        track_col = QColor(bar_color)
+        track_col.setAlpha(45)
+        fill_col = QColor(bar_color)
+        fill_col.setAlpha(220)
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(track_col)
@@ -949,30 +1017,30 @@ class PrinterOverlay(BaseOverlay):
         if fill_w > 0:
             painter.setBrush(fill_col)
             painter.drawRoundedRect(QRect(rx, ry, fill_w, 6), 3, 3)
-        ry += 10   # bar + gap
+        ry += 10  # bar + gap
 
         if _active:
             # Time remaining + percentage
             painter.setFont(QFont(SYSTEM_FONT, 8))
             painter.setPen(self._fg_color(int(alpha * 0.6)))
-            painter.drawText(QRect(rx, ry, rw, 16), Qt.AlignmentFlag.AlignLeft,  self._time_remaining)
+            painter.drawText(QRect(rx, ry, rw, 16), Qt.AlignmentFlag.AlignLeft, self._time_remaining)
             painter.drawText(QRect(rx, ry, rw, 16), Qt.AlignmentFlag.AlignRight, f"{self._progress:.0f}%")
 
         # Decide whether to use side-by-side cards or inline temps
         use_cards = (rw - 8) // 2 >= 52
-        card_h    = 40 if use_cards else 28
+        card_h = 40 if use_cards else 28
 
         if _active:
             # Anchored to bottom when active
-            btn_y  = rect.height() - pad - 36
+            btn_y = rect.height() - pad - 36
             card_y = btn_y - 8 - card_h
         else:
             # Center cards+buttons in remaining space below the bar
             content_h = card_h + 8 + 36
-            avail     = rect.height() - ry - pad
-            start_y   = ry + max(4, (avail - content_h) // 2)
-            card_y    = start_y
-            btn_y     = start_y + card_h + 8
+            avail = rect.height() - ry - pad
+            start_y = ry + max(4, (avail - content_h) // 2)
+            card_y = start_y
+            btn_y = start_y + card_h + 8
 
         if use_cards:
             self._draw_temp_cards(painter, rx, card_y, rw, card_h, alpha)
@@ -988,10 +1056,10 @@ class PrinterOverlay(BaseOverlay):
 
     def _draw_full_stacked(self, painter, rect, alpha):
         pad = 12
-        sw  = rect.width() - pad * 2
+        sw = rect.width() - pad * 2
 
         # Close button
-        close_size      = 20
+        close_size = 20
         self._btn_close = QRect(rect.width() - close_size - pad, pad, close_size, close_size)
         painter.setFont(get_mdi_font(18))
         painter.setPen(self._fg_color(int(alpha * 0.5)))
@@ -999,29 +1067,32 @@ class PrinterOverlay(BaseOverlay):
 
         # State badge right of title in the same header row
         badge_label = self._state.upper()
-        fm_badge    = QFontMetrics(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
-        badge_w     = fm_badge.horizontalAdvance(badge_label) + 18
-        badge_x     = rect.width() - close_size - pad - 6 - badge_w
+        fm_badge = QFontMetrics(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
+        badge_w = fm_badge.horizontalAdvance(badge_label) + 18
+        badge_x = rect.width() - close_size - pad - 6 - badge_w
         self._draw_state_badge(painter, badge_x, pad + 1, alpha)
 
         painter.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.Bold))
         painter.setPen(self._fg_color(alpha))
-        painter.drawText(QRect(pad, pad, badge_x - pad - 4, 22),
-                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text)
+        painter.drawText(
+            QRect(pad, pad, badge_x - pad - 4, 22),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            self._text,
+        )
 
         # Bottom section (anchored from bottom upward)
-        _active   = self._is_active_state()
-        btn_y     = rect.height() - pad - 36
-        card_y    = btn_y - 8 - 44
-        cam_top   = pad + 22 + 8
+        _active = self._is_active_state()
+        btn_y = rect.height() - pad - 36
+        card_y = btn_y - 8 - 44
+        cam_top = pad + 22 + 8
         bar_color = QColor("#4CAF50") if self._state.lower() in ('printing', 'heating') else QColor("#FF9800")
 
         # Bar and optional time row sit between camera and temp cards
         if _active:
             time_y = card_y - 4 - 16
-            bar_y  = time_y - 4 - 6
+            bar_y = time_y - 4 - 6
         else:
-            bar_y  = card_y - 10  # bar flush above cards
+            bar_y = card_y - 10  # bar flush above cards
 
         # Camera fills space between header and bar
         cam_h = bar_y - 8 - cam_top
@@ -1029,8 +1100,10 @@ class PrinterOverlay(BaseOverlay):
             self._draw_camera(painter, QRect(pad, cam_top, sw, cam_h), alpha)
 
         # Progress bar — always visible
-        track_col = QColor(bar_color); track_col.setAlpha(45)
-        fill_col  = QColor(bar_color); fill_col.setAlpha(220)
+        track_col = QColor(bar_color)
+        track_col.setAlpha(45)
+        fill_col = QColor(bar_color)
+        fill_col.setAlpha(220)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(track_col)
         painter.drawRoundedRect(QRect(pad, bar_y, sw, 6), 3, 3)
@@ -1043,7 +1116,7 @@ class PrinterOverlay(BaseOverlay):
             # Time remaining + percentage
             painter.setFont(QFont(SYSTEM_FONT, 8))
             painter.setPen(self._fg_color(int(alpha * 0.6)))
-            painter.drawText(QRect(pad, time_y, sw, 16), Qt.AlignmentFlag.AlignLeft,  self._time_remaining)
+            painter.drawText(QRect(pad, time_y, sw, 16), Qt.AlignmentFlag.AlignLeft, self._time_remaining)
             painter.drawText(QRect(pad, time_y, sw, 16), Qt.AlignmentFlag.AlignRight, f"{self._progress:.0f}%")
 
         self._draw_temp_cards(painter, pad, card_y, sw, 44, alpha)
@@ -1051,11 +1124,11 @@ class PrinterOverlay(BaseOverlay):
 
     def _draw_compact_stacked(self, painter, rect, alpha):
         pad = 12
-        sw  = rect.width() - pad * 2
-        y   = 10
+        sw = rect.width() - pad * 2
+        y = 10
 
         # Title + close button
-        close_size      = 20
+        close_size = 20
         self._btn_close = QRect(rect.width() - close_size - pad, y, close_size, close_size)
         painter.setFont(get_mdi_font(18))
         painter.setPen(self._fg_color(int(alpha * 0.5)))
@@ -1063,19 +1136,24 @@ class PrinterOverlay(BaseOverlay):
 
         painter.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.Bold))
         painter.setPen(self._fg_color(alpha))
-        painter.drawText(QRect(pad, y, sw - close_size - 4, 22),
-                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text)
+        painter.drawText(
+            QRect(pad, y, sw - close_size - 4, 22),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            self._text,
+        )
         y += 28
 
         # State badge
         self._draw_state_badge(painter, pad, y, alpha)
-        y += 28   # 16px badge + 12px margin before bar
+        y += 28  # 16px badge + 12px margin before bar
 
         # Progress bar — always visible; green when printing, yellow otherwise
-        _active   = self._is_active_state()
+        _active = self._is_active_state()
         bar_color = QColor("#4CAF50") if self._state.lower() in ('printing', 'heating') else QColor("#FF9800")
-        track_col = QColor(bar_color); track_col.setAlpha(45)
-        fill_col  = QColor(bar_color); fill_col.setAlpha(220)
+        track_col = QColor(bar_color)
+        track_col.setAlpha(45)
+        fill_col = QColor(bar_color)
+        fill_col.setAlpha(220)
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(track_col)
@@ -1084,13 +1162,13 @@ class PrinterOverlay(BaseOverlay):
         if fill_w > 0:
             painter.setBrush(fill_col)
             painter.drawRoundedRect(QRect(pad, y, fill_w, 6), 3, 3)
-        y += 10   # bar + gap
+        y += 10  # bar + gap
 
         if _active:
             # Time remaining + percentage
             painter.setFont(QFont(SYSTEM_FONT, 8))
             painter.setPen(self._fg_color(int(alpha * 0.6)))
-            painter.drawText(QRect(pad, y, sw, 16), Qt.AlignmentFlag.AlignLeft,  self._time_remaining)
+            painter.drawText(QRect(pad, y, sw, 16), Qt.AlignmentFlag.AlignLeft, self._time_remaining)
             painter.drawText(QRect(pad, y, sw, 16), Qt.AlignmentFlag.AlignRight, f"{self._progress:.0f}%")
             y += 20
         else:
@@ -1114,9 +1192,9 @@ class PrinterOverlay(BaseOverlay):
             painter.setClipPath(path)
 
             scale = max(rect.width() / self._camera_pixmap.width(), rect.height() / self._camera_pixmap.height())
-            pw = self._camera_pixmap.width()  * scale
+            pw = self._camera_pixmap.width() * scale
             ph = self._camera_pixmap.height() * scale
-            px = rect.x() + (rect.width()  - pw) / 2
+            px = rect.x() + (rect.width() - pw) / 2
             py = rect.y() + (rect.height() - ph) / 2
 
             painter.setOpacity(alpha / 255.0)
@@ -1125,18 +1203,24 @@ class PrinterOverlay(BaseOverlay):
             painter.setClipping(False)
 
             scaled_pixmap = self._camera_pixmap.scaled(
-                int(pw), int(ph),
+                int(pw),
+                int(ph),
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation
+                Qt.TransformationMode.SmoothTransformation,
             )
-            x_off = (pw - rect.width())  / 2
+            x_off = (pw - rect.width()) / 2
             y_off = (ph - rect.height()) / 2
 
             if self._is_active_state():
                 painter.translate(rect.x(), rect.y())
                 DashboardButtonPainter._draw_pill_label(
-                    painter, QRect(0, 0, rect.width(), rect.height()), f"{self._progress:.0f}%",
-                    background_pixmap=scaled_pixmap, x_off=x_off, y_off=y_off, position='top-right'
+                    painter,
+                    QRect(0, 0, rect.width(), rect.height()),
+                    f"{self._progress:.0f}%",
+                    background_pixmap=scaled_pixmap,
+                    x_off=x_off,
+                    y_off=y_off,
+                    position='top-right',
                 )
                 painter.translate(-rect.x(), -rect.y())
         else:
@@ -1149,8 +1233,13 @@ class PrinterOverlay(BaseOverlay):
             if self._is_active_state():
                 painter.translate(rect.x(), rect.y())
                 DashboardButtonPainter._draw_pill_label(
-                    painter, QRect(0, 0, rect.width(), rect.height()), f"{self._progress:.0f}%",
-                    background_pixmap=None, x_off=0, y_off=0, position='top-right'
+                    painter,
+                    QRect(0, 0, rect.width(), rect.height()),
+                    f"{self._progress:.0f}%",
+                    background_pixmap=None,
+                    x_off=0,
+                    y_off=0,
+                    position='top-right',
                 )
                 painter.translate(-rect.x(), -rect.y())
 
@@ -1158,8 +1247,8 @@ class PrinterOverlay(BaseOverlay):
         state_color = self._state_color()
         state_color.setAlpha(min(255, int(alpha * 0.9)))
 
-        label  = self._state.upper()
-        fm     = QFontMetrics(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
+        label = self._state.upper()
+        fm = QFontMetrics(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
         pill_w = fm.horizontalAdvance(label) + pill_pad
 
         painter.setPen(Qt.PenStyle.NoPen)
@@ -1171,59 +1260,81 @@ class PrinterOverlay(BaseOverlay):
         painter.drawText(QRect(x, y, pill_w, 16), Qt.AlignmentFlag.AlignCenter, label)
 
     def _draw_temp_cards(self, painter, x, y, w, h, alpha):
-        _fmt        = lambda v: format_temperature(v, self._printer_source_unit, self._temperature_unit_preference, precision=0, fallback="0")
-        gap         = 8
-        card_w      = (w - gap) // 2
+        def _fmt(value):
+            return format_temperature(
+                value, self._printer_source_unit, self._temperature_unit_preference, precision=0, fallback="0"
+            )
+
+        gap = 8
+        card_w = (w - gap) // 2
         icon_colors = [QColor("#FF6D00"), QColor("#42A5F5")]  # orange nozzle, blue bed
 
-        for i, (icon_name, actual, target) in enumerate([
-            ('printer-3d-nozzle', self._hotend_actual, self._hotend_target),
-            ('square-medium',     self._bed_actual,    self._bed_target),
-        ]):
-            cx        = x + i * (card_w + gap)
+        for i, (icon_name, actual, target) in enumerate(
+            [
+                ('printer-3d-nozzle', self._hotend_actual, self._hotend_target),
+                ('square-medium', self._bed_actual, self._bed_target),
+            ]
+        ):
+            cx = x + i * (card_w + gap)
             card_rect = QRect(cx, y, card_w, h)
-            ic        = icon_colors[i]
+            ic = icon_colors[i]
 
             # Card with colored tint matching its icon
-            border_col = QColor(ic); border_col.setAlpha(130)
-            bg_col     = QColor(ic); bg_col.setAlpha(35)
+            border_col = QColor(ic)
+            border_col.setAlpha(130)
+            bg_col = QColor(ic)
+            bg_col.setAlpha(35)
             painter.setPen(QPen(border_col, 1.5))
             painter.setBrush(bg_col)
             painter.drawRoundedRect(card_rect, 8, 8)
 
-            ic_pen   = QColor(ic); ic_pen.setAlpha(min(255, int(alpha * 0.95)))
+            ic_pen = QColor(ic)
+            ic_pen.setAlpha(min(255, int(alpha * 0.95)))
             font_val = QFont(SYSTEM_FONT, 9, QFont.Weight.Bold)
-            tx       = cx + 8 + 22
-            tw       = card_w - 8 - 22 - 4
+            tx = cx + 8 + 22
+            tw = card_w - 8 - 22 - 4
 
             if target > 5:
                 half = h // 2
                 painter.setFont(get_mdi_font(15))
                 painter.setPen(ic_pen)
-                painter.drawText(QRect(cx + 8, y, 22, half),
-                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, get_icon(icon_name))
+                painter.drawText(
+                    QRect(cx + 8, y, 22, half),
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                    get_icon(icon_name),
+                )
                 painter.setFont(font_val)
                 painter.setPen(self._fg_color(alpha))
-                painter.drawText(QRect(tx, y, tw, half),
-                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, _fmt(actual))
+                painter.drawText(
+                    QRect(tx, y, tw, half), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, _fmt(actual)
+                )
                 painter.setFont(QFont(SYSTEM_FONT, 8))
                 painter.setPen(self._fg_color(int(alpha * 0.55)))
-                painter.drawText(QRect(tx, y + half, tw, half),
-                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, f"→ {_fmt(target)}")
+                painter.drawText(
+                    QRect(tx, y + half, tw, half),
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                    f"→ {_fmt(target)}",
+                )
             else:
                 painter.setFont(get_mdi_font(14))
                 painter.setPen(ic_pen)
-                painter.drawText(QRect(cx + 8, y, 22, h),
-                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, get_icon(icon_name))
+                painter.drawText(
+                    QRect(cx + 8, y, 22, h),
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                    get_icon(icon_name),
+                )
                 painter.setFont(font_val)
                 painter.setPen(self._fg_color(alpha))
-                painter.drawText(QRect(tx, y, tw, h),
-                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, _fmt(actual))
+                painter.drawText(
+                    QRect(tx, y, tw, h), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, _fmt(actual)
+                )
 
     def _draw_inline_temps(self, painter, x, y, w, h, alpha):
         # Strip trailing letter from unit ("205°C" → "205°") to save space in compact layout
         def _fmt_short(v):
-            s = format_temperature(v, self._printer_source_unit, self._temperature_unit_preference, precision=0, fallback="0")
+            s = format_temperature(
+                v, self._printer_source_unit, self._temperature_unit_preference, precision=0, fallback="0"
+            )
             return s[:-1] if s and s[-1].isalpha() else s
 
         painter.setPen(QPen(self._fg_color(50), 1.5))
@@ -1236,18 +1347,22 @@ class PrinterOverlay(BaseOverlay):
         painter.drawLine(mid_x, y + 4, mid_x, y + h - 4)
 
         icon_colors = [QColor("#FF6D00"), QColor("#42A5F5")]  # orange nozzle, blue bed
-        half_w      = w // 2
-        for i, (icon_name, actual, target) in enumerate([
-            ('printer-3d-nozzle', self._hotend_actual, self._hotend_target),
-            ('square-medium',     self._bed_actual,    self._bed_target),
-        ]):
-            hx     = x + i * half_w
-            ic_pen = QColor(icon_colors[i]); ic_pen.setAlpha(min(255, int(alpha * 0.95)))
+        half_w = w // 2
+        for i, (icon_name, actual, target) in enumerate(
+            [
+                ('printer-3d-nozzle', self._hotend_actual, self._hotend_target),
+                ('square-medium', self._bed_actual, self._bed_target),
+            ]
+        ):
+            hx = x + i * half_w
+            ic_pen = QColor(icon_colors[i])
+            ic_pen.setAlpha(min(255, int(alpha * 0.95)))
 
             painter.setFont(get_mdi_font(12))
             painter.setPen(ic_pen)
-            painter.drawText(QRect(hx + 4, y, 16, h),
-                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, get_icon(icon_name))
+            painter.drawText(
+                QRect(hx + 4, y, 16, h), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, get_icon(icon_name)
+            )
 
             # "205°/210°" or just "205°" when target is off/idle
             if target > 5:
@@ -1256,60 +1371,64 @@ class PrinterOverlay(BaseOverlay):
                 val_text = _fmt_short(actual)
             painter.setFont(QFont(SYSTEM_FONT, 8, QFont.Weight.Bold))
             painter.setPen(self._fg_color(alpha))
-            painter.drawText(QRect(hx + 20, y, half_w - 22, h),
-                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, val_text)
+            painter.drawText(
+                QRect(hx + 20, y, half_w - 22, h), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, val_text
+            )
 
     def _draw_action_buttons(self, painter, x, y, w, h, alpha):
-        btn_w      = (w - 8) // 2
-        is_paused  = self._state.lower() == 'paused'
-        pause_icon = 'play' if is_paused else 'pause'
-        pause_label = t("overlay.printer.resume_btn") if is_paused else t("overlay.printer.pause_btn")
-        stop_label  = t("overlay.printer.stop_btn")
-
-        show_text = btn_w >= 80
-        font_text = QFont(SYSTEM_FONT, 10, QFont.Weight.Bold)
-        icon_w    = 20   # MDI glyph width at 15pt
-        icon_gap  = 6
-        radius    = 8
-
-        def _draw_btn(btn_rect, icon_name, label, is_stop):
-            if is_stop and self._confirm_stop_mode:
-                bg  = QColor("#C62828")
-                bdr = QColor(255, 110, 110, 220)
-            elif is_stop:
-                hover = self._hover_stop
-                bg  = QColor(200, 60, 60, 70 if hover else 45)
-                bdr = QColor(220, 80, 80, 160 if hover else 110)
-            else:
-                hover = self._hover_pause
-                bg  = QColor(60, 110, 200, 70 if hover else 45)
-                bdr = QColor(80, 140, 230, 160 if hover else 110)
-
-            painter.setPen(QPen(bdr, 1.5))
-            painter.setBrush(bg)
-            painter.drawRoundedRect(btn_rect, radius, radius)
-            painter.setPen(self._fg_color(alpha))
-
-            if is_stop and self._confirm_stop_mode:
-                painter.setFont(font_text)
-                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, t("overlay.printer.confirm_stop"))
-            elif show_text:
-                painter.setFont(get_mdi_font(15))
-                painter.drawText(QRect(btn_rect.x() + 8, btn_rect.y(), icon_w, btn_rect.height()),
-                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                                 get_icon(icon_name))
-                painter.setFont(font_text)
-                painter.drawText(QRect(btn_rect.x() + 8 + icon_w + icon_gap, btn_rect.y(), btn_rect.width() - 8 - icon_w - icon_gap - 4, btn_rect.height()),
-                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
-            else:
-                painter.setFont(get_mdi_font(16))
-                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon(icon_name))
-
+        """Pause/resume and stop side by side; stop turns red and asks again before acting."""
+        btn_w = (w - 8) // 2
+        is_paused = self._state.lower() == 'paused'
         self._btn_pause = QRect(x, y, btn_w, h)
-        _draw_btn(self._btn_pause, pause_icon, pause_label, False)
-
+        pause_label = t("overlay.printer.resume_btn") if is_paused else t("overlay.printer.pause_btn")
+        self._draw_action_button(painter, self._btn_pause, 'play' if is_paused else 'pause', pause_label, False, alpha)
         self._btn_stop = QRect(x + btn_w + 8, y, btn_w, h)
-        _draw_btn(self._btn_stop, 'stop', stop_label, True)
+        self._draw_action_button(painter, self._btn_stop, 'stop', t("overlay.printer.stop_btn"), True, alpha)
+
+    def _action_button_colors(self, is_stop: bool):
+        """(background, border): blue pause, red stop, solid red while confirming a stop; brighter on hover."""
+        if is_stop and self._confirm_stop_mode:
+            return QColor("#C62828"), QColor(255, 110, 110, 220)
+        if is_stop:
+            hover = self._hover_stop
+            return QColor(200, 60, 60, 70 if hover else 45), QColor(220, 80, 80, 160 if hover else 110)
+        hover = self._hover_pause
+        return QColor(60, 110, 200, 70 if hover else 45), QColor(80, 140, 230, 160 if hover else 110)
+
+    def _draw_action_button(self, painter, btn_rect: QRect, icon_name: str, label: str, is_stop: bool, alpha: int):
+        bg, border = self._action_button_colors(is_stop)
+        painter.setPen(QPen(border, 1.5))
+        painter.setBrush(bg)
+        painter.drawRoundedRect(btn_rect, 8, 8)
+        painter.setPen(self._fg_color(alpha))
+
+        font_text = QFont(SYSTEM_FONT, 10, QFont.Weight.Bold)
+        if is_stop and self._confirm_stop_mode:
+            painter.setFont(font_text)
+            painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, t("overlay.printer.confirm_stop"))
+        elif btn_rect.width() >= 80:
+            # Icon and label; the MDI glyph is about 20px wide at 15pt
+            icon_w, icon_gap = 20, 6
+            painter.setFont(get_mdi_font(15))
+            painter.drawText(
+                QRect(btn_rect.x() + 8, btn_rect.y(), icon_w, btn_rect.height()),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                get_icon(icon_name),
+            )
+            painter.setFont(font_text)
+            painter.drawText(
+                QRect(
+                    btn_rect.x() + 8 + icon_w + icon_gap,
+                    btn_rect.y(),
+                    btn_rect.width() - 8 - icon_w - icon_gap - 4,
+                    btn_rect.height(),
+                ),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                label,
+            )
+        else:
+            painter.setFont(get_mdi_font(16))
+            painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon(icon_name))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1320,14 +1439,14 @@ class WeatherOverlay(BaseOverlay):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._text       = "Weather"
-        self._color      = QColor("#4285F4")
+        self._text = "Weather"
+        self._color = QColor("#4285F4")
         self._base_color = QColor("#2d2d2d")
 
-        self._current_state               = {}
-        self._forecasts                   = []
+        self._current_state = {}
+        self._forecasts = []
         self._temperature_unit_preference = "celsius"
-        self._btn_close                   = QRect()
+        self._btn_close = QRect()
 
     def update_state(self, current_state: dict):
         if not current_state:
@@ -1339,12 +1458,20 @@ class WeatherOverlay(BaseOverlay):
         self._temperature_unit_preference = preference
         self.update()
 
-    def start_morph(self, start_geo: QRect, target_geo: QRect, current_state: dict, forecasts: list,
-                    text: str, color: QColor = None, base_color: QColor = None):
+    def start_morph(
+        self,
+        start_geo: QRect,
+        target_geo: QRect,
+        current_state: dict,
+        forecasts: list,
+        text: str,
+        color: QColor = None,
+        base_color: QColor = None,
+    ):
         self.update_state(current_state)
-        self._forecasts  = forecasts or []
-        self._text       = text
-        self._color      = color      or QColor("#4285F4")
+        self._forecasts = forecasts or []
+        self._text = text
+        self._color = color or QColor("#4285F4")
         self._base_color = base_color or QColor("#2d2d2d")
         self._start_morph_animations(start_geo, target_geo)
 
@@ -1353,26 +1480,42 @@ class WeatherOverlay(BaseOverlay):
             self.close_morph()
 
     def _get_weather_emoji(self, state: str) -> str:
-        import sys
         if sys.platform.startswith('linux'):
             mapping = {
-                'clear-night': Icons.WEATHER_NIGHT, 'cloudy': Icons.WEATHER_CLOUDY,
-                'fog': Icons.WEATHER_FOG, 'hail': Icons.WEATHER_HAIL,
-                'lightning': Icons.WEATHER_LIGHTNING, 'lightning-rainy': Icons.WEATHER_LIGHTNING_RAINY,
-                'partlycloudy': Icons.WEATHER_PARTLY_CLOUDY, 'pouring': Icons.WEATHER_POURING,
-                'rainy': Icons.WEATHER_RAINY, 'snowy': Icons.WEATHER_SNOWY,
-                'snowy-rainy': Icons.WEATHER_SNOWY_RAINY, 'sunny': Icons.WEATHER_SUNNY,
-                'windy': Icons.WEATHER_WINDY, 'windy-variant': Icons.WEATHER_WINDY_VARIANT,
-                'exceptional': Icons.ALERT_CIRCLE
+                'clear-night': Icons.WEATHER_NIGHT,
+                'cloudy': Icons.WEATHER_CLOUDY,
+                'fog': Icons.WEATHER_FOG,
+                'hail': Icons.WEATHER_HAIL,
+                'lightning': Icons.WEATHER_LIGHTNING,
+                'lightning-rainy': Icons.WEATHER_LIGHTNING_RAINY,
+                'partlycloudy': Icons.WEATHER_PARTLY_CLOUDY,
+                'pouring': Icons.WEATHER_POURING,
+                'rainy': Icons.WEATHER_RAINY,
+                'snowy': Icons.WEATHER_SNOWY,
+                'snowy-rainy': Icons.WEATHER_SNOWY_RAINY,
+                'sunny': Icons.WEATHER_SUNNY,
+                'windy': Icons.WEATHER_WINDY,
+                'windy-variant': Icons.WEATHER_WINDY_VARIANT,
+                'exceptional': Icons.ALERT_CIRCLE,
             }
             return mapping.get(state, Icons.WEATHER_CLOUDY)
         else:
             mapping = {
-                'clear-night': '🌙', 'cloudy': '☁️', 'fog': '🌫️',
-                'hail': '🌨️', 'lightning': '🌩️', 'lightning-rainy': '⛈️',
-                'partlycloudy': '⛅', 'pouring': '🌧️', 'rainy': '🌧️',
-                'snowy': '❄️', 'snowy-rainy': '🌨️', 'sunny': '☀️',
-                'windy': '💨', 'windy-variant': '🌬️', 'exceptional': '⚠️'
+                'clear-night': '🌙',
+                'cloudy': '☁️',
+                'fog': '🌫️',
+                'hail': '🌨️',
+                'lightning': '🌩️',
+                'lightning-rainy': '⛈️',
+                'partlycloudy': '⛅',
+                'pouring': '🌧️',
+                'rainy': '🌧️',
+                'snowy': '❄️',
+                'snowy-rainy': '🌨️',
+                'sunny': '☀️',
+                'windy': '💨',
+                'windy-variant': '🌬️',
+                'exceptional': '⚠️',
             }
             return mapping.get(state, 'Unknown')
 
@@ -1383,98 +1526,95 @@ class WeatherOverlay(BaseOverlay):
 
         rect = self.rect()
         self._draw_background(painter, rect)
-        DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg())
+        DashboardButtonPainter.draw_image_edge_effects(
+            painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg()
+        )
         self._draw_border_animation(painter, rect)
 
-        base_alpha = int(255 * self._morph_progress)
-        alpha = int(base_alpha * self._content_opacity)
+        alpha = int(int(255 * self._morph_progress) * self._content_opacity)
         if alpha < 10:
             return
 
-        import sys
-        is_linux = sys.platform.startswith('linux')
-
-        close_size      = 20
+        close_size = 20
         self._btn_close = QRect(rect.width() - close_size - 12, 8, close_size, close_size)
         painter.setFont(get_mdi_font(18))
         painter.setPen(self._fg_color(int(alpha * 0.5)))
         painter.drawText(self._btn_close, Qt.AlignmentFlag.AlignCenter, get_icon('close'))
 
-        title_rect = QRect(20, 8, rect.width() - 80, 20)
         font_title = QFont(SYSTEM_FONT, 8, QFont.Weight.Bold)
         font_title.setCapitalization(QFont.Capitalization.AllUppercase)
         painter.setFont(font_title)
         painter.setPen(self._fg_color(int(alpha * 0.4)))
-        painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text)
+        painter.drawText(
+            QRect(20, 8, rect.width() - 80, 20), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._text
+        )
 
+        # Today on the left third, the forecast to the right of a thin divider
         mid_x = int(rect.width() * 0.3)
         painter.setPen(QPen(self._fg_color(int(alpha * 0.1)), 1))
         painter.drawLine(mid_x, 20, mid_x, rect.height() - 20)
+        source_unit = self._current_state.get('attributes', {}).get('temperature_unit')
+        self._draw_current_weather(painter, rect, mid_x, alpha, source_unit)
+        self._draw_forecast(painter, rect, mid_x, alpha, source_unit)
 
-        current_st  = self._current_state.get('state', 'unknown')
-        attrs       = self._current_state.get('attributes', {})
-        temp        = attrs.get('temperature', '--')
-        emoji       = self._get_weather_emoji(current_st)
-        source_unit = attrs.get('temperature_unit')
-        temp_str    = format_temperature(temp, source_unit, self._temperature_unit_preference, precision=1)
-
-        if is_linux:
-            painter.setFont(get_mdi_font(36))
-        else:
-            painter.setFont(QFont(SYSTEM_FONT, 32))
+    def _draw_current_weather(self, painter, rect, mid_x: int, alpha: int, source_unit):
+        attrs = self._current_state.get('attributes', {})
+        temp_str = format_temperature(
+            attrs.get('temperature', '--'), source_unit, self._temperature_unit_preference, precision=1
+        )
+        # MDI glyphs on Linux, emoji elsewhere
+        painter.setFont(get_mdi_font(36) if sys.platform.startswith('linux') else QFont(SYSTEM_FONT, 32))
         painter.setPen(self._fg_color(alpha))
-
-        fm     = painter.fontMetrics()
-        icon_h = fm.height()
-        painter.drawText(QRect(0, rect.height() // 2 - icon_h // 2 - 12, mid_x, icon_h), Qt.AlignmentFlag.AlignCenter, emoji)
-
+        icon_h = painter.fontMetrics().height()
+        painter.drawText(
+            QRect(0, rect.height() // 2 - icon_h // 2 - 12, mid_x, icon_h),
+            Qt.AlignmentFlag.AlignCenter,
+            self._get_weather_emoji(self._current_state.get('state', 'unknown')),
+        )
         painter.setFont(QFont(SYSTEM_FONT, 14, QFont.Weight.DemiBold))
         painter.drawText(QRect(0, rect.height() // 2 + 18, mid_x, 30), Qt.AlignmentFlag.AlignCenter, temp_str)
 
-        right_rect     = QRect(mid_x, 0, rect.width() - mid_x, rect.height())
-        forecast_count = len(self._forecasts)
+    def _draw_forecast(self, painter, rect, mid_x: int, alpha: int, source_unit):
+        """As many 65px day columns as fit, centred right of the divider."""
+        if not self._forecasts:
+            return
+        item_w = 65
+        avail_w = rect.width() - mid_x - 20
+        display_count = min(len(self._forecasts), avail_w // item_w)
+        start_x = mid_x + (avail_w - (display_count * item_w)) // 2 + 10
+        fy = rect.height() // 2 - 35
+        for i, forecast in enumerate(self._forecasts[:display_count]):
+            self._draw_forecast_day(painter, forecast, start_x + i * item_w, fy, item_w, alpha, source_unit)
 
-        if forecast_count > 0:
-            item_w        = 65
-            avail_w       = right_rect.width() - 20
-            max_items     = avail_w // item_w
-            display_count = min(forecast_count, max_items)
-            start_x       = right_rect.left() + (avail_w - (display_count * item_w)) // 2 + 10
+    def _draw_forecast_day(self, painter, forecast: dict, fx: int, fy: int, item_w: int, alpha: int, source_unit):
+        """Weekday, condition icon, high and (when known) low."""
+        try:
+            day_str = datetime.fromisoformat(forecast.get('datetime', '')).strftime("%a")
+        except Exception:
+            day_str = "-"
+        pref = self._temperature_unit_preference
+        high = format_temperature(forecast.get('temperature', '--'), source_unit, pref, precision=1)
+        low = format_temperature(forecast.get('templow', '--'), source_unit, pref, precision=1, fallback='--')
 
-            for i in range(display_count):
-                f   = self._forecasts[i]
-                fx  = start_x + (i * item_w)
-                fy  = rect.height() // 2 - 35
-                dt_str = f.get('datetime', '')
-                try:
-                    from datetime import datetime
-                    day_str = datetime.fromisoformat(dt_str).strftime("%a")
-                except Exception:
-                    day_str = "-"
+        painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.DemiBold))
+        painter.setPen(self._fg_color(int(alpha * 0.6)))
+        painter.drawText(QRect(fx, fy, item_w, 15), Qt.AlignmentFlag.AlignCenter, day_str.upper())
 
-                f_emoji = self._get_weather_emoji(f.get('condition', 'unknown'))
-                high    = format_temperature(f.get('temperature', '--'), source_unit, self._temperature_unit_preference, precision=1)
-                low     = format_temperature(f.get('templow', '--'),     source_unit, self._temperature_unit_preference, precision=1, fallback='--')
+        painter.setFont(get_mdi_font(20) if sys.platform.startswith('linux') else QFont(SYSTEM_FONT, 16))
+        painter.setPen(self._fg_color(alpha))
+        painter.drawText(
+            QRect(fx, fy + 18, item_w, 30),
+            Qt.AlignmentFlag.AlignCenter,
+            self._get_weather_emoji(forecast.get('condition', 'unknown')),
+        )
 
-                painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.DemiBold))
-                painter.setPen(self._fg_color(int(alpha * 0.6)))
-                painter.drawText(QRect(fx, fy, item_w, 15), Qt.AlignmentFlag.AlignCenter, day_str.upper())
-
-                if is_linux:
-                    painter.setFont(get_mdi_font(20))
-                else:
-                    painter.setFont(QFont(SYSTEM_FONT, 16))
-                painter.setPen(self._fg_color(alpha))
-                painter.drawText(QRect(fx, fy + 18, item_w, 30), Qt.AlignmentFlag.AlignCenter, f_emoji)
-
-                painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold))
-                painter.setPen(self._fg_color(int(alpha * 0.95)))
-                painter.drawText(QRect(fx, fy + 50, item_w, 16), Qt.AlignmentFlag.AlignCenter, high)
-
-                if not str(low).startswith('--'):
-                    painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.Medium))
-                    painter.setPen(self._fg_color(int(alpha * 0.4)))
-                    painter.drawText(QRect(fx, fy + 68, item_w, 16), Qt.AlignmentFlag.AlignCenter, low)
+        painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold))
+        painter.setPen(self._fg_color(int(alpha * 0.95)))
+        painter.drawText(QRect(fx, fy + 50, item_w, 16), Qt.AlignmentFlag.AlignCenter, high)
+        if not str(low).startswith('--'):
+            painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.Medium))
+            painter.setPen(self._fg_color(int(alpha * 0.4)))
+            painter.drawText(QRect(fx, fy + 68, item_w, 16), Qt.AlignmentFlag.AlignCenter, low)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1482,16 +1622,17 @@ class WeatherOverlay(BaseOverlay):
 
 class CameraOverlay(BaseOverlay):
     """Dynamic overlay for full camera view."""
-    pip_requested = pyqtSignal()   # pop the feed out into picture-in-picture
+
+    pip_requested = pyqtSignal()  # pop the feed out into picture-in-picture
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._camera_pixmap = None
-        self._text          = "Camera"
-        self._base_color    = QColor("#2d2d2d")
-        self._btn_close     = QRect()
-        self._btn_pip       = QRect()
+        self._text = "Camera"
+        self._base_color = QColor("#2d2d2d")
+        self._btn_close = QRect()
+        self._btn_pip = QRect()
         self._pip_available = False
 
     def on_anim_finished(self):
@@ -1504,13 +1645,14 @@ class CameraOverlay(BaseOverlay):
         if self.isVisible():
             self.update()
 
-    def start_morph(self, start_geo: QRect, target_geo: QRect, text: str, base_color: QColor = None,
-                    pip_available: bool = False):
-        self._text          = text
-        self._base_color    = base_color or QColor("#2d2d2d")
+    def start_morph(
+        self, start_geo: QRect, target_geo: QRect, text: str, base_color: QColor = None, pip_available: bool = False
+    ):
+        self._text = text
+        self._base_color = base_color or QColor("#2d2d2d")
         # Only camera.* entities have a stream; image.* tiles get no PiP button.
         self._pip_available = pip_available
-        self._btn_pip       = QRect()
+        self._btn_pip = QRect()
         self._start_morph_animations(start_geo, target_geo)
 
     def paintEvent(self, event):
@@ -1522,8 +1664,8 @@ class CameraOverlay(BaseOverlay):
         self._draw_background(painter, rect)
 
         bg_pix = None
-        x_bg   = 0
-        y_bg   = 0
+        x_bg = 0
+        y_bg = 0
 
         if self._camera_pixmap and not self._camera_pixmap.isNull():
             path = QPainterPath()
@@ -1533,42 +1675,51 @@ class CameraOverlay(BaseOverlay):
             w = rect.width()
             h = rect.height()
             scaled_cam = self._camera_pixmap.scaled(
-                int(w), int(h),
+                int(w),
+                int(h),
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation
+                Qt.TransformationMode.SmoothTransformation,
             )
-            x_off = (scaled_cam.width()  - w) / 2
+            x_off = (scaled_cam.width() - w) / 2
             y_off = (scaled_cam.height() - h) / 2
 
             painter.drawPixmap(0, 0, scaled_cam, int(x_off), int(y_off), int(w), int(h))
 
             bg_pix = scaled_cam
-            x_bg   = int(x_off)
-            y_bg   = int(y_off)
+            x_bg = int(x_off)
+            y_bg = int(y_off)
 
-        DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg())
+        DashboardButtonPainter.draw_image_edge_effects(
+            painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg()
+        )
         self._draw_border_animation(painter, rect)
 
         rect_int = rect.toRect() if isinstance(rect, QRectF) else rect
-        alpha    = int(255 * self._morph_progress)
+        alpha = int(255 * self._morph_progress)
         if alpha < 10:
             return
 
         painter.setOpacity(alpha / 255.0)
 
         is_light = self._is_light_bg()
-        pill_bg  = QColor(255, 255, 255) if is_light else QColor(30, 30, 30)
-        pill_fg  = QColor(30, 30, 30)   if is_light else QColor(255, 255, 255)
+        pill_bg = QColor(255, 255, 255) if is_light else QColor(30, 30, 30)
+        pill_fg = QColor(30, 30, 30) if is_light else QColor(255, 255, 255)
 
         DashboardButtonPainter._draw_pill_label(
-            painter, rect_int, self._text,
-            background_pixmap=bg_pix, x_off=x_bg, y_off=y_bg,
-            position='top-left', forced_bg_color=pill_bg, forced_text_color=pill_fg
+            painter,
+            rect_int,
+            self._text,
+            background_pixmap=bg_pix,
+            x_off=x_bg,
+            y_off=y_bg,
+            position='top-left',
+            forced_bg_color=pill_bg,
+            forced_text_color=pill_fg,
         )
 
-        close_size      = 28
-        close_x         = rect_int.width() - close_size - 12
-        close_y         = 12
+        close_size = 28
+        close_x = rect_int.width() - close_size - 12
+        close_y = 12
         self._btn_close = QRect(close_x, close_y, close_size, close_size)
         if self._pip_available:
             self._btn_pip = QRect(close_x - close_size - 8, close_y, close_size, close_size)
@@ -1587,8 +1738,7 @@ class CameraOverlay(BaseOverlay):
         painter.drawText(self._btn_close, Qt.AlignmentFlag.AlignCenter, get_icon('close'))
         if self._pip_available:
             painter.setFont(get_mdi_font(16))
-            painter.drawText(self._btn_pip, Qt.AlignmentFlag.AlignCenter,
-                             get_icon('picture-in-picture-bottom-right'))
+            painter.drawText(self._btn_pip, Qt.AlignmentFlag.AlignCenter, get_icon('picture-in-picture-bottom-right'))
 
     def mousePressEvent(self, event):
         if self._btn_close.contains(event.pos()):
@@ -1610,29 +1760,30 @@ class RobotOverlay(BaseOverlay):
         DOCK_ACTION    – service action string emitted for dock button
         DEFAULT_LABEL  – fallback label when none is provided
     """
+
     ACTIVE_STATES: tuple = ()
-    START_ACTION:  str   = ''
-    DOCK_ACTION:   str   = ''
-    DEFAULT_LABEL: str   = ''
+    START_ACTION: str = ''
+    DOCK_ACTION: str = ''
+    DEFAULT_LABEL: str = ''
 
     action_requested = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._text       = self.DEFAULT_LABEL
-        self._color      = QColor("#4CAF50")
+        self._text = self.DEFAULT_LABEL
+        self._color = QColor("#4CAF50")
         self._base_color = QColor("#2d2d2d")
 
-        self._state         = "unknown"
+        self._state = "unknown"
         self._battery_level = -1.0
 
-        self._btn_close       = QRect()
+        self._btn_close = QRect()
         self._btn_start_pause = QRect()
-        self._btn_dock        = QRect()
+        self._btn_dock = QRect()
 
         self.setMouseTracking(True)
         self._hover_start_pause = False
-        self._hover_dock        = False
+        self._hover_dock = False
 
     def update_state(self, state_dict: dict):
         self._state = state_dict.get('state', 'unknown')
@@ -1643,12 +1794,19 @@ class RobotOverlay(BaseOverlay):
             self._battery_level = -1.0
         self.update()
 
-    def start_morph(self, start_geo: QRect, target_geo: QRect, label: str,
-                    color: QColor = None, base_color: QColor = None, current_state: dict | None = None):
+    def start_morph(
+        self,
+        start_geo: QRect,
+        target_geo: QRect,
+        label: str,
+        color: QColor = None,
+        base_color: QColor = None,
+        current_state: dict | None = None,
+    ):
         if current_state:
             self.update_state(current_state)
-        self._text       = label
-        self._color      = color      or QColor("#4CAF50")
+        self._text = label
+        self._color = color or QColor("#4CAF50")
         self._base_color = base_color or QColor("#2d2d2d")
         self._start_morph_animations(start_geo, target_geo)
 
@@ -1665,17 +1823,17 @@ class RobotOverlay(BaseOverlay):
             self.action_requested.emit(self.DOCK_ACTION)
 
     def mouseMoveEvent(self, event):
-        pos    = event.pos()
+        pos = event.pos()
         new_sp = self._btn_start_pause.contains(pos)
         new_dk = self._btn_dock.contains(pos)
         if new_sp != self._hover_start_pause or new_dk != self._hover_dock:
             self._hover_start_pause = new_sp
-            self._hover_dock        = new_dk
+            self._hover_dock = new_dk
             self.update()
 
     def leaveEvent(self, event):
         self._hover_start_pause = False
-        self._hover_dock        = False
+        self._hover_dock = False
         self.update()
 
     def paintEvent(self, event):
@@ -1685,19 +1843,21 @@ class RobotOverlay(BaseOverlay):
 
         rect = self.rect()
         self._draw_background(painter, rect)
-        DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg())
+        DashboardButtonPainter.draw_image_edge_effects(
+            painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg()
+        )
         self._draw_border_animation(painter, rect)
 
         base_alpha = int(255 * self._morph_progress)
-        alpha      = int(base_alpha * self._content_opacity)
+        alpha = int(base_alpha * self._content_opacity)
         if alpha < 10:
             return
 
         padding = 16
-        fg      = self._fg_color(alpha)
-        dim_fg  = self._fg_color(int(alpha * 0.5))
+        fg = self._fg_color(alpha)
+        dim_fg = self._fg_color(int(alpha * 0.5))
 
-        close_size      = 20
+        close_size = 20
         self._btn_close = QRect(rect.width() - close_size - padding, padding, close_size, close_size)
         painter.setFont(get_mdi_font(18))
         painter.setPen(dim_fg)
@@ -1709,19 +1869,19 @@ class RobotOverlay(BaseOverlay):
         state_rect = QRectF(padding, padding, rect.width() - padding * 2 - close_size, 24)
         painter.drawText(state_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, state_display)
 
-        btn_h         = 36
-        gap           = 8
-        pill_h        = 22
-        pill_gap      = 10
-        avail_w       = rect.width() - padding * 2
-        btn_w         = (avail_w - gap) / 2
+        btn_h = 36
+        gap = 8
+        pill_h = 22
+        pill_gap = 10
+        avail_w = rect.width() - padding * 2
+        btn_w = (avail_w - gap) / 2
         total_group_h = btn_h + pill_gap + pill_h
-        btn_y         = padding + 24 + 4 + (rect.height() - padding * 2 - 24 - 4 - total_group_h) / 2
-        pill_y        = btn_y + btn_h + pill_gap
-        pill_rect     = QRectF(padding, pill_y, avail_w, pill_h)
+        btn_y = padding + 24 + 4 + (rect.height() - padding * 2 - 24 - 4 - total_group_h) / 2
+        pill_y = btn_y + btn_h + pill_gap
+        pill_rect = QRectF(padding, pill_y, avail_w, pill_h)
 
         is_active = self._state in self.ACTIVE_STATES
-        sp_rect   = QRectF(padding, btn_y, btn_w, btn_h)
+        sp_rect = QRectF(padding, btn_y, btn_w, btn_h)
         self._btn_start_pause = sp_rect.toAlignedRect()
 
         sp_color = QColor(self._color)
@@ -1735,22 +1895,26 @@ class RobotOverlay(BaseOverlay):
         painter.setBrush(sp_color)
         painter.drawPath(path_sp)
 
-        sp_icon  = get_icon('pause') if is_active else get_icon('play')
+        sp_icon = get_icon('pause') if is_active else get_icon('play')
         sp_label = t("overlay.robot.pause_btn") if is_active else t("overlay.robot.start_btn")
         painter.setPen(self._fg_color(alpha))
         icon_x = sp_rect.x() + 12
         painter.setFont(get_mdi_font(16))
-        painter.drawText(QRectF(icon_x, sp_rect.y(), 20, btn_h),
-                         Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, sp_icon)
+        painter.drawText(
+            QRectF(icon_x, sp_rect.y(), 20, btn_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, sp_icon
+        )
         painter.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.DemiBold))
-        painter.drawText(QRectF(icon_x + 22, sp_rect.y(), btn_w - 34, btn_h),
-                         Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, sp_label)
+        painter.drawText(
+            QRectF(icon_x + 22, sp_rect.y(), btn_w - 34, btn_h),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            sp_label,
+        )
 
-        dk_rect  = QRectF(padding + btn_w + gap, btn_y, btn_w, btn_h)
+        dk_rect = QRectF(padding + btn_w + gap, btn_y, btn_w, btn_h)
         self._btn_dock = dk_rect.toAlignedRect()
 
-        dk_fill  = self._fg_color(int(alpha * 0.20) if self._hover_dock else int(alpha * 0.12))
-        path_dk  = QPainterPath()
+        dk_fill = self._fg_color(int(alpha * 0.20) if self._hover_dock else int(alpha * 0.12))
+        path_dk = QPainterPath()
         path_dk.addRoundedRect(dk_rect, OVERLAY_CORNER_RADIUS, OVERLAY_CORNER_RADIUS)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(dk_fill)
@@ -1759,11 +1923,17 @@ class RobotOverlay(BaseOverlay):
         painter.setPen(self._fg_color(alpha))
         icon_x2 = dk_rect.x() + 12
         painter.setFont(get_mdi_font(16))
-        painter.drawText(QRectF(icon_x2, dk_rect.y(), 20, btn_h),
-                         Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, get_icon('home'))
+        painter.drawText(
+            QRectF(icon_x2, dk_rect.y(), 20, btn_h),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            get_icon('home'),
+        )
         painter.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.DemiBold))
-        painter.drawText(QRectF(icon_x2 + 22, dk_rect.y(), btn_w - 34, btn_h),
-                         Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, t("overlay.robot.dock_btn"))
+        painter.drawText(
+            QRectF(icon_x2 + 22, dk_rect.y(), btn_w - 34, btn_h),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            t("overlay.robot.dock_btn"),
+        )
 
         if self._battery_level >= 0:
             if self._battery_level > 50:
@@ -1793,17 +1963,19 @@ class RobotOverlay(BaseOverlay):
 
 class MowerOverlay(RobotOverlay):
     """Lawn mower control overlay."""
+
     ACTIVE_STATES = ('mowing', 'returning')
-    START_ACTION  = 'start_mowing'
-    DOCK_ACTION   = 'dock'
+    START_ACTION = 'start_mowing'
+    DOCK_ACTION = 'dock'
     DEFAULT_LABEL = 'Mower'
 
 
 class VacuumOverlay(RobotOverlay):
     """Vacuum control overlay."""
+
     ACTIVE_STATES = ('cleaning', 'returning')
-    START_ACTION  = 'start'
-    DOCK_ACTION   = 'return_to_base'
+    START_ACTION = 'start'
+    DOCK_ACTION = 'return_to_base'
     DEFAULT_LABEL = 'Vacuum'
 
 
@@ -1820,52 +1992,58 @@ class AlarmOverlay(PressableOverlay):
     """
 
     action_requested = pyqtSignal(str, str)
-    keypad_toggled   = pyqtSignal(bool)  # True when the keypad needs to be shown/hidden — panel must resize
+    keypad_toggled = pyqtSignal(bool)  # True when the keypad needs to be shown/hidden — panel must resize
 
     # action -> (mdi icon name, translation key)
     MODE_META = {
-        'arm_home':          ('home',              'overlay.alarm.mode_home'),
-        'arm_away':          ('briefcase-outline',  'overlay.alarm.mode_away'),
-        'arm_night':         ('weather-night',      'overlay.alarm.mode_night'),
-        'arm_vacation':      ('airplane',           'overlay.alarm.mode_vacation'),
-        'arm_custom_bypass': ('shield-half-full',   'overlay.alarm.mode_bypass'),
+        'arm_home': ('home', 'overlay.alarm.mode_home'),
+        'arm_away': ('briefcase-outline', 'overlay.alarm.mode_away'),
+        'arm_night': ('weather-night', 'overlay.alarm.mode_night'),
+        'arm_vacation': ('airplane', 'overlay.alarm.mode_vacation'),
+        'arm_custom_bypass': ('shield-half-full', 'overlay.alarm.mode_bypass'),
     }
     ARMED_STATES = (
-        'armed_home', 'armed_away', 'armed_night', 'armed_vacation',
-        'armed_custom_bypass', 'arming', 'pending', 'disarming', 'triggered',
+        'armed_home',
+        'armed_away',
+        'armed_night',
+        'armed_vacation',
+        'armed_custom_bypass',
+        'arming',
+        'pending',
+        'disarming',
+        'triggered',
     )
     STATE_LABEL_KEYS = {
-        'disarmed':            'overlay.alarm.state_disarmed',
-        'armed_home':          'overlay.alarm.state_armed_home',
-        'armed_away':          'overlay.alarm.state_armed_away',
-        'armed_night':         'overlay.alarm.state_armed_night',
-        'armed_vacation':      'overlay.alarm.state_armed_vacation',
+        'disarmed': 'overlay.alarm.state_disarmed',
+        'armed_home': 'overlay.alarm.state_armed_home',
+        'armed_away': 'overlay.alarm.state_armed_away',
+        'armed_night': 'overlay.alarm.state_armed_night',
+        'armed_vacation': 'overlay.alarm.state_armed_vacation',
         'armed_custom_bypass': 'overlay.alarm.state_armed_bypass',
-        'arming':              'overlay.alarm.state_arming',
-        'pending':              'overlay.alarm.state_pending',
-        'disarming':           'overlay.alarm.state_disarming',
-        'triggered':            'overlay.alarm.state_triggered',
+        'arming': 'overlay.alarm.state_arming',
+        'pending': 'overlay.alarm.state_pending',
+        'disarming': 'overlay.alarm.state_disarming',
+        'triggered': 'overlay.alarm.state_triggered',
     }
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._text       = 'Alarm'
-        self._color      = QColor("#4285F4")
+        self._text = 'Alarm'
+        self._color = QColor("#4285F4")
         self._base_color = QColor("#2d2d2d")
 
-        self._state           = 'unknown'
-        self._available_modes = []     # e.g. ['arm_home', 'arm_away']
-        self._code_for_arm    = False
+        self._state = 'unknown'
+        self._available_modes = []  # e.g. ['arm_home', 'arm_away']
+        self._code_for_arm = False
         self._code_for_disarm = False
 
-        self._pending_action  = None   # action awaiting code confirmation, or None
-        self._entered_code    = ''
+        self._pending_action = None  # action awaiting code confirmation, or None
+        self._entered_code = ''
 
-        self._btn_close  = QRect()
-        self._mode_btns  = []          # [(QRect, action)]
+        self._btn_close = QRect()
+        self._mode_btns = []  # [(QRect, action)]
         self._btn_disarm = QRect()
-        self._keypad_btns = []         # [(QRect, 'digit'|'back'|'submit', value)]
-
+        self._keypad_btns = []  # [(QRect, 'digit'|'back'|'submit', value)]
 
     # ── Configuration ──
 
@@ -1873,7 +2051,7 @@ class AlarmOverlay(PressableOverlay):
         self._available_modes = [m for m in modes if m in self.MODE_META]
 
     def configure_code(self, code_for_arm: bool, code_for_disarm: bool):
-        self._code_for_arm    = code_for_arm
+        self._code_for_arm = code_for_arm
         self._code_for_disarm = code_for_disarm
 
     def update_state(self, state_dict: dict):
@@ -1887,17 +2065,24 @@ class AlarmOverlay(PressableOverlay):
         self._state = new_state
         self.update()
 
-    def start_morph(self, start_geo: QRect, target_geo: QRect, label: str,
-                    color: QColor = None, base_color: QColor = None, current_state: dict | None = None):
+    def start_morph(
+        self,
+        start_geo: QRect,
+        target_geo: QRect,
+        label: str,
+        color: QColor = None,
+        base_color: QColor = None,
+        current_state: dict | None = None,
+    ):
         self._pending_action = None
-        self._entered_code   = ''
-        self._btn_disarm     = QRect()
-        self._mode_btns      = []
-        self._keypad_btns    = []
+        self._entered_code = ''
+        self._btn_disarm = QRect()
+        self._mode_btns = []
+        self._keypad_btns = []
         if current_state:
             self.update_state(current_state)
-        self._text       = label
-        self._color      = color      or QColor("#4285F4")
+        self._text = label
+        self._color = color or QColor("#4285F4")
         self._base_color = base_color or QColor("#2d2d2d")
         self._start_morph_animations(start_geo, target_geo)
 
@@ -1933,27 +2118,10 @@ class AlarmOverlay(PressableOverlay):
             return
 
         if self._pending_action:
-            for rect_btn, kind, value in self._keypad_btns:
-                if not rect_btn.contains(pos):
-                    continue
-                self._trigger_press_anim(rect_btn)
-                if kind == 'digit':
-                    if len(self._entered_code) < 8:
-                        self._entered_code += value
-                        self.update()
-                elif kind == 'back':
-                    if self._entered_code:
-                        self._entered_code = self._entered_code[:-1]
-                        self.update()
-                    else:
-                        # Nothing to erase — treat as "back" out of the keypad.
-                        self._set_pending_action(None)
-                elif kind == 'submit':
-                    if self._entered_code:
-                        self.action_requested.emit(self._pending_action, self._entered_code)
-                        self._entered_code = ''
-                        self._set_pending_action(None)
-                return
+            key = next(((rect, kind, value) for rect, kind, value in self._keypad_btns if rect.contains(pos)), None)
+            if key:
+                self._trigger_press_anim(key[0])
+                self._press_keypad_key(key[1], key[2])
             return
 
         if self._btn_disarm.contains(pos):
@@ -1967,6 +2135,23 @@ class AlarmOverlay(PressableOverlay):
                 self._request_action(action)
                 return
 
+    def _press_keypad_key(self, kind: str, value):
+        if kind == 'digit':
+            if len(self._entered_code) < 8:
+                self._entered_code += value
+                self.update()
+        elif kind == 'back':
+            if self._entered_code:
+                self._entered_code = self._entered_code[:-1]
+                self.update()
+            else:
+                # Nothing to erase — treat as "back" out of the keypad.
+                self._set_pending_action(None)
+        elif kind == 'submit' and self._entered_code:
+            self.action_requested.emit(self._pending_action, self._entered_code)
+            self._entered_code = ''
+            self._set_pending_action(None)
+
     # ── Painting ──
 
     def paintEvent(self, event):
@@ -1976,18 +2161,20 @@ class AlarmOverlay(PressableOverlay):
 
         rect = self.rect()
         self._draw_background(painter, rect)
-        DashboardButtonPainter.draw_image_edge_effects(painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg())
+        DashboardButtonPainter.draw_image_edge_effects(
+            painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg()
+        )
         self._draw_border_animation(painter, rect)
 
         base_alpha = int(255 * self._morph_progress)
-        alpha      = int(base_alpha * self._content_opacity)
+        alpha = int(base_alpha * self._content_opacity)
         if alpha < 10:
             return
 
         padding = 16
-        fg      = self._fg_color(alpha)
+        fg = self._fg_color(alpha)
 
-        close_size      = 20
+        close_size = 20
         self._btn_close = QRect(rect.width() - close_size - padding, padding, close_size, close_size)
         painter.setFont(get_mdi_font(18))
         painter.setPen(self._fg_color(int(alpha * 0.5)))
@@ -1996,7 +2183,7 @@ class AlarmOverlay(PressableOverlay):
         is_triggered = self._state == 'triggered'
         header_color = QColor('#EA4335') if is_triggered else fg
         header_color.setAlpha(alpha)
-        label_key   = self.STATE_LABEL_KEYS.get(self._state)
+        label_key = self.STATE_LABEL_KEYS.get(self._state)
         state_label = t(label_key) if label_key else self._state.replace('_', ' ').capitalize()
 
         painter.setFont(QFont(SYSTEM_FONT, 13, QFont.Weight.Bold))
@@ -2016,14 +2203,13 @@ class AlarmOverlay(PressableOverlay):
         painter.end()
 
     def _draw_disarm_button(self, painter, rect, alpha, top, is_triggered):
-        padding  = 16
-        btn_h    = 40
+        padding = 16
+        btn_h = 40
         btn_rect = QRect(padding, top, rect.width() - padding * 2, btn_h)
         self._btn_disarm = btn_rect
         self._mode_btns = []  # hit rects are only valid for the view that was just drawn
 
         with self._press_feedback(painter, btn_rect):
-
             fill = QColor('#EA4335') if is_triggered else QColor(255, 255, 255, int(alpha * 0.14))
             if is_triggered:
                 fill.setAlpha(alpha)
@@ -2037,11 +2223,13 @@ class AlarmOverlay(PressableOverlay):
             painter.setPen(text_color)
             painter.setFont(get_mdi_font(16))
             icon_x = btn_rect.center().x() - 60
-            painter.drawText(QRectF(icon_x, btn_rect.y(), 20, btn_h),
-                             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, get_icon('shield-off-outline'))
+            painter.drawText(
+                QRectF(icon_x, btn_rect.y(), 20, btn_h),
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                get_icon('shield-off-outline'),
+            )
             painter.setFont(QFont(SYSTEM_FONT, 12, QFont.Weight.DemiBold))
             painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, t("overlay.alarm.disarm_btn"))
-
 
     def _draw_mode_buttons(self, painter, rect, alpha, top):
         padding = 16
@@ -2049,11 +2237,11 @@ class AlarmOverlay(PressableOverlay):
         self._btn_disarm = QRect()  # no Disarm button in this view
 
         modes = self._available_modes or ['arm_home', 'arm_away']
-        gap     = 8
-        btn_h   = 40
+        gap = 8
+        btn_h = 40
         avail_w = rect.width() - padding * 2
-        n       = len(modes)
-        btn_w   = (avail_w - (n - 1) * gap) / n if n else avail_w
+        n = len(modes)
+        btn_w = (avail_w - (n - 1) * gap) / n if n else avail_w
         show_label = btn_w >= 64
 
         for i, action in enumerate(modes):
@@ -2063,7 +2251,6 @@ class AlarmOverlay(PressableOverlay):
             self._mode_btns.append((btn_rect, action))
 
             with self._press_feedback(painter, btn_rect):
-
                 path = QPainterPath()
                 path.addRoundedRect(QRectF(btn_rect), 10, 10)
                 painter.fillPath(path, QColor(255, 255, 255, int(alpha * 0.10)))
@@ -2075,83 +2262,78 @@ class AlarmOverlay(PressableOverlay):
                 if show_label:
                     painter.setFont(get_mdi_font(16))
                     icon_x = btn_rect.x() + 10
-                    painter.drawText(QRectF(icon_x, btn_rect.y(), 20, btn_h),
-                                     Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, get_icon(icon_name))
+                    painter.drawText(
+                        QRectF(icon_x, btn_rect.y(), 20, btn_h),
+                        Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                        get_icon(icon_name),
+                    )
                     painter.setFont(QFont(SYSTEM_FONT, 10, QFont.Weight.DemiBold))
-                    painter.drawText(QRectF(icon_x + 22, btn_rect.y(), btn_w - 34, btn_h),
-                                     Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, t(label_key))
+                    painter.drawText(
+                        QRectF(icon_x + 22, btn_rect.y(), btn_w - 34, btn_h),
+                        Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                        t(label_key),
+                    )
                 else:
                     painter.setFont(get_mdi_font(18))
                     painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon(icon_name))
 
-
     def _draw_keypad(self, painter, rect, alpha, top):
+        """The code entry: a prompt, a dot per digit typed, and a 3x4 keypad."""
         padding = 16
         self._mode_btns = []
         self._btn_disarm = QRect()
 
-        action_label_key = 'overlay.alarm.enter_code_disarm' if self._pending_action == 'disarm' else 'overlay.alarm.enter_code_arm'
+        prompt_key = (
+            'overlay.alarm.enter_code_disarm' if self._pending_action == 'disarm' else 'overlay.alarm.enter_code_arm'
+        )
         painter.setFont(QFont(SYSTEM_FONT, 9, QFont.Weight.DemiBold))
         painter.setPen(self._fg_color(int(alpha * 0.5)))
-        subtitle_rect = QRectF(padding, top, rect.width() - padding * 2, 16)
-        painter.drawText(subtitle_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, t(action_label_key))
-
-        dots_rect = QRectF(padding, top + 18, rect.width() - padding * 2, 22)
+        painter.drawText(
+            QRectF(padding, top, rect.width() - padding * 2, 16),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            t(prompt_key),
+        )
         painter.setFont(QFont(SYSTEM_FONT, 18, QFont.Weight.Bold))
         painter.setPen(self._fg_color(alpha))
-        dots = "• " * len(self._entered_code)
-        painter.drawText(dots_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, dots.strip())
+        painter.drawText(
+            QRectF(padding, top + 18, rect.width() - padding * 2, 22),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            ("• " * len(self._entered_code)).strip(),
+        )
 
-        keys = [
-            ('1', '1'), ('2', '2'), ('3', '3'),
-            ('4', '4'), ('5', '5'), ('6', '6'),
-            ('7', '7'), ('8', '8'), ('9', '9'),
-            ('back', None), ('0', '0'), ('submit', None),
-        ]
-        cols    = 3
-        rows    = 4
-        gap     = 6
+        cols, rows, gap = 3, 4, 6
         grid_top = top + 46
-        avail_w = rect.width() - padding * 2
-        avail_h = rect.height() - grid_top - padding
-        cell_w  = (avail_w - (cols - 1) * gap) / cols
-        cell_h  = min((avail_h - (rows - 1) * gap) / rows, 32)
-
+        cell_w = (rect.width() - padding * 2 - (cols - 1) * gap) / cols
+        cell_h = min((rect.height() - grid_top - padding - (rows - 1) * gap) / rows, 32)
         self._keypad_btns = []
-        for i, (key, digit) in enumerate(keys):
-            col = i % cols
-            row = i // cols
-            x = padding + col * (cell_w + gap)
-            y = grid_top + row * (cell_h + gap)
-            btn_rect = QRect(int(x), int(y), int(cell_w), int(cell_h))
-
-            if key == 'back':
-                kind, value = 'back', None
-            elif key == 'submit':
-                kind, value = 'submit', None
-            else:
-                kind, value = 'digit', digit
+        for i, (kind, value) in enumerate(_KEYPAD_KEYS):
+            row, col = divmod(i, cols)
+            btn_rect = QRect(
+                int(padding + col * (cell_w + gap)), int(grid_top + row * (cell_h + gap)), int(cell_w), int(cell_h)
+            )
             self._keypad_btns.append((btn_rect, kind, value))
+            self._draw_keypad_key(painter, btn_rect, kind, value, alpha)
 
-            with self._press_feedback(painter, btn_rect):
-
-                path = QPainterPath()
-                path.addRoundedRect(QRectF(btn_rect), 8, 8)
-                if kind == 'submit':
-                    fill = QColor(52, 168, 83, int(alpha * 0.85))
-                else:
-                    fill = QColor(255, 255, 255, int(alpha * 0.08))
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(fill)
-                painter.drawPath(path)
-
-                if kind == 'digit':
-                    painter.setFont(QFont(SYSTEM_FONT, 13, QFont.Weight.Medium))
-                    painter.setPen(self._fg_color(alpha))
-                    painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, digit)
-                else:
-                    painter.setFont(get_mdi_font(16))
-                    painter.setPen(QColor(255, 255, 255, alpha) if kind == 'submit' else self._fg_color(int(alpha * 0.7)))
-                    icon = get_icon('check-bold') if kind == 'submit' else get_icon('backspace-outline')
-                    painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, icon)
-
+    def _draw_keypad_key(self, painter, btn_rect: QRect, kind: str, value, alpha: int):
+        """A digit, backspace, or the green submit key."""
+        with self._press_feedback(painter, btn_rect):
+            path = QPainterPath()
+            path.addRoundedRect(QRectF(btn_rect), 8, 8)
+            painter.setPen(Qt.PenStyle.NoPen)
+            if kind == 'submit':
+                painter.setBrush(QColor(52, 168, 83, int(alpha * 0.85)))
+            else:
+                painter.setBrush(QColor(255, 255, 255, int(alpha * 0.08)))
+            painter.drawPath(path)
+            if kind == 'digit':
+                painter.setFont(QFont(SYSTEM_FONT, 13, QFont.Weight.Medium))
+                painter.setPen(self._fg_color(alpha))
+                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, value)
+                return
+            painter.setFont(get_mdi_font(16))
+            if kind == 'submit':
+                painter.setPen(QColor(255, 255, 255, alpha))
+                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon('check-bold'))
+            else:
+                painter.setPen(self._fg_color(int(alpha * 0.7)))
+                painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, get_icon('backspace-outline'))

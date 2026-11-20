@@ -2,6 +2,7 @@
  
 **A Home Assistant desktop app for Windows, Linux & macOS — control your smart home from your PC.**
  
+[![Code quality](https://github.com/lasselian/prism-desktop/actions/workflows/quality.yml/badge.svg)](https://github.com/lasselian/prism-desktop/actions/workflows/quality.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](https://github.com/lasselian/prism-desktop/releases)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-WebSocket%20API-41BDF5?logo=home-assistant)](https://www.home-assistant.io/)
@@ -33,6 +34,8 @@ Built on Home Assistant's WebSocket API, it keeps your dashboard in **real-time 
 - [Configuration](#configuration)
 - [Building](#building)
 - [Troubleshooting](#troubleshooting)
+- [How it works](#how-it-works)
+- [Contributing](#contributing)
 - [License](#license)
 ---
  
@@ -252,6 +255,28 @@ Your reverse proxy is adding a duplicate `Server` header. Fix for common proxies
 - **Other proxies**: Check for a similar "remove upstream header" option.
 ---
  
+## How it works
+
+Prism keeps one WebSocket connection to Home Assistant for live state updates
+and uses the REST API for service calls, camera images and media. Qt and
+asyncio share one event loop (via qasync), so the UI stays responsive while it
+waits on the network. It can also register itself as a mobile app device, which
+gives Home Assistant a notify service and sensors for this computer.
+
+- [Architecture](docs/ARCHITECTURE.md): the code layers, the event loop, how state and clicks flow
+- [Platform integrations](docs/platforms.md): what differs on Windows, Linux and macOS
+- [Assist](docs/assist.md): how voice and text requests reach your Assist pipeline
+
+---
+
+## Contributing
+
+Pull requests, translations and bug reports are welcome; see
+[CONTRIBUTING.md](CONTRIBUTING.md). Please report security problems privately as
+described in [SECURITY.md](SECURITY.md).
+
+---
+
 ## License
  
 MIT License — see [LICENSE](LICENSE) for details.

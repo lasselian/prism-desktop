@@ -18,6 +18,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 from core.build_info import REPO_ROOT, APP_VERSION
+from core.utils import get_config_path
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +54,12 @@ class AutoUpdateThread(QThread):
     """
 
     progress = pyqtSignal(str)
-    success = pyqtSignal(str)   # "updated" | "already_up_to_date"
+    success = pyqtSignal(str)  # "updated" | "already_up_to_date"
     error = pyqtSignal(str)
 
     _GIT_TIMEOUT = 60
     _PIP_TIMEOUT = 120
-    _NET_TIMEOUT = (10, 120)   # (connect, read) seconds for HTTP requests
+    _NET_TIMEOUT = (10, 120)  # (connect, read) seconds for HTTP requests
 
     def run(self):
         global _update_in_progress
@@ -145,9 +146,7 @@ class AutoUpdateThread(QThread):
             self.progress.emit("Downloading update…")
             total = asset.get("size", 0)
             done = 0
-            with requests.get(
-                asset["browser_download_url"], stream=True, timeout=self._NET_TIMEOUT
-            ) as dl:
+            with requests.get(asset["browser_download_url"], stream=True, timeout=self._NET_TIMEOUT) as dl:
                 dl.raise_for_status()
                 with open(tmp_path, "wb") as f:
                     for chunk in dl.iter_content(chunk_size=65536):
@@ -155,14 +154,14 @@ class AutoUpdateThread(QThread):
                             f.write(chunk)
                             done += len(chunk)
                             if total:
-                                self.progress.emit(
-                                    f"Downloading update… {done * 100 // total}%"
-                                )
+                                self.progress.emit(f"Downloading update… {done * 100 // total}%")
 
             # 3. Verify checksum if a SHA256SUMS asset is present in the release
             if not self._verify_checksum(tmp_path, asset_name, assets):
-                self.error.emit("Checksum verification failed — the download is missing from "
-                                "or does not match the release's SHA256SUMS. Aborting.")
+                self.error.emit(
+                    "Checksum verification failed — the download is missing from "
+                    "or does not match the release's SHA256SUMS. Aborting."
+                )
                 return
 
             # 4. Apply the downloaded asset
@@ -191,15 +190,11 @@ class AutoUpdateThread(QThread):
         opportunistic, not mandatory, until checksums are part of every release.
         Returns False when the sums file exists but has no line for asset_name.
         """
-        sums_asset = next(
-            (a for a in assets if a["name"] in ("SHA256SUMS", "sha256sums.txt")), None
-        )
+        sums_asset = next((a for a in assets if a["name"] in ("SHA256SUMS", "sha256sums.txt")), None)
         if not sums_asset:
             return True
 
-        resp = requests.get(
-            sums_asset["browser_download_url"], headers=_GH_HEADERS, timeout=self._NET_TIMEOUT
-        )
+        resp = requests.get(sums_asset["browser_download_url"], headers=_GH_HEADERS, timeout=self._NET_TIMEOUT)
         resp.raise_for_status()
 
         expected = None
@@ -258,9 +253,7 @@ class AutoUpdateThread(QThread):
             os.replace(staged, current)
         except PermissionError as exc:
             staged.unlink(missing_ok=True)
-            raise OSError(
-                f"Cannot replace {current} — check that you own the file or have write permission."
-            ) from exc
+            raise OSError(f"Cannot replace {current} — check that you own the file or have write permission.") from exc
         except BaseException:
             staged.unlink(missing_ok=True)
             raise
@@ -270,19 +263,19 @@ class AutoUpdateThread(QThread):
         Extract the updated .app bundle from the downloaded ZIP and replace
         the running application bundle in /Applications (or current bundle dir).
         """
-        import zipfile
-        current_app = None
-        for p in Path(sys.executable).parents:
-            if p.suffix == ".app":
-                current_app = p
-                break
-
+        current_app = _running_app_bundle()
         if not current_app or not current_app.exists():
             raise OSError(f"Could not locate the .app bundle for {sys.executable}")
+        new_app = self._extract_app_bundle(zip_path)
+        self._clear_quarantine(new_app)
+        self._swap_app_bundles(current_app, new_app)
+
+    @staticmethod
+    def _extract_app_bundle(zip_path: Path) -> Path:
+        import zipfile
 
         extract_dir = zip_path.parent / "extracted"
         extract_dir.mkdir(exist_ok=True)
-
         try:
             subprocess.run(["ditto", "-xk", str(zip_path), str(extract_dir)], check=True)
         except Exception:
@@ -290,21 +283,24 @@ class AutoUpdateThread(QThread):
                 zf.extractall(extract_dir)
 
         new_app = extract_dir / "PrismDesktop.app"
-        if not new_app.exists():
-            apps = list(extract_dir.glob("*.app"))
-            if apps:
-                new_app = apps[0]
-            else:
-                raise OSError("Downloaded archive did not contain PrismDesktop.app")
+        if new_app.exists():
+            return new_app
+        apps = list(extract_dir.glob("*.app"))
+        if not apps:
+            raise OSError("Downloaded archive did not contain PrismDesktop.app")
+        return apps[0]
 
-        # Strip quarantine flag and ad-hoc sign new .app
+    @staticmethod
+    def _clear_quarantine(app: Path) -> None:
+        """Strip the quarantine flag and ad-hoc sign the new bundle."""
         try:
-            subprocess.run(["xattr", "-cr", str(new_app)], check=False)
-            subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(new_app)], check=False)
+            subprocess.run(["xattr", "-cr", str(app)], check=False)
+            subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(app)], check=False)
         except Exception:
             pass
 
-        # Move/replace current .app bundle
+    @staticmethod
+    def _swap_app_bundles(current_app: Path, new_app: Path) -> None:
         backup_app = current_app.with_suffix(".app.old")
         if backup_app.exists():
             shutil.rmtree(backup_app, ignore_errors=True)
@@ -317,8 +313,7 @@ class AutoUpdateThread(QThread):
             shutil.move(str(current_app), str(backup_app))
         except OSError as exc:
             raise OSError(
-                f"Cannot replace {current_app} — check that you own the bundle "
-                f"or have write permission ({exc})."
+                f"Cannot replace {current_app} — check that you own the bundle or have write permission ({exc})."
             ) from exc
 
         try:
@@ -337,17 +332,32 @@ class AutoUpdateThread(QThread):
                     f"{backup_app} — rename it back to {current_app.name} to "
                     f"recover ({exc})."
                 ) from exc
-            raise OSError(
-                f"Update failed; the previous version has been restored ({exc})."
-            ) from exc
+            raise OSError(f"Update failed; the previous version has been restored ({exc}).") from exc
 
         shutil.rmtree(backup_app, ignore_errors=True)
 
 
 # ── Post-update flag ──────────────────────────────────────────────────────────
 
+_FLAG_NAME = "prism_desktop_just_updated"
+
+
 def _flag_path() -> Path:
-    return Path(tempfile.gettempdir()) / "prism_desktop_just_updated"
+    # Next to config.json (portable, installed or source), per user unlike
+    # the shared temp directory.
+    return get_config_path().with_name(_FLAG_NAME)
+
+
+def _legacy_flag_path() -> Path | None:
+    """Where versions up to 1.7 wrote the flag; still read so the first update
+    onto this version gets its sanity check. Only a file this user owns counts."""
+    path = Path(tempfile.gettempdir()) / _FLAG_NAME
+    try:
+        if hasattr(os, "getuid") and path.stat().st_uid != os.getuid():
+            return None
+    except OSError:
+        return None
+    return path
 
 
 def write_update_flag() -> None:
@@ -363,42 +373,48 @@ def consume_update_flag() -> str | None:
     Read and delete the update flag written before the restart.
     Returns the version string that was running before the update, or None.
     """
-    path = _flag_path()
-    if not path.exists():
-        return None
-    try:
-        prev = path.read_text(encoding="utf-8").strip()
-        path.unlink(missing_ok=True)
-        return prev or "unknown"
-    except OSError:
-        return None
+    for path in (_flag_path(), _legacy_flag_path()):
+        if path is None or not path.exists():
+            continue
+        try:
+            prev = path.read_text(encoding="utf-8").strip()
+            path.unlink(missing_ok=True)
+            return prev or "unknown"
+        except OSError:
+            return None
+    return None
 
 
 # ── App restart ───────────────────────────────────────────────────────────────
 
+
 def restart_app() -> None:
     """Restart the application after a successful update."""
     write_update_flag()
-    if getattr(sys, "frozen", False):
-        if sys.platform.startswith("linux"):
-            # New AppImage is in place at $APPIMAGE; re-exec from there.
-            # sys.executable points into the /tmp squashfs mount, not the file.
-            appimage = os.environ.get("APPIMAGE") or sys.executable
-            subprocess.Popen([appimage])
-        elif sys.platform == "darwin":
-            current_app = None
-            for p in Path(sys.executable).parents:
-                if p.suffix == ".app":
-                    current_app = p
-                    break
-            if current_app:
-                subprocess.Popen(["open", "-n", str(current_app)])
-            else:
-                subprocess.Popen([sys.executable])
-        else:
-            # Windows: the installer (spawned in _apply_windows) relaunches the
-            # app itself once it's done; don't race it by launching here too.
-            logger.info("Quitting so the Windows installer can relaunch the app")
+    command = _relaunch_command()
+    if command:
+        subprocess.Popen(command)
     else:
-        subprocess.Popen([sys.executable] + sys.argv)
+        # Windows: the installer (spawned in _apply_windows) relaunches the
+        # app itself once it's done; don't race it by launching here too.
+        logger.info("Quitting so the Windows installer can relaunch the app")
     QApplication.quit()
+
+
+def _relaunch_command() -> list[str] | None:
+    """How to start the updated app, or None when the installer does it."""
+    if not getattr(sys, "frozen", False):
+        return [sys.executable] + sys.argv
+    if sys.platform.startswith("linux"):
+        # New AppImage is in place at $APPIMAGE; re-exec from there.
+        # sys.executable points into the /tmp squashfs mount, not the file.
+        return [os.environ.get("APPIMAGE") or sys.executable]
+    if sys.platform == "darwin":
+        bundle = _running_app_bundle()
+        return ["open", "-n", str(bundle)] if bundle else [sys.executable]
+    return None
+
+
+def _running_app_bundle() -> Path | None:
+    """The .app bundle the running executable lives in (macOS), if any."""
+    return next((p for p in Path(sys.executable).parents if p.suffix == ".app"), None)

@@ -1,18 +1,32 @@
-
 """
 Embedded Button Editor Widget
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QLineEdit, QPushButton, QComboBox, QFormLayout,
-    QSpinBox, QDoubleSpinBox, QSizePolicy, QCompleter, QMenu
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QComboBox,
+    QFormLayout,
+    QSpinBox,
+    QDoubleSpinBox,
+    QSizePolicy,
+    QCompleter,
+    QMenu,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QColor, QPainter, QLinearGradient, QPen
 from ui.widgets.toggle_switch import ToggleSwitch
 from core.localization_manager import t
 from ui.styles import Typography, Dimensions
+
+# The record button's dot (idle); a rounded square while recording
+RECORD_ICON_IDLE_STYLE = 'background-color: white; border-radius: 6px;'
+
+SHORTCUT_RECORDING_KEY = 'settings.shortcut.recording'
 
 
 class HueSlider(QWidget):
@@ -62,12 +76,13 @@ class HueSlider(QWidget):
         if e.buttons() & Qt.MouseButton.LeftButton:
             self._set_from_x(e.position().x())
 
+
 class ButtonEditWidget(QWidget):
     """
     Editor for configuring button properties.
     Uses the same design style as SettingsWidgetV2.
     """
-    
+
     # Internal type identifiers (display labels are looked up via t() at runtime)
     TYPE_DEFINITIONS = [
         ("Alarm Control Panel", "alarm_control_panel"),
@@ -88,7 +103,7 @@ class ButtonEditWidget(QWidget):
         ("Sun", "sun"),
         ("Vacuum", "vacuum"),
         ("Weather", "weather"),
-        ("3D Printer", "3d_printer")
+        ("3D Printer", "3d_printer"),
     ]
 
     # Config keys that only mean something for certain tile types. They are
@@ -141,16 +156,24 @@ class ButtonEditWidget(QWidget):
             (t("button_editor.type.weather"), "weather"),
             (t("button_editor.type.3d_printer"), "3d_printer"),
         ]
-    
+
     saved = pyqtSignal(dict)
     cancelled = pyqtSignal()
     size_changed = pyqtSignal()
     custom_colors_changed = pyqtSignal(list)
-    
+
     # Class-level preference for entity display format (persists across instances)
     _global_show_friendly_names = True
-    
-    def __init__(self, entities: list, config: dict | None = None, slot: int = 0, theme_manager=None, input_manager=None, parent=None):
+
+    def __init__(
+        self,
+        entities: list,
+        config: dict | None = None,
+        slot: int = 0,
+        theme_manager=None,
+        input_manager=None,
+        parent=None,
+    ):
         super().__init__(parent)
         self.entities = entities or []
         self.config = config or {}
@@ -164,11 +187,11 @@ class ButtonEditWidget(QWidget):
         # Connect input manager if available
         if self.input_manager:
             self.input_manager.recorded.connect(self.on_shortcut_recorded)
-        
+
         self.setup_ui()
         self.load_config()
         self.cancelled.connect(self._abort_recording)
-    
+
     def _update_stylesheet(self):
         """Update the stylesheet matching the active theme."""
         if self.theme_manager:
@@ -184,10 +207,10 @@ class ButtonEditWidget(QWidget):
                 'button_text': '#ffffff',
                 'accent': '#007aff',
             }
-        
+
         # Check if using light or dark text to determine background contrast
         is_light = colors.get('text', '#ffffff') == '#1e1e1e'
-        
+
         # Input backgrounds: slightly darker/lighter than base
         if is_light:
             input_bg = "rgba(0, 0, 0, 0.05)"
@@ -205,7 +228,7 @@ class ButtonEditWidget(QWidget):
             section_header_color = "#8e8e93"  # Apple gray for dark mode
             custom_btn_ring = "rgba(255, 255, 255, 0.3)"
             pill_bg = "rgba(255, 255, 255, 0.07)"
-            
+
         self.setStyleSheet(f"""
             QWidget {{ 
                 font-family: {Typography.FONT_FAMILY_UI}; 
@@ -312,11 +335,11 @@ class ButtonEditWidget(QWidget):
                 font-size: {Typography.SIZE_SMALL};
             }}
         """)
-        
+
     def setup_ui(self):
         # Update styling
         self._update_stylesheet()
-        
+
         # Listen for theme changes
         if self.theme_manager:
             self.theme_manager.theme_changed.connect(self._update_stylesheet)
@@ -324,12 +347,11 @@ class ButtonEditWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(10)
-        
-        
+
         # 1. Header
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 10)
-        
+
         self.cancel_btn = QPushButton(t("button_editor.cancel_btn"))
         self.cancel_btn.setMinimumWidth(70)
         self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -345,18 +367,18 @@ class ButtonEditWidget(QWidget):
         self.save_btn.setMinimumWidth(70)
         self.save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.save_btn.clicked.connect(self.save)
-        
+
         header_layout.addWidget(self.cancel_btn)
         header_layout.addWidget(title)
         header_layout.addWidget(self.save_btn)
-        
+
         layout.addLayout(header_layout)
-        
+
         # 2. Form
         self.form = QFormLayout()
         self.form.setVerticalSpacing(8)
         self.form.setHorizontalSpacing(16)
-        
+
         # --- Config Section ---
         self._add_section_header(t("button_editor.section.configuration"))
 
@@ -372,7 +394,9 @@ class ButtonEditWidget(QWidget):
 
         # Display Toggle (Global across all entity dropdowns)
         self.friendly_toggle_btn = QPushButton(
-            t("button_editor.show_ids_btn") if ButtonEditWidget._global_show_friendly_names else t("button_editor.show_names_btn")
+            t("button_editor.show_ids_btn")
+            if ButtonEditWidget._global_show_friendly_names
+            else t("button_editor.show_names_btn")
         )
         self.friendly_toggle_btn.setObjectName("friendlyToggleBtn")
         self.friendly_toggle_btn.setMinimumWidth(110)
@@ -411,12 +435,14 @@ class ButtonEditWidget(QWidget):
 
         # Display Style (Widget/Sensor Only) — Normal / Gauge / Bar
         self.display_style_combo = QComboBox()
-        self.display_style_combo.addItems([
-            t("button_editor.display_style_normal"),
-            t("button_editor.display_style_gauge"),
-            t("button_editor.display_style_bar"),
-            t("button_editor.display_style_perimeter"),
-        ])
+        self.display_style_combo.addItems(
+            [
+                t("button_editor.display_style_normal"),
+                t("button_editor.display_style_gauge"),
+                t("button_editor.display_style_bar"),
+                t("button_editor.display_style_perimeter"),
+            ]
+        )
         self.display_style_combo.setToolTip(t("button_editor.display_style_tooltip"))
         self.form.addRow(t("button_editor.display_style_label"), self.display_style_combo)
         self.form.setRowVisible(self.display_style_combo, False)
@@ -450,20 +476,24 @@ class ButtonEditWidget(QWidget):
         self.service_combo = QComboBox()
         self.service_combo.addItems(["toggle", "turn_on", "turn_off"])
         self.form.addRow(self.service_label, self.service_combo)
-        
+
         # Automation Action (Automation Only)
         self.automation_action_label = QLabel(t("button_editor.action_label"))
         self.automation_action_combo = QComboBox()
-        self.automation_action_combo.addItems([t("button_editor.automation_toggle"), t("button_editor.automation_trigger")])
+        self.automation_action_combo.addItems(
+            [t("button_editor.automation_toggle"), t("button_editor.automation_trigger")]
+        )
         self.automation_action_combo.setToolTip(t("button_editor.automation_tooltip"))
         self.automation_action_label.setVisible(False)
         self.automation_action_combo.setVisible(False)
         self.form.addRow(self.automation_action_label, self.automation_action_combo)
-        
+
         # Lock Action (Lock Only)
         self.lock_action_label = QLabel(t("button_editor.action_label"))
         self.lock_action_combo = QComboBox()
-        self.lock_action_combo.addItems([t("button_editor.lock_toggle_smart"), t("button_editor.lock_lock"), t("button_editor.lock_unlock")])
+        self.lock_action_combo.addItems(
+            [t("button_editor.lock_toggle_smart"), t("button_editor.lock_lock"), t("button_editor.lock_unlock")]
+        )
         self.lock_action_combo.setToolTip(t("button_editor.lock_tooltip"))
         self.lock_action_label.setVisible(False)
         self.lock_action_combo.setVisible(False)
@@ -528,7 +558,6 @@ class ButtonEditWidget(QWidget):
         self.printer_stop_combo = self._create_entity_combo()
         self.form.addRow(self.printer_stop_label, self.printer_stop_combo)
 
-        
         # --- Appearance Section ---
         self.appearance_header = self._add_section_header(t("button_editor.section.appearance"))
 
@@ -538,7 +567,7 @@ class ButtonEditWidget(QWidget):
         self.icon_input.returnPressed.connect(self.save)
         self.form.addRow(t("button_editor.icon_label"), self.icon_input)
         self.icon_label = self.form.labelForField(self.icon_input)
-        
+
         # Color Picker
         color_widget = QWidget()
         color_outer_layout = QVBoxLayout(color_widget)
@@ -646,7 +675,7 @@ class ButtonEditWidget(QWidget):
         self.form.addRow(t("button_editor.color_label"), color_widget)
         self.color_widget = color_widget
         self.color_label = self.form.labelForField(color_widget)
-        
+
         # --- Shortcut Section ---
         self.shortcut_header = self._add_section_header(t("button_editor.section.shortcut"))
 
@@ -670,7 +699,7 @@ class ButtonEditWidget(QWidget):
 
         # Inner Icon Widget
         btn_layout = QHBoxLayout(self.record_btn)
-        btn_layout.setContentsMargins(0,0,0,0)
+        btn_layout.setContentsMargins(0, 0, 0, 0)
         btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.record_icon = QWidget()
@@ -687,10 +716,10 @@ class ButtonEditWidget(QWidget):
 
         self.shortcut_keys_container = shortcut_keys_container
         self.form.addRow(t("button_editor.keys_label"), shortcut_keys_container)
-        
+
         layout.addLayout(self.form)
         self.adjustSize()
-        
+
     def _create_entity_combo(self):
         """Create a combobox configured for long entity IDs, preventing layout clipping."""
         combo = QComboBox()
@@ -699,7 +728,7 @@ class ButtonEditWidget(QWidget):
         combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         combo.setMinimumContentsLength(10)
-        
+
         # Configure the completer for partial, case-insensitive substring matching
         combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         completer = combo.completer()
@@ -707,9 +736,9 @@ class ButtonEditWidget(QWidget):
             completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
             completer.setFilterMode(Qt.MatchFlag.MatchContains)
             completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-            
+
         return combo
-        
+
     def _add_section_header(self, title):
         lbl = QLabel(title)
         lbl.setObjectName("sectionHeader")
@@ -723,135 +752,65 @@ class ButtonEditWidget(QWidget):
 
     def populate_entities(self):
         """Fill entity dropdown based on the selected button type with high-performance bulk insertion."""
-        # Determine allowed domains based on selected type
         type_idx = self.type_combo.currentIndex()
         current_type = self.TYPE_DEFINITIONS[type_idx][1] if 0 <= type_idx < len(self.TYPE_DEFINITIONS) else None
-        is_printer = (current_type == '3d_printer')
-        has_printer_combos = hasattr(self, 'printer_state_combo')
+        printer_combos = self._printer_combos()
+        fill_printer = current_type == '3d_printer' and bool(printer_combos)
 
-        # Save current selections (entity IDs) to restore later
+        # Remember the selections (entity IDs) to restore them afterwards
         current_entity = self._get_combo_entity_id(self.entity_combo)
-        current_printer_ids = {}
-        if has_printer_combos and is_printer:
-            current_printer_ids = {
-                'state': self._get_combo_entity_id(self.printer_state_combo),
-                'progress': self._get_combo_entity_id(self.printer_progress_combo),
-                'camera': self._get_combo_entity_id(self.printer_camera_combo),
-                'nozzle': self._get_combo_entity_id(self.printer_nozzle_combo),
-                'bed': self._get_combo_entity_id(self.printer_bed_combo),
-                'nozzle_target': self._get_combo_entity_id(self.printer_nozzle_target_combo),
-                'bed_target': self._get_combo_entity_id(self.printer_bed_target_combo),
-                'pause': self._get_combo_entity_id(self.printer_pause_combo),
-                'stop': self._get_combo_entity_id(self.printer_stop_combo),
-            }
+        printer_ids = [self._get_combo_entity_id(c) for c in printer_combos] if fill_printer else []
 
-        # Block signals and disable view updates during bulk insertion to avoid UI freeze
-        self.entity_combo.blockSignals(True)
-        self.entity_combo.setUpdatesEnabled(False)
-        self.entity_combo.clear()
-
-        printer_combos = []
-        if has_printer_combos:
-            printer_combos = [
-                self.printer_state_combo, self.printer_progress_combo,
-                self.printer_camera_combo,
-                self.printer_nozzle_combo, self.printer_bed_combo,
-                self.printer_nozzle_target_combo, self.printer_bed_target_combo,
-                self.printer_pause_combo, self.printer_stop_combo
-            ]
-            for combo in printer_combos:
-                combo.blockSignals(True)
-                combo.setUpdatesEnabled(False)
-                combo.clear()
-
-        if not self.entities:
-            self.entity_combo.setUpdatesEnabled(True)
-            self.entity_combo.blockSignals(False)
-            for combo in printer_combos:
+        # Bulk insertion with signals and repaints off, so a large HA instance doesn't freeze the UI
+        combos = [self.entity_combo, *printer_combos]
+        for combo in combos:
+            combo.blockSignals(True)
+            combo.setUpdatesEnabled(False)
+            combo.clear()
+        try:
+            if not self.entities:
+                return
+            show_friendly = ButtonEditWidget._global_show_friendly_names
+            self._fill_entity_combo(
+                self.entity_combo, self._entity_items(_ENTITY_DOMAINS.get(current_type)), show_friendly
+            )
+            self._restore_combo_selection(self.entity_combo, current_entity)
+            if fill_printer:
+                # Any entity can feed a printer field, so these lists are unfiltered.
+                all_items = self._entity_items(None)
+                for combo, entity_id in zip(printer_combos, printer_ids, strict=True):
+                    self._fill_entity_combo(combo, all_items, show_friendly)
+                    self._restore_combo_selection(combo, entity_id)
+        finally:
+            for combo in combos:
                 combo.setUpdatesEnabled(True)
                 combo.blockSignals(False)
-            return
 
-        domain_map = {
-            'alarm_control_panel': {'alarm_control_panel'},
-            'automation': {'automation'},
-            'switch': {'light', 'switch', 'input_boolean', 'input_button'},
-            'widget': {'sensor', 'binary_sensor', 'number'},
-            'input_number': {'input_number'},
-            'climate': {'climate'},
-            'curtain': {'cover'},
-            'fan': {'fan'},
-            'media_player': {'media_player'},
-            'script': {'script'},
-            'scene': {'scene'},
-            'camera': {'camera', 'image'},
-            'weather': {'weather'},
-            'lock': {'lock'},
-            'lawn_mower': {'lawn_mower'},
-            'vacuum': {'vacuum'},
-            'sun': {'sun'}
-        }
-        allowed_domains = domain_map.get(current_type)
+    def _printer_combos(self) -> list:
+        """The 3D printer entity pickers, in _PRINTER_FIELDS order (none before they exist)."""
+        if not hasattr(self, 'printer_state_combo'):
+            return []
+        return [getattr(self, f'printer_{field}_combo') for field in _PRINTER_FIELDS]
 
-        # Group by domain (filtered for the primary entity combo)
-        domains = {}
-        all_domains = {} if (has_printer_combos and is_printer) else None
-
-        show_friendly = ButtonEditWidget._global_show_friendly_names
-
+    def _entity_items(self, allowed_domains) -> list:
+        """(entity_id, friendly name) of entities in allowed_domains (all if None), by domain then ID."""
+        items = []
         for entity in self.entities:
             eid = entity.get('entity_id', '')
             if not eid:
                 continue
             domain = eid.split('.')[0] if '.' in eid else 'other'
-            friendly = entity.get('attributes', {}).get('friendly_name', eid)
-
             if not allowed_domains or domain in allowed_domains:
-                if domain not in domains:
-                    domains[domain] = []
-                domains[domain].append((eid, friendly))
+                items.append((domain, eid, entity.get('attributes', {}).get('friendly_name', eid)))
+        items.sort(key=lambda item: (item[0], item[1]))
+        return [(eid, friendly) for _, eid, friendly in items]
 
-            if all_domains is not None:
-                if domain not in all_domains:
-                    all_domains[domain] = []
-                all_domains[domain].append((eid, friendly))
-
-        for domain in sorted(domains.keys()):
-            for eid, friendly in sorted(domains[domain], key=lambda x: x[0]):
-                display = friendly if show_friendly else eid
-                tooltip = f"{friendly} ({eid})" if show_friendly else f"{eid} ({friendly})"
-                self.entity_combo.addItem(display, eid)
-                self.entity_combo.setItemData(self.entity_combo.count() - 1, tooltip, Qt.ItemDataRole.ToolTipRole)
-
-        # Populate printer combos ONLY when the current button type is 3D Printer
-        if all_domains is not None and printer_combos:
-            for domain in sorted(all_domains.keys()):
-                for eid, friendly in sorted(all_domains[domain], key=lambda x: x[0]):
-                    display = friendly if show_friendly else eid
-                    tooltip = f"{friendly} ({eid})" if show_friendly else f"{eid} ({friendly})"
-                    for combo in printer_combos:
-                        combo.addItem(display, eid)
-                        combo.setItemData(combo.count() - 1, tooltip, Qt.ItemDataRole.ToolTipRole)
-
-        # Restore previous selections by entity ID
-        self._restore_combo_selection(self.entity_combo, current_entity)
-        if has_printer_combos and is_printer and current_printer_ids:
-            self._restore_combo_selection(self.printer_state_combo, current_printer_ids.get('state', ''))
-            self._restore_combo_selection(self.printer_progress_combo, current_printer_ids.get('progress', ''))
-            self._restore_combo_selection(self.printer_camera_combo, current_printer_ids.get('camera', ''))
-            self._restore_combo_selection(self.printer_nozzle_combo, current_printer_ids.get('nozzle', ''))
-            self._restore_combo_selection(self.printer_bed_combo, current_printer_ids.get('bed', ''))
-            self._restore_combo_selection(self.printer_nozzle_target_combo, current_printer_ids.get('nozzle_target', ''))
-            self._restore_combo_selection(self.printer_bed_target_combo, current_printer_ids.get('bed_target', ''))
-            self._restore_combo_selection(self.printer_pause_combo, current_printer_ids.get('pause', ''))
-            self._restore_combo_selection(self.printer_stop_combo, current_printer_ids.get('stop', ''))
-
-        # Re-enable updates and signals
-        self.entity_combo.setUpdatesEnabled(True)
-        self.entity_combo.blockSignals(False)
-        for combo in printer_combos:
-            combo.setUpdatesEnabled(True)
-            combo.blockSignals(False)
+    @staticmethod
+    def _fill_entity_combo(combo, items: list, show_friendly: bool):
+        for eid, friendly in items:
+            combo.addItem(friendly if show_friendly else eid, eid)
+            tooltip = f"{friendly} ({eid})" if show_friendly else f"{eid} ({friendly})"
+            combo.setItemData(combo.count() - 1, tooltip, Qt.ItemDataRole.ToolTipRole)
 
     def _get_combo_entity_id(self, combo):
         """Get the entity ID from a combo, whether from userData or typed text."""
@@ -859,7 +818,7 @@ class ButtonEditWidget(QWidget):
         text = combo.currentText().strip()
         if not text:
             return ""
-            
+
         # Prefer the selected row: several entities can share one friendly name,
         # and findText() would always resolve to the first of them.
         cur = combo.currentIndex()
@@ -870,10 +829,10 @@ class ButtonEditWidget(QWidget):
         idx = combo.findText(text)
         if idx >= 0:
             return combo.itemData(idx)
-            
+
         # Fallback: user typed a custom entity ID
         return text
-    
+
     def _restore_combo_selection(self, combo, entity_id):
         """Restore a combo's selection by entity ID (stored in UserRole)."""
         if not entity_id:
@@ -887,12 +846,14 @@ class ButtonEditWidget(QWidget):
                 return
         # Not found in list — set as typed text (custom entity)
         combo.setCurrentText(entity_id)
-    
+
     def _toggle_entity_display(self):
         """Toggle between friendly name and entity ID display in all combos."""
         ButtonEditWidget._global_show_friendly_names = not ButtonEditWidget._global_show_friendly_names
         self.friendly_toggle_btn.setText(
-            t("button_editor.show_ids_btn") if ButtonEditWidget._global_show_friendly_names else t("button_editor.show_names_btn")
+            t("button_editor.show_ids_btn")
+            if ButtonEditWidget._global_show_friendly_names
+            else t("button_editor.show_names_btn")
         )
         self.populate_entities()
 
@@ -908,7 +869,7 @@ class ButtonEditWidget(QWidget):
         self.form.setRowVisible(self.sensor_min_spin, needs_range)
         self.form.setRowVisible(self.sensor_max_spin, needs_range)
 
-        needs_anim = is_sensor and style_idx in (1, 3)  # gauge=1, perimeter=3
+        needs_anim = is_sensor and style_idx in (1, 3)  # the gauge and perimeter styles
         self.form.setRowVisible(self.entry_animation_toggle, needs_anim)
 
         # Hide color palette for sensor with Normal display style
@@ -926,7 +887,7 @@ class ButtonEditWidget(QWidget):
         self.animated_bg_toggle.setVisible(current_type == 'media_player')
         self.service_combo.setVisible(current_type == 'switch')
         self.service_label.setVisible(current_type == 'switch')
-        
+
         # Show precision for widget/sensor
         is_sensor = current_type == 'widget'
         self.precision_spin.setVisible(is_sensor)
@@ -970,7 +931,7 @@ class ButtonEditWidget(QWidget):
         self.printer_pause_combo.setVisible(is_printer)
         self.printer_stop_label.setVisible(is_printer)
         self.printer_stop_combo.setVisible(is_printer)
-        
+
         is_pin = current_type == 'pin_window'
 
         # Hide standard entity picker if 3D printer or pin_window (no entity needed)
@@ -1013,25 +974,25 @@ class ButtonEditWidget(QWidget):
             self.color_widget.setVisible(show_color)
         if hasattr(self, 'color_label'):
             self.color_label.setVisible(show_color)
-            
+
         # Default color per type when coming from the generic blue default
         if current_type == 'widget' and self.selected_color == "#4285F4":
             self.select_color("#3C3C3C")
-        
+
         # Find the label associated with the widget and hide it too.
         # Layouts don't automatically hide labels for hidden widgets.
         if self.form.labelForField(self.precision_spin):
-             self.form.labelForField(self.precision_spin).setVisible(is_sensor)
-             
+            self.form.labelForField(self.precision_spin).setVisible(is_sensor)
+
         if self.form.labelForField(self.service_combo):
-             self.form.labelForField(self.service_combo).setVisible(current_type == 'switch')
-        
+            self.form.labelForField(self.service_combo).setVisible(current_type == 'switch')
+
         # Refresh entity list for the new type
         self.populate_entities()
-        
+
         # Notify that the layout requirements may have changed
         self.size_changed.emit()
-    
+
     def _add_script_arg_row(self, key="", value=""):
         """Add a key-value argument row for script variables."""
         row_widget = QWidget()
@@ -1081,12 +1042,12 @@ class ButtonEditWidget(QWidget):
         # Grey out appearance header
         if hasattr(self, 'appearance_header') and self.appearance_header:
             self.appearance_header.setEnabled(enabled)
-        
+
         # Icon input and label
         self.icon_input.setEnabled(enabled)
         if hasattr(self, 'icon_label') and self.icon_label:
             self.icon_label.setEnabled(enabled)
-        
+
         # Color widget and label
         if hasattr(self, 'color_widget'):
             self.color_widget.setEnabled(enabled)
@@ -1129,7 +1090,7 @@ class ButtonEditWidget(QWidget):
     def set_custom_colors(self, colors: list):
         self._editing_custom_hex = None
         self.custom_colors = list(colors)
-        stale = set(id(b) for b in self._custom_swatch_btns)
+        stale = {id(b) for b in self._custom_swatch_btns}
         self.color_buttons = [(b, c) for b, c in self.color_buttons if id(b) not in stale]
         for btn in self._custom_swatch_btns:
             self.color_button_row.removeWidget(btn)
@@ -1148,9 +1109,7 @@ class ButtonEditWidget(QWidget):
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(lambda checked, c=color_hex: self.select_color(c))
         btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        btn.customContextMenuRequested.connect(
-            lambda pos, c=color_hex, b=btn: self._show_custom_color_menu(pos, c, b)
-        )
+        btn.customContextMenuRequested.connect(lambda pos, c=color_hex, b=btn: self._show_custom_color_menu(pos, c, b))
         # Insert before rainbow button (rainbow is second-to-last, stretch is last)
         insert_pos = self.color_button_row.count() - 2
         self.color_button_row.insertWidget(insert_pos, btn)
@@ -1244,9 +1203,7 @@ class ButtonEditWidget(QWidget):
             self.select_color(self.preset_colors[0][0])
 
     def _delete_custom_color_silent(self, color_hex: str):
-        btn_to_remove = next(
-            (b for b in self._custom_swatch_btns if b.toolTip().upper() == color_hex.upper()), None
-        )
+        btn_to_remove = next((b for b in self._custom_swatch_btns if b.toolTip().upper() == color_hex.upper()), None)
         if btn_to_remove is None:
             return
         self.color_button_row.removeWidget(btn_to_remove)
@@ -1262,31 +1219,32 @@ class ButtonEditWidget(QWidget):
             self.entity_combo.setCurrentText("")
             self.label_input.clear()
             self.icon_input.clear()
-            
+
             # Default to Light / Switch (switch)
             switch_idx = next((i for i, t in enumerate(self.TYPE_DEFINITIONS) if t[1] == 'switch'), 0)
             self.type_combo.setCurrentIndex(switch_idx)
-            
+
             self.service_combo.setCurrentIndex(0)
             return
-            
+
         self.label_input.setText(self.config.get('label', ''))
         self.icon_input.setText(self.config.get('icon', ''))
-        
+
         # Find index by internal type name
         config_type = self.config.get('type', 'switch')
         type_idx = next((i for i, t in enumerate(self.TYPE_DEFINITIONS) if t[1] == config_type), 0)
         self.type_combo.setCurrentIndex(type_idx)
-        
+
         eid = self.config.get('entity_id', '')
         if eid:
             self._restore_combo_selection(self.entity_combo, eid)
-            
+
         service = self.config.get('service', 'toggle')
         svc_name = service.split('.')[-1]
         svc_idx = self.service_combo.findText(svc_name)
-        if svc_idx >= 0: self.service_combo.setCurrentIndex(svc_idx)
-        
+        if svc_idx >= 0:
+            self.service_combo.setCurrentIndex(svc_idx)
+
         self.show_album_art_check.setChecked(self.config.get('show_album_art', True))
         self.animated_bg_toggle.setChecked(self.config.get('animated_bg', True))
         # Precision
@@ -1299,7 +1257,7 @@ class ButtonEditWidget(QWidget):
         self.sensor_min_spin.setValue(float(self.config.get('sensor_min', 0.0)))
         self.sensor_max_spin.setValue(float(self.config.get('sensor_max', 100.0)))
         self.entry_animation_toggle.setChecked(self.config.get('entry_animation', True))
-        
+
         # Automation settings
         automation_action = self.config.get('action', 'toggle')
         self.automation_action_combo.setCurrentIndex(1 if automation_action == 'trigger' else 0)
@@ -1316,30 +1274,32 @@ class ButtonEditWidget(QWidget):
         elif lock_action == 'unlock':
             self.lock_action_combo.setCurrentIndex(2)
         else:
-            self.lock_action_combo.setCurrentIndex(0) # Toggle
-            
+            self.lock_action_combo.setCurrentIndex(0)  # Toggle
+
         # 3D Printer Settings
         self._restore_combo_selection(self.printer_state_combo, self.config.get('printer_state_entity', ''))
         self._restore_combo_selection(self.printer_progress_combo, self.config.get('printer_progress_entity', ''))
         self._restore_combo_selection(self.printer_camera_combo, self.config.get('printer_camera_entity', ''))
         self._restore_combo_selection(self.printer_nozzle_combo, self.config.get('printer_nozzle_entity', ''))
-        self._restore_combo_selection(self.printer_nozzle_target_combo, self.config.get('printer_nozzle_target_entity', ''))
+        self._restore_combo_selection(
+            self.printer_nozzle_target_combo, self.config.get('printer_nozzle_target_entity', '')
+        )
         self._restore_combo_selection(self.printer_bed_combo, self.config.get('printer_bed_entity', ''))
         self._restore_combo_selection(self.printer_bed_target_combo, self.config.get('printer_bed_target_entity', ''))
         self._restore_combo_selection(self.printer_pause_combo, self.config.get('printer_pause_entity', ''))
         self._restore_combo_selection(self.printer_stop_combo, self.config.get('printer_stop_entity', ''))
-        
+
         self.select_color(self.config.get('color', '#4285F4'))
-        
+
         # Trigger type-specific UI updates
         self.on_type_changed(self.type_combo.currentIndex())
-        
+
         # Shortcut
         shortcut = self.config.get('custom_shortcut', {})
         self.custom_shortcut_check.setChecked(shortcut.get('enabled', False))
         self.shortcut_display.setText(shortcut.get('value', ''))
         self.on_custom_shortcut_toggled(shortcut.get('enabled', False))
-        
+
     def get_content_height(self):
         # Force layout update to get accurate size after content changes
         self.adjustSize()
@@ -1353,131 +1313,125 @@ class ButtonEditWidget(QWidget):
         new_config['label'] = self.label_input.text().strip()
 
         type_idx = self.type_combo.currentIndex()
-        new_config['type'] = self.TYPE_DEFINITIONS[type_idx][1] if 0 <= type_idx < len(self.TYPE_DEFINITIONS) else 'switch'
-
+        btn_type = self.TYPE_DEFINITIONS[type_idx][1] if 0 <= type_idx < len(self.TYPE_DEFINITIONS) else 'switch'
+        new_config['type'] = btn_type
         for key, types in self.TYPE_SPECIFIC_KEYS.items():
-            if new_config['type'] not in types:
+            if btn_type not in types:
                 new_config.pop(key, None)
-        
+
         # Get entity_id from combo data (UserRole), fallback to typed text
         new_config['entity_id'] = self._get_combo_entity_id(self.entity_combo)
-        
-        if new_config['type'] == 'climate':
-            # Clean up deprecated legacy key for backwards compatibility
-            new_config.pop('advanced_mode', None)
-            
-        if new_config['type'] == 'media_player':
-            new_config['show_album_art'] = self.show_album_art_check.isChecked()
-            new_config['animated_bg'] = self.animated_bg_toggle.isChecked()
+        collect = self._TYPE_FIELD_COLLECTORS.get(btn_type)
+        if collect is not None:
+            collect(self, new_config)
 
-        if new_config['type'] == 'switch' and '.' in new_config.get('entity_id', ''):
-            new_config['service'] = f"{new_config['entity_id'].split('.')[0]}.{self.service_combo.currentText()}"
-        
-        if new_config['type'] == 'widget':
-            new_config['precision'] = self.precision_spin.value()
-            new_config['display_style'] = ['normal', 'gauge', 'bar', 'perimeter'][self.display_style_combo.currentIndex()]
-            new_config['sensor_min'] = self.sensor_min_spin.value()
-            new_config['sensor_max'] = self.sensor_max_spin.value()
-            new_config['entry_animation'] = self.entry_animation_toggle.isChecked()
-        
-        if new_config['type'] == 'sun':
-            new_config['entry_animation'] = self.entry_animation_toggle.isChecked()
-
-        if new_config['type'] == 'camera':
-            new_config['camera_mode'] = 'stream'
-            # Preserve existing size/span if set, otherwise default to 1x1 during creation
-            if 'span_x' not in new_config: new_config['span_x'] = 1
-            if 'span_y' not in new_config: new_config['span_y'] = 1
-            # Sync camera_size to span for compatibility
-            new_config['camera_size'] = new_config['span_x']
-             
-        if new_config['type'] == 'script':
-            variables = {}
-            for row in self.script_arg_rows:
-                key = row['key_input'].text().strip()
-                value = row['value_input'].text().strip()
-                if key:
-                    try:
-                        value = int(value)
-                    except ValueError:
-                        try:
-                            value = float(value)
-                        except ValueError:
-                            pass
-                    variables[key] = value
-            if variables:
-                new_config['script_variables'] = variables
-            else:
-                new_config.pop('script_variables', None)
-
-        if new_config['type'] == 'automation':
-            new_config['action'] = 'trigger' if self.automation_action_combo.currentIndex() == 1 else 'toggle'
-
-        if new_config['type'] == 'lock':
-            idx = self.lock_action_combo.currentIndex()
-            if idx == 1: new_config['action'] = 'lock'
-            elif idx == 2: new_config['action'] = 'unlock'
-            else: new_config['action'] = 'toggle'
-            
-        if new_config['type'] == '3d_printer':
-            new_config['printer_state_entity'] = self._get_combo_entity_id(self.printer_state_combo)
-            new_config['printer_progress_entity'] = self._get_combo_entity_id(self.printer_progress_combo)
-            new_config['printer_camera_entity'] = self._get_combo_entity_id(self.printer_camera_combo)
-            new_config['printer_nozzle_entity'] = self._get_combo_entity_id(self.printer_nozzle_combo)
-            new_config['printer_nozzle_target_entity'] = self._get_combo_entity_id(self.printer_nozzle_target_combo)
-            new_config['printer_bed_entity'] = self._get_combo_entity_id(self.printer_bed_combo)
-            new_config['printer_bed_target_entity'] = self._get_combo_entity_id(self.printer_bed_target_combo)
-            new_config['printer_pause_entity'] = self._get_combo_entity_id(self.printer_pause_combo)
-            new_config['printer_stop_entity'] = self._get_combo_entity_id(self.printer_stop_combo)
-            # Override standard entity_id with state entity for generic handling if needed
-            new_config['entity_id'] = new_config['printer_state_entity']
-        
         new_config['icon'] = self.icon_input.text().strip()
         new_config['color'] = self.selected_color
-        
-        # Save shortcut
         new_config['custom_shortcut'] = {
             'enabled': self.custom_shortcut_check.isChecked(),
-            'value': self.shortcut_display.text()
+            'value': self.shortcut_display.text(),
         }
-        
         self.saved.emit(new_config)
+
+    def _collect_climate(self, cfg: dict):
+        cfg.pop('advanced_mode', None)  # deprecated legacy key
+
+    def _collect_media_player(self, cfg: dict):
+        cfg['show_album_art'] = self.show_album_art_check.isChecked()
+        cfg['animated_bg'] = self.animated_bg_toggle.isChecked()
+
+    def _collect_switch(self, cfg: dict):
+        if '.' in cfg.get('entity_id', ''):
+            cfg['service'] = f"{cfg['entity_id'].split('.')[0]}.{self.service_combo.currentText()}"
+
+    def _collect_widget(self, cfg: dict):
+        cfg['precision'] = self.precision_spin.value()
+        cfg['display_style'] = ['normal', 'gauge', 'bar', 'perimeter'][self.display_style_combo.currentIndex()]
+        cfg['sensor_min'] = self.sensor_min_spin.value()
+        cfg['sensor_max'] = self.sensor_max_spin.value()
+        cfg['entry_animation'] = self.entry_animation_toggle.isChecked()
+
+    def _collect_sun(self, cfg: dict):
+        cfg['entry_animation'] = self.entry_animation_toggle.isChecked()
+
+    def _collect_camera(self, cfg: dict):
+        cfg['camera_mode'] = 'stream'
+        # Keep an existing size; a new camera starts at 1x1
+        cfg.setdefault('span_x', 1)
+        cfg.setdefault('span_y', 1)
+        cfg['camera_size'] = cfg['span_x']  # kept in sync with the span for compatibility
+
+    def _collect_script(self, cfg: dict):
+        variables = {}
+        for row in self.script_arg_rows:
+            key = row['key_input'].text().strip()
+            if key:
+                variables[key] = _parse_script_value(row['value_input'].text().strip())
+        if variables:
+            cfg['script_variables'] = variables
+        else:
+            cfg.pop('script_variables', None)
+
+    def _collect_automation(self, cfg: dict):
+        cfg['action'] = 'trigger' if self.automation_action_combo.currentIndex() == 1 else 'toggle'
+
+    def _collect_lock(self, cfg: dict):
+        cfg['action'] = {1: 'lock', 2: 'unlock'}.get(self.lock_action_combo.currentIndex(), 'toggle')
+
+    def _collect_3d_printer(self, cfg: dict):
+        for field in _PRINTER_FIELDS:
+            cfg[f'printer_{field}_entity'] = self._get_combo_entity_id(getattr(self, f'printer_{field}_combo'))
+        # The state entity stands in as the tile's entity_id for generic handling
+        cfg['entity_id'] = cfg['printer_state_entity']
+
+    _TYPE_FIELD_COLLECTORS = {
+        'climate': _collect_climate,
+        'media_player': _collect_media_player,
+        'switch': _collect_switch,
+        'widget': _collect_widget,
+        'sun': _collect_sun,
+        'camera': _collect_camera,
+        'script': _collect_script,
+        'automation': _collect_automation,
+        'lock': _collect_lock,
+        '3d_printer': _collect_3d_printer,
+    }
 
     def on_custom_shortcut_toggled(self, checked):
         self.record_btn.setEnabled(checked)
         self.shortcut_display.setEnabled(checked)
         if not checked:
-             self.record_btn.setChecked(False)
-             if self.input_manager:
-                 self.input_manager.restore_shortcut()
-                 self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+            self.record_btn.setChecked(False)
+            if self.input_manager:
+                self.input_manager.restore_shortcut()
+                self.record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
 
     def toggle_recording(self, checked):
         if not self.input_manager:
             self.record_btn.setChecked(False)
             return
-            
+
         if checked:
             # Stop State (Square)
             self.record_icon.setStyleSheet("background-color: white; border-radius: 2px;")
-            self.shortcut_display.setText(t("settings.shortcut.recording"))
+            self.shortcut_display.setText(t(SHORTCUT_RECORDING_KEY))
             self.input_manager.start_recording()
         else:
             # Record State (Circle)
-            self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+            self.record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
             self.input_manager.restore_shortcut()
             # Restore if empty
-            if self.shortcut_display.text() == t("settings.shortcut.recording"):
+            if self.shortcut_display.text() == t(SHORTCUT_RECORDING_KEY):
                 sc = self.config.get('custom_shortcut', {}) if self.config else {}
                 self.shortcut_display.setText(sc.get('value', ''))
 
     @pyqtSlot(dict)
     def on_shortcut_recorded(self, shortcut):
         if not self.record_btn.isChecked():
-            return # Ignore if we aren't recording
+            return  # Ignore if we aren't recording
 
         self.record_btn.setChecked(False)
-        self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+        self.record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
         self.shortcut_display.setText(shortcut.get('value', ''))
         # Recording stopped the global listeners; bring the dashboard hotkey back.
         if self.input_manager:
@@ -1488,10 +1442,10 @@ class ButtonEditWidget(QWidget):
         if not self.record_btn.isChecked():
             return
         self.record_btn.setChecked(False)
-        self.record_icon.setStyleSheet("background-color: white; border-radius: 6px;")
+        self.record_icon.setStyleSheet(RECORD_ICON_IDLE_STYLE)
         if self.input_manager:
             self.input_manager.restore_shortcut()
-        if self.shortcut_display.text() == t("settings.shortcut.recording"):
+        if self.shortcut_display.text() == t(SHORTCUT_RECORDING_KEY):
             sc = self.config.get('custom_shortcut', {}) if self.config else {}
             self.shortcut_display.setText(sc.get('value', ''))
 
@@ -1505,3 +1459,37 @@ class ButtonEditWidget(QWidget):
         else:
             super().keyPressEvent(event)
 
+
+# Entity domains offered for each tile type (types not listed accept any entity)
+_ENTITY_DOMAINS = {
+    'alarm_control_panel': {'alarm_control_panel'},
+    'automation': {'automation'},
+    'switch': {'light', 'switch', 'input_boolean', 'input_button'},
+    'widget': {'sensor', 'binary_sensor', 'number'},
+    'input_number': {'input_number'},
+    'climate': {'climate'},
+    'curtain': {'cover'},
+    'fan': {'fan'},
+    'media_player': {'media_player'},
+    'script': {'script'},
+    'scene': {'scene'},
+    'camera': {'camera', 'image'},
+    'weather': {'weather'},
+    'lock': {'lock'},
+    'lawn_mower': {'lawn_mower'},
+    'vacuum': {'vacuum'},
+    'sun': {'sun'},
+}
+
+# The 3D printer's entity fields: printer_<field>_combo widgets, printer_<field>_entity config keys
+_PRINTER_FIELDS = ('state', 'progress', 'camera', 'nozzle', 'nozzle_target', 'bed', 'bed_target', 'pause', 'stop')
+
+
+def _parse_script_value(text: str):
+    """A script variable typed in the editor: int, else float, else the text itself."""
+    for convert in (int, float):
+        try:
+            return convert(text)
+        except ValueError:
+            pass
+    return text

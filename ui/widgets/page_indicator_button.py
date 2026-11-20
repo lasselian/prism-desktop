@@ -1,7 +1,13 @@
 from PyQt6.QtWidgets import QPushButton
 from PyQt6.QtCore import (
-    Qt, QRectF, QPointF, pyqtSignal,
-    QPropertyAnimation, QSequentialAnimationGroup, QEasingCurve, pyqtProperty
+    Qt,
+    QRectF,
+    QPointF,
+    pyqtSignal,
+    QPropertyAnimation,
+    QSequentialAnimationGroup,
+    QEasingCurve,
+    pyqtProperty,
 )
 from PyQt6.QtGui import QPainter, QColor
 from ui.widgets.dashboard_button_painter import DashboardButtonPainter
@@ -11,13 +17,13 @@ from ui.constants import PAGE_INDICATOR_WIDTH, FOOTER_HEIGHT
 class PageIndicatorButton(QPushButton):
     """Footer button showing page indicator dots. Scroll or click to change page."""
 
-    page_scrolled = pyqtSignal(int)   # delta: +1 / -1
-    page_jumped = pyqtSignal(int)     # absolute page index from click
+    page_scrolled = pyqtSignal(int)  # delta: +1 / -1
+    page_jumped = pyqtSignal(int)  # absolute page index from click
 
     # Dot appearance
     ACTIVE_DIAMETER = 8
     INACTIVE_DIAMETER = 6
-    DOT_SPACING = 14      # center-to-center
+    DOT_SPACING = 14  # center-to-center
     ACTIVE_OPACITY = 255
     INACTIVE_OPACITY = 90  # ~35%
 
@@ -114,7 +120,7 @@ class PageIndicatorButton(QPushButton):
 
         for i in range(self._page_count):
             cx = start_x + i * self.DOT_SPACING
-            is_active = (i == self._current_page)
+            is_active = i == self._current_page
 
             diameter = self.ACTIVE_DIAMETER if is_active else self.INACTIVE_DIAMETER
             opacity = self.ACTIVE_OPACITY if is_active else self.INACTIVE_OPACITY

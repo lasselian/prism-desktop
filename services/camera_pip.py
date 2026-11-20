@@ -27,10 +27,13 @@ from core.ha_client import CAMERA_ENTITY_RE, HAClient
 from core.localization_manager import t
 from ui.widgets.camera_pip import CameraPipWindow
 
+# Translation key of the status line shown while a feed can't be read
+STATUS_UNAVAILABLE = 'camera_pip.unavailable'
+
 logger = logging.getLogger(__name__)
 
 CONFIG_KEY = "camera_pip"
-READ_TIMEOUT = 45          # seconds of silence before a quiet reconnect
+READ_TIMEOUT = 45  # seconds of silence before a quiet reconnect
 BACKOFF = (2, 5, 10, 30, 60)
 
 
@@ -38,6 +41,19 @@ class _HttpStatus(Exception):
     def __init__(self, status: int):
         super().__init__(status)
         self.status = status
+
+
+# Failures a stream attempt recovers from by reconnecting; anything else stops the feed.
+_STREAM_FAILURES = (_HttpStatus, aiohttp.ClientError, OSError, ValueError, MjpegError)
+
+
+class _StreamAttempt:
+    """One connection attempt; still readable after the stream fails."""
+
+    __slots__ = ("got_frame",)
+
+    def __init__(self):
+        self.got_frame = False
 
 
 class _Latest:
@@ -67,8 +83,7 @@ def decode_frame(data: bytes, target: QSize) -> Optional[QImage]:
         return None
     reader = QImageReader(buf)
     size = reader.size()
-    if (size.isValid() and target.isValid()
-            and size.width() > target.width() and size.height() > target.height()):
+    if size.isValid() and target.isValid() and size.width() > target.width() and size.height() > target.height():
         # libjpeg decodes straight to 1/2, 1/4 or 1/8 size, which is far
         # cheaper than decoding a 4K frame and scaling it afterwards.
         reader.setScaledSize(size.scaled(target, Qt.AspectRatioMode.KeepAspectRatioByExpanding))
@@ -132,7 +147,7 @@ class CameraPipManager:
         """Restart every stream. Call after the HA URL or token changed:
         closing the HTTP session does not wake a reader in the middle of a
         streaming response, so the old streams would hang on their last frame."""
-        for entity_id, win in list(self._windows.items()):
+        for entity_id, win in self._windows.items():
             task = self._tasks.pop(entity_id, None)
             if task is not None:
                 task.cancel()
@@ -148,8 +163,8 @@ class CameraPipManager:
             win.deleteLater()
 
     def close_all(self):
-        for entity_id in list(self._windows):
-            self.close(entity_id)
+        while self._windows:  # close() removes each window
+            self.close(next(iter(self._windows)))
 
     # -- geometry ----------------------------------------------------------------
 
@@ -181,6 +196,7 @@ class CameraPipManager:
         def start():
             if self._windows.get(entity_id) is win and entity_id not in self._tasks:
                 self._tasks[entity_id] = asyncio.ensure_future(self._run(entity_id, win))
+
         QTimer.singleShot(0, start)
 
     async def _run(self, entity_id: str, win: CameraPipWindow):
@@ -193,64 +209,16 @@ class CameraPipManager:
         except Exception:
             logger.exception("Camera PiP feed stopped")
             if self._alive(entity_id, win):
-                win.set_status(t("camera_pip.unavailable"))
+                win.set_status(t(STATUS_UNAVAILABLE))
         finally:
             decoder.cancel()
 
     async def _read_loop(self, entity_id: str, win: CameraPipWindow, box: _Latest):
         failures = 0
         while True:
-            got_frame = False
-            status: Optional[str] = None
-            delay: Optional[float] = None
-            try:
-                async with self._ha.camera_stream(entity_id, read_timeout=READ_TIMEOUT) as resp:
-                    if resp.status != 200:
-                        raise _HttpStatus(resp.status)
-                    parser = MjpegParser()
-                    async for chunk in resp.content.iter_any():
-                        frames = parser.feed(chunk)
-                        if frames:
-                            box.put(frames[-1])
-                            if not got_frame:
-                                got_frame = True
-                                failures = 0
-                                if self._alive(entity_id, win):
-                                    win.set_status(None)
-                # HA ended the stream (it does when the camera returns no image).
-                if got_frame:
-                    delay = 1
-                else:
-                    status = t("camera_pip.unavailable")
-            except asyncio.CancelledError:
-                raise
-            except _HttpStatus as e:
-                logger.info("Camera PiP: HTTP %s", e.status)
-                if e.status in (401, 403):
-                    status, delay = t("camera_pip.unauthorized"), 30
-                elif e.status == 404:
-                    status, delay = t("camera_pip.not_found"), 60
-                else:
-                    status = t("camera_pip.unavailable")
-            except aiohttp.ConnectionTimeoutError:
-                status = t("camera_pip.no_connection")
-            except TimeoutError:
-                # A read timeout (aiohttp's ServerTimeoutError). After frames
-                # this is a static picture, not a fault: reconnect at once.
-                if got_frame:
-                    delay = 0
-                else:
-                    status = t("camera_pip.not_responding")
-            except ValueError:
-                status, delay = t("camera_pip.not_configured"), 30
-            except MjpegError as e:
-                logger.info("Camera PiP: %s", e)
-                status = t("camera_pip.unavailable")
-            except (aiohttp.ClientError, OSError) as e:
-                # Never log the URL; only the kind of failure.
-                logger.info("Camera PiP: connection failed (%s)", type(e).__name__)
-                status = t("camera_pip.no_connection")
-
+            got_frame, status, delay = await self._stream_once(entity_id, win, box)
+            if got_frame:
+                failures = 0
             if delay is None:
                 delay = BACKOFF[min(failures, len(BACKOFF) - 1)]
             if status is not None:
@@ -258,6 +226,59 @@ class CameraPipManager:
                 if self._alive(entity_id, win):
                     win.set_status(status)
             await asyncio.sleep(delay)
+
+    async def _stream_once(self, entity_id: str, win: CameraPipWindow, box: _Latest):
+        """Read one stream to its end; return (got a frame, status line or None, retry delay or None)."""
+        attempt = _StreamAttempt()
+        try:
+            await self._pump_stream(entity_id, win, box, attempt)
+        except _STREAM_FAILURES as exc:
+            return (attempt.got_frame, *self._failure_status(exc, attempt.got_frame))
+        # HA ended the stream (it does when the camera returns no image).
+        if attempt.got_frame:
+            return True, None, 1
+        return False, t(STATUS_UNAVAILABLE), None
+
+    async def _pump_stream(self, entity_id: str, win: CameraPipWindow, box: _Latest, attempt: _StreamAttempt):
+        """Read one stream until it ends, handing the newest frame to the decoder."""
+        async with self._ha.camera_stream(entity_id, read_timeout=READ_TIMEOUT) as resp:
+            if resp.status != 200:
+                raise _HttpStatus(resp.status)
+            parser = MjpegParser()
+            async for chunk in resp.content.iter_any():
+                frames = parser.feed(chunk)
+                if not frames:
+                    continue
+                box.put(frames[-1])
+                if not attempt.got_frame:
+                    attempt.got_frame = True
+                    if self._alive(entity_id, win):
+                        win.set_status(None)
+
+    @staticmethod
+    def _failure_status(exc: Exception, got_frame: bool) -> tuple[Optional[str], Optional[float]]:
+        """Status line and retry delay for a failed attempt (None delay: use the backoff)."""
+        if isinstance(exc, _HttpStatus):
+            logger.info("Camera PiP: HTTP %s", exc.status)
+            if exc.status in (401, 403):
+                return t("camera_pip.unauthorized"), 30
+            if exc.status == 404:
+                return t("camera_pip.not_found"), 60
+            return t(STATUS_UNAVAILABLE), None
+        if isinstance(exc, aiohttp.ConnectionTimeoutError):
+            return t("camera_pip.no_connection"), None
+        if isinstance(exc, TimeoutError):
+            # A read timeout (aiohttp's ServerTimeoutError). After frames
+            # this is a static picture, not a fault: reconnect at once.
+            return (None, 0) if got_frame else (t("camera_pip.not_responding"), None)
+        if isinstance(exc, ValueError):
+            return t("camera_pip.not_configured"), 30
+        if isinstance(exc, MjpegError):
+            logger.info("Camera PiP: %s", exc)
+            return t(STATUS_UNAVAILABLE), None
+        # aiohttp.ClientError or OSError. Never log the URL; only the kind of failure.
+        logger.info("Camera PiP: connection failed (%s)", type(exc).__name__)
+        return t("camera_pip.no_connection"), None
 
     async def _decode_loop(self, entity_id: str, win: CameraPipWindow, box: _Latest):
         loop = asyncio.get_running_loop()

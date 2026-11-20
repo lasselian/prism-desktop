@@ -15,8 +15,17 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
-    QColor, QCursor, QFont, QFontMetrics, QGuiApplication, QImage, QLinearGradient,
-    QPainter, QPainterPath, QPen, QPixmap,
+    QColor,
+    QCursor,
+    QFont,
+    QFontMetrics,
+    QGuiApplication,
+    QImage,
+    QLinearGradient,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
 )
 from PyQt6.QtWidgets import QWidget
 
@@ -32,10 +41,10 @@ class CameraPipWindow(QWidget):
     geometry_committed = pyqtSignal()  # after the user moved or resized it
 
     RADIUS = 12
-    GRIP = 22          # corner area that resizes instead of moving
-    SNAP = 16          # distance at which an edge snaps to the screen edge
-    MARGIN = 24        # gap to the screen corner for the default position
-    MIN_SHORT = 112    # shortest side, in logical pixels
+    GRIP = 22  # corner area that resizes instead of moving
+    SNAP = 16  # distance at which an edge snaps to the screen edge
+    MARGIN = 24  # gap to the screen corner for the default position
+    MIN_SHORT = 112  # shortest side, in logical pixels
     DEFAULT_LONG = 420
     CLOSE = 26
 

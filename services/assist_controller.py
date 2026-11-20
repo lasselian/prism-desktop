@@ -14,11 +14,17 @@ import math
 import re
 import time
 from array import array
+from dataclasses import dataclass
 from typing import Callable, Optional
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal, QBuffer, QIODeviceBase
 from PyQt6.QtMultimedia import (
-    QAudio, QAudioFormat, QAudioSource, QMediaDevices, QMediaPlayer, QAudioOutput,
+    QAudio,
+    QAudioFormat,
+    QAudioSource,
+    QMediaDevices,
+    QMediaPlayer,
+    QAudioOutput,
 )
 
 from core.ha_client import HAClient
@@ -73,6 +79,20 @@ def _speech_from_response(response: dict) -> str:
     return text
 
 
+@dataclass
+class _PipelineRun:
+    """What one assist_pipeline/run has produced so far."""
+
+    ws: HAWebSocket
+    speak: bool
+    handler_id: Optional[int] = None
+    sender_task: Optional[asyncio.Task] = None
+    got_result: bool = False
+    had_error: bool = False
+    continue_conversation: bool = False
+    partial: str = ""
+
+
 class AssistController(QObject):
     """Owns one Assist "session": text submissions and push-to-talk voice
     recording, both routed through the shared HAWebSocket connection.
@@ -84,12 +104,12 @@ class AssistController(QObject):
 
     listening_started = pyqtSignal()
     listening_stopped = pyqtSignal()
-    processing = pyqtSignal()           # mic closed, waiting for speech-to-text
+    processing = pyqtSignal()  # mic closed, waiting for speech-to-text
     heard = pyqtSignal(str)
     thinking = pyqtSignal()
-    reply_partial = pyqtSignal(str)     # streamed reply so far (agents that stream)
+    reply_partial = pyqtSignal(str)  # streamed reply so far (agents that stream)
     reply_ready = pyqtSignal(str, bool)  # final reply, is_error (agent couldn't handle it)
-    notice = pyqtSignal(str)            # transient status, not a chat message
+    notice = pyqtSignal(str)  # transient status, not a chat message
     error = pyqtSignal(str)
     busy_changed = pyqtSignal(bool)
     speaking_changed = pyqtSignal(bool)
@@ -239,8 +259,7 @@ class AssistController(QObject):
         )
         if actual_fmt.channelCount() != 1 or not self._capture_is_int16:
             logger.warning(
-                "Assist: mic capture format isn't mono Int16 — HA will likely "
-                "fail to transcribe this stream"
+                "Assist: mic capture format isn't mono Int16 — HA will likely fail to transcribe this stream"
             )
 
         if self._audio_device is not None:
@@ -315,91 +334,113 @@ class AssistController(QObject):
             self.processing.emit()
 
     async def _run(self, ws: HAWebSocket, token: object, text: Optional[str] = None, voice: bool = False):
-        handler_id: Optional[int] = None
-        sender_task: Optional[asyncio.Task] = None
-        got_result = False
-        had_error = False
-        continue_conversation = False
-        partial = ""
         speak = voice and self._assist_config().get('speak_replies', True)
+        run = _PipelineRun(ws=ws, speak=speak)
+        try:
+            async for event in ws.run_assist_pipeline(**self._pipeline_kwargs(text, speak)):
+                if self._run_token is not token or self._on_pipeline_event(run, event):
+                    break
+            if self._run_token is token and not run.got_result and not run.had_error:
+                # HA ends a run that hit its own timeout with run-end *before*
+                # the error event, so an empty run is reported here.
+                self.error.emit(t("assist.error.no_response"))
+        except asyncio.TimeoutError:
+            if self._run_token is token:
+                self.error.emit(t("assist.error.timeout"))
+        except Exception as e:
+            logger.exception("Assist request failed")
+            if self._run_token is token:
+                self.error.emit(str(e) or t("assist.error.generic"))
+        finally:
+            self._finish_run(run, token, voice)
 
+    def _pipeline_kwargs(self, text: Optional[str], speak: bool) -> dict:
         kwargs = {'conversation_id': self.conversation_id}
         if text is not None:
             kwargs.update(text=text, end_stage='intent')
         else:
             kwargs.update(sample_rate=self._capture_sample_rate, end_stage='tts' if speak else 'intent')
+        return kwargs
 
-        try:
-            async for event in ws.run_assist_pipeline(**kwargs):
-                if self._run_token is not token:
-                    break
-                etype = event.get('type')
-                data = event.get('data', {}) or {}
+    def _on_pipeline_event(self, run: _PipelineRun, event: dict) -> bool:
+        """Apply one pipeline event; True when the run is over."""
+        etype = event.get('type')
+        if etype == 'run-end':
+            return True
+        handler = self._PIPELINE_EVENT_HANDLERS.get(etype)
+        if handler is not None:
+            handler(self, run, event.get('data', {}) or {})
+        return False
 
-                if etype == 'run-start':
-                    handler_id = (data.get('runner_data', {}) or {}).get('stt_binary_handler_id')
-                elif etype == 'stt-start':
-                    if handler_id is not None and self._audio_queue is not None:
-                        sender_task = asyncio.create_task(self._stream_audio(ws, handler_id))
-                elif etype == 'stt-vad-end':
-                    self._finish_listening()
-                elif etype == 'stt-end':
-                    stt_text = (data.get('stt_output', {}) or {}).get('text', '')
-                    if stt_text:
-                        self.heard.emit(stt_text)
-                    self._finish_listening()
-                elif etype == 'intent-start':
-                    self.thinking.emit()
-                elif etype == 'intent-progress':
-                    delta = data.get('chat_log_delta') or {}
-                    # A delta with a role starts a new message; only assistant
-                    # text is shown (tool_result deltas are skipped).
-                    if isinstance(delta, dict) and delta.get('role') in (None, 'assistant'):
-                        if delta.get('role') == 'assistant':
-                            partial = ""  # a new assistant message (e.g. after a tool call)
-                        content = delta.get('content')
-                        if isinstance(content, str) and content:
-                            partial += content
-                            self.reply_partial.emit(partial)
-                elif etype == 'intent-end':
-                    got_result = True
-                    continue_conversation = self._handle_conversation_result(
-                        data.get('intent_output', {}) or {}
-                    )
-                elif etype == 'tts-end':
-                    url = (data.get('tts_output', {}) or {}).get('url')
-                    if url and speak:
-                        self._tts_task = asyncio.create_task(self._play_tts(url))
-                elif etype == 'error':
-                    had_error = True
-                    self._report_pipeline_error(data)
-                elif etype == 'run-end':
-                    break
-            if self._run_token is token and not got_result and not had_error:
-                # HA ends a run that hit its own timeout with run-end *before*
-                # the error event, so an empty run is reported here.
-                self.error.emit(t("assist.error.no_response"))
-        except asyncio.CancelledError:
-            raise
-        except asyncio.TimeoutError:
-            if self._run_token is token:
-                self.error.emit(t("assist.error.timeout"))
-        except Exception as e:
-            logger.error(f"Assist request failed: {e}")
-            if self._run_token is token:
-                self.error.emit(str(e) or t("assist.error.generic"))
-        finally:
-            if self._recording and self._run_token is token:
-                self._stop_recording()
-            if sender_task and not sender_task.done():
-                sender_task.cancel()
-            if self._run_token is token:
-                self._run_token = None
-                self._run_task = None
-                self._set_busy(False)
-                if voice and continue_conversation:
-                    self._follow_up_pending = True
-                    self._maybe_start_follow_up()
+    def _on_run_start(self, run: _PipelineRun, data: dict):
+        run.handler_id = (data.get('runner_data', {}) or {}).get('stt_binary_handler_id')
+
+    def _on_stt_start(self, run: _PipelineRun, data: dict):
+        if run.handler_id is not None and self._audio_queue is not None:
+            run.sender_task = asyncio.create_task(self._stream_audio(run.ws, run.handler_id))
+
+    def _on_stt_vad_end(self, run: _PipelineRun, data: dict):
+        self._finish_listening()
+
+    def _on_stt_end(self, run: _PipelineRun, data: dict):
+        stt_text = (data.get('stt_output', {}) or {}).get('text', '')
+        if stt_text:
+            self.heard.emit(stt_text)
+        self._finish_listening()
+
+    def _on_intent_start(self, run: _PipelineRun, data: dict):
+        self.thinking.emit()
+
+    def _on_intent_progress(self, run: _PipelineRun, data: dict):
+        delta = data.get('chat_log_delta') or {}
+        # A delta with a role starts a new message; only assistant
+        # text is shown (tool_result deltas are skipped).
+        if not isinstance(delta, dict) or delta.get('role') not in (None, 'assistant'):
+            return
+        if delta.get('role') == 'assistant':
+            run.partial = ""  # a new assistant message (e.g. after a tool call)
+        content = delta.get('content')
+        if isinstance(content, str) and content:
+            run.partial += content
+            self.reply_partial.emit(run.partial)
+
+    def _on_intent_end(self, run: _PipelineRun, data: dict):
+        run.got_result = True
+        run.continue_conversation = self._handle_conversation_result(data.get('intent_output', {}) or {})
+
+    def _on_tts_end(self, run: _PipelineRun, data: dict):
+        url = (data.get('tts_output', {}) or {}).get('url')
+        if url and run.speak:
+            self._tts_task = asyncio.create_task(self._play_tts(url))
+
+    def _on_pipeline_error(self, run: _PipelineRun, data: dict):
+        run.had_error = True
+        self._report_pipeline_error(data)
+
+    _PIPELINE_EVENT_HANDLERS = {
+        'run-start': _on_run_start,
+        'stt-start': _on_stt_start,
+        'stt-vad-end': _on_stt_vad_end,
+        'stt-end': _on_stt_end,
+        'intent-start': _on_intent_start,
+        'intent-progress': _on_intent_progress,
+        'intent-end': _on_intent_end,
+        'tts-end': _on_tts_end,
+        'error': _on_pipeline_error,
+    }
+
+    def _finish_run(self, run: _PipelineRun, token: object, voice: bool):
+        if self._recording and self._run_token is token:
+            self._stop_recording()
+        if run.sender_task and not run.sender_task.done():
+            run.sender_task.cancel()
+        if self._run_token is token:
+            self._run_token = None
+            self._run_task = None
+            self._set_busy(False)
+            if voice and run.continue_conversation:
+                self._follow_up_pending = True
+                self._maybe_start_follow_up()
 
     def _report_pipeline_error(self, data: dict):
         code = data.get('code', '')
@@ -443,8 +484,8 @@ class AssistController(QObject):
                     break
                 await ws.send_stt_audio(handler_id, chunk)
             await ws.end_stt_audio(handler_id)
-        except Exception as e:
-            logger.error(f"Failed to stream Assist audio: {e}")
+        except Exception:
+            logger.exception("Failed to stream Assist audio")
 
     async def _play_tts(self, url: str):
         """Fetch the TTS reply and play it back.

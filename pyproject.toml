@@ -1,0 +1,37 @@
+# Tool configuration only; dependencies live in requirements.txt and the
+# version in core/build_info.py.
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["build", "dist", "squashfs-root"]
+
+[tool.ruff.format]
+# The code base mixes quote styles; keep them rather than rewriting every string.
+quote-style = "preserve"
+
+[tool.ruff.lint]
+select = [
+    "E4", "E7", "E9",  # pycodestyle errors that matter: imports, statements, syntax
+    "F",               # pyflakes
+    "B",               # bugbear
+    "E722",            # bare except
+    "PLE",             # pylint errors
+    "RUF006",          # un-referenced asyncio tasks
+    "C90",             # complexity
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Deliberate import order: main.py configures SSL and serves --toggle/--assist
+# before importing Qt; build_macos.py puts the project root on sys.path first.
+"main.py" = ["E402"]
+"build_macos.py" = ["E402"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.basedpyright]
+include = ["core", "services"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+reportMissingModuleSource = false

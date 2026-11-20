@@ -48,6 +48,7 @@ _keyring_available = False
 # Keyring probe
 # ---------------------------------------------------------------------------
 
+
 def _probe_keyring() -> bool:
     """Test whether the OS keyring actually works by doing a write/read/delete cycle."""
     global _keyring_probed, _keyring_available
@@ -100,6 +101,7 @@ def _probe_keyring() -> bool:
 # Encrypted file helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_enc_dir() -> Path:
     """Get the directory where encrypted token files are stored (same as config.json)."""
     return get_config_path().parent
@@ -108,62 +110,81 @@ def _get_enc_dir() -> Path:
 def _get_machine_seed() -> bytes:
     """
     Derive a machine-specific seed for key generation.
-    
+
     Uses (in order of preference):
       - Linux:   /etc/machine-id
       - Windows: MachineGuid from the registry
+      - macOS:   IOPlatformUUID
       - Fallback: hostname + username (stable but less unique)
+
+    The result must never change for a given machine: it keys the token file.
     """
-    seed = None
+    reader = _MACHINE_ID_READERS.get(sys.platform)
+    seed = reader() if reader else None
+    return (seed or _host_and_user()).encode("utf-8")
 
-    if sys.platform == "linux":
+
+def _linux_machine_id() -> str | None:
+    for path in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
         try:
-            seed = Path("/etc/machine-id").read_text().strip()
+            seed = Path(path).read_text().strip()
         except Exception:
-            pass
-        if not seed:
-            try:
-                seed = Path("/var/lib/dbus/machine-id").read_text().strip()
-            except Exception:
-                pass
+            continue
+        if seed:
+            return seed
+    return None
 
-    elif sys.platform == "win32":
-        try:
-            import winreg
-            key = winreg.OpenKey(
-                winreg.HKEY_LOCAL_MACHINE,
-                r"SOFTWARE\Microsoft\Cryptography",
-            )
-            seed, _ = winreg.QueryValueEx(key, "MachineGuid")
-            winreg.CloseKey(key)
-        except Exception:
-            pass
 
-    elif sys.platform == "darwin":
-        try:
-            import subprocess
-            result = subprocess.run(
-                ["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
-                capture_output=True, text=True, timeout=5, check=False,
-            )
-            for line in result.stdout.splitlines():
-                if "IOPlatformUUID" in line:
-                    seed = line.split('"')[-2]
-                    break
-        except Exception:
-            pass
+def _windows_machine_guid() -> str | None:
+    try:
+        import winreg
 
-    if not seed:
-        # os.getlogin() can raise OSError on macOS GUI apps launched without a
-        # controlling terminal (e.g. from Finder / LaunchServices). Fall back
-        # to os.getuid() which always works.
-        try:
-            login = os.getlogin()
-        except OSError:
-            login = str(os.getuid())
-        seed = f"{platform.node()}:{login}"
+        key = winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Cryptography",
+        )
+        seed, _ = winreg.QueryValueEx(key, "MachineGuid")
+        winreg.CloseKey(key)
+        return seed
+    except Exception:
+        return None
 
-    return seed.encode("utf-8")
+
+def _macos_platform_uuid() -> str | None:
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        for line in result.stdout.splitlines():
+            if "IOPlatformUUID" in line:
+                return line.split('"')[-2]
+    except Exception:
+        pass
+    return None
+
+
+def _host_and_user() -> str:
+    # os.getlogin() can raise OSError on macOS GUI apps launched without a
+    # controlling terminal (e.g. from Finder / LaunchServices). Fall back
+    # to os.getuid() which always works.
+    try:
+        login = os.getlogin()
+    except OSError:
+        login = str(os.getuid())
+    return f"{platform.node()}:{login}"
+
+
+_MACHINE_ID_READERS = {
+    "linux": _linux_machine_id,
+    "win32": _windows_machine_guid,
+    "darwin": _macos_platform_uuid,
+}
 
 
 def _write_private(path: Path, data: bytes) -> None:
@@ -244,8 +265,8 @@ def _enc_load() -> str:
         key = _derive_key(salt)
         f = Fernet(key)
         return f.decrypt(enc_path.read_bytes()).decode("utf-8")
-    except (InvalidToken, Exception) as e:
-        logger.error(f"[TokenStorage] Failed to decrypt token file: {e}")
+    except (InvalidToken, Exception):
+        logger.exception("[TokenStorage] Failed to decrypt token file")
         return ""
 
 
@@ -264,6 +285,7 @@ def _enc_delete() -> None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def store_token(token: str) -> None:
     """Store the HA token securely. Tries keyring first, then encrypted file."""
