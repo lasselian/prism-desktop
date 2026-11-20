@@ -6,19 +6,38 @@ on:
       - 'v*'
       - '[0-9]*'
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Tag or commit to build (empty = the branch you run this on). Builds are uploaded as artifacts only.
+        required: false
+        default: ''
+
+env:
+  # cryptography 49+ ships no Intel macOS wheels, so the Intel build compiles
+  # it from source against this OpenSSL, linked statically. Same series as
+  # cryptography's own wheels bundle; checksum from the OpenSSL release.
+  OPENSSL_VERSION: '4.0.3'
+  OPENSSL_SHA256: '325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9'
+  # Matches the minimum macOS of cryptography's own wheels; below Qt's own.
+  MIN_MACOS: '11.0'
+
 jobs:
   build-macos:
     name: Build macOS (${{ matrix.name }})
-    runs-on: macos-15
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - python-arch: arm64
             arch: arm64
+            runner: macos-15
             name: Apple Silicon (arm64)
+          # A native Intel runner: compiling cryptography under Rosetta on an
+          # Apple Silicon runner produces an arm64 binary.
           - python-arch: x64
             arch: x86_64
+            runner: macos-15-intel
             name: Intel (x86_64)
     permissions:
       contents: read
@@ -28,6 +47,29 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Build static OpenSSL (Intel)
+        if: matrix.arch == 'x86_64'
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ env.MIN_MACOS }}
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSL --proto '=https' --tlsv1.2 -o openssl.tar.gz \
+            "https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/openssl-$OPENSSL_VERSION.tar.gz"
+          echo "$OPENSSL_SHA256  openssl.tar.gz" | shasum -a 256 -c -
+          tar xzf openssl.tar.gz
+          cd "openssl-$OPENSSL_VERSION"
+          ./Configure darwin64-x86_64-cc no-shared no-tests no-docs \
+            --prefix="$RUNNER_TEMP/openssl" --libdir=lib
+          make -j"$(sysctl -n hw.ncpu)" >/dev/null
+          make install_sw >/dev/null
+          "$RUNNER_TEMP/openssl/bin/openssl" version
+          {
+            echo "OPENSSL_DIR=$RUNNER_TEMP/openssl"
+            echo "OPENSSL_STATIC=1"
+            echo "MACOSX_DEPLOYMENT_TARGET=$MIN_MACOS"
+          } >> "$GITHUB_ENV"
 
       - name: Set up Python (${{ matrix.python-arch }})
         uses: actions/setup-python@v7
@@ -70,6 +112,38 @@ jobs:
       - name: Build macOS App Bundle (.app, .dmg, .zip)
         run: |
           .build_venv/bin/python build_macos.py --target-arch ${{ matrix.arch }}
+
+      # A green build doesn't prove the bundled cryptography is usable: check
+      # its architecture, that it doesn't need Homebrew's OpenSSL (users
+      # don't have it), its minimum macOS, and that it actually works.
+      - name: Check the bundled cryptography
+        run: |
+          SO=$(find dist/PrismDesktop.app -name '_rust.abi3.so' -path '*cryptography*' | head -n 1)
+          if [ -z "$SO" ]; then echo "::error::cryptography's _rust.abi3.so is not in the app"; exit 1; fi
+          echo "$SO"
+          ARCHS=$(lipo -archs "$SO")
+          echo "Architectures: $ARCHS"
+          if [ "$ARCHS" != "${{ matrix.arch }}" ]; then
+            echo "::error::cryptography is built for '$ARCHS', not ${{ matrix.arch }}"; exit 1
+          fi
+          otool -L "$SO"
+          if otool -L "$SO" | grep -E '/usr/local/|/opt/homebrew/|libssl|libcrypto' >/dev/null; then
+            echo "::error::cryptography links a system or Homebrew OpenSSL instead of its own static one"; exit 1
+          fi
+          MINOS=$(otool -l "$SO" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')
+          echo "Minimum macOS: $MINOS (allowed: $MIN_MACOS or lower)"
+          if [ "$(printf '%s\n%s\n' "$MINOS" "$MIN_MACOS" | sort -V | tail -n 1)" != "$MIN_MACOS" ]; then
+            echo "::error::cryptography needs macOS $MINOS, newer than $MIN_MACOS"; exit 1
+          fi
+          QTCORE=$(find dist/PrismDesktop.app -path '*QtCore.framework/Versions/A/QtCore' | head -n 1)
+          [ -n "$QTCORE" ] && echo "QtCore minimum macOS (for reference): $(otool -l "$QTCORE" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')"
+          .build_venv/bin/python -c "
+          from cryptography.fernet import Fernet
+          from cryptography.hazmat.backends.openssl import backend
+          f = Fernet(Fernet.generate_key())
+          assert f.decrypt(f.encrypt(b'prism')) == b'prism'
+          print('Fernet round trip OK,', backend.openssl_version_text())
+          "
 
       - name: Upload Artifacts to GitHub Actions Run
         uses: actions/upload-artifact@v7
