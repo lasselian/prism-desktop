@@ -12,9 +12,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-MDI_CSS_URL = (
-    "https://raw.githubusercontent.com/Templarian/MaterialDesign-Webfont/master/css/materialdesignicons.css"
-)
+MDI_CSS_URL = "https://raw.githubusercontent.com/Templarian/MaterialDesign-Webfont/master/css/materialdesignicons.css"
 OUTPUT = Path(__file__).parent / "mdi_mapping.json"
 
 
