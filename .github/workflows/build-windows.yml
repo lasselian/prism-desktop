@@ -81,6 +81,64 @@ jobs:
           }
           Get-Item installer/PrismDesktopSetup.exe | Format-List Name, Length
 
+      # Replays the in-app update: a stand-in PrismDesktop.exe starts the
+      # installer exactly like services/auto_updater.py (_apply_windows) and,
+      # unlike the real app, stays running, so the installer always meets a
+      # live app. The update must install and relaunch Prism from the install
+      # folder.
+      - name: In-app update test
+        run: |
+          $inst = (Resolve-Path installer/PrismDesktopSetup.exe).Path
+          $appDir = Join-Path $env:LOCALAPPDATA 'Programs\Prism Desktop'
+          $tmp = $env:RUNNER_TEMP
+
+          # 1. An existing install, as users have it
+          Start-Process $inst -ArgumentList '/VERYSILENT', '/NORESTART', '/SUPPRESSMSGBOXES', "/LOG=$tmp\first-install.log" -Wait
+          Start-Sleep -Seconds 5
+          Get-Process PrismDesktop -ErrorAction SilentlyContinue | Stop-Process -Force
+          if (-not (Test-Path "$appDir\PrismDesktop.exe")) {
+            Get-Content "$tmp\first-install.log" -ErrorAction SilentlyContinue
+            Write-Output "::error::The first install did not create $appDir\PrismDesktop.exe"; exit 1
+          }
+
+          # 2. The stand-in app
+          @'
+          import os, subprocess, time
+          subprocess.Popen(
+              [os.environ["PRISM_TEST_INSTALLER"], "/VERYSILENT", "/NORESTART", "/NOCANCEL",
+               "/LOG=" + os.environ["PRISM_TEST_LOG"]],
+              creationflags=subprocess.CREATE_NO_WINDOW,
+          )
+          time.sleep(60)
+          '@ | Set-Content -Path "$tmp\stub.py" -Encoding utf8
+          python -m PyInstaller --noconfirm --onedir --noconsole --name PrismDesktop `
+            --distpath "$tmp\stubdist" --workpath "$tmp\stubbuild" --specpath "$tmp" "$tmp\stub.py" | Out-Null
+          if ($LASTEXITCODE -ne 0) { Write-Output "::error::Could not build the stand-in app"; exit 1 }
+
+          # 3. The update, started by the stand-in
+          $env:PRISM_TEST_INSTALLER = $inst
+          $env:PRISM_TEST_LOG = "$tmp\update.log"
+          Start-Process "$tmp\stubdist\PrismDesktop\PrismDesktop.exe"
+          $deadline = (Get-Date).AddSeconds(120)
+          do {
+            Start-Sleep -Seconds 2
+            $setup = Get-Process | Where-Object { $_.ProcessName -like 'PrismDesktopSetup*' -or $_.ProcessName -like 'is-*' }
+            $started = Test-Path "$tmp\update.log"
+          } while ((-not $started -or $setup) -and (Get-Date) -lt $deadline)
+          Start-Sleep -Seconds 5
+
+          Write-Output '----- installer log -----'
+          Get-Content "$tmp\update.log" -ErrorAction SilentlyContinue
+          Write-Output '-------------------------'
+          $relaunched = Get-Process PrismDesktop -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -and $_.Path.StartsWith($appDir, [StringComparison]::OrdinalIgnoreCase) }
+          $succeeded = Select-String -Path "$tmp\update.log" -Pattern 'Installation process succeeded' -Quiet -ErrorAction SilentlyContinue
+          Get-Process PrismDesktop -ErrorAction SilentlyContinue | Stop-Process -Force
+
+          if (-not $succeeded) { Write-Output "::error::The in-app update did not finish installing (see the installer log above)"; exit 1 }
+          if (-not $relaunched) { Write-Output "::error::The update installed but did not relaunch Prism from $appDir"; exit 1 }
+          Write-Output 'The in-app update installed and relaunched Prism.'
+
       - name: Upload Artifact to GitHub Actions Run
         uses: actions/upload-artifact@v7
         with:
