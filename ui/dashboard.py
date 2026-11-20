@@ -330,7 +330,10 @@ class Dashboard(QWidget):
         if not event.mimeData().hasFormat(MIME_TYPE):
             return
         # The source slot travels in the drag data; its button gives the spans.
-        stream = QDataStream(event.mimeData().data(MIME_TYPE), QIODevice.OpenModeFlag.ReadOnly)
+        # Keep the QByteArray in a variable: QDataStream doesn't own it, and a
+        # temporary would be freed before readInt32() reads from it.
+        data = event.mimeData().data(MIME_TYPE)
+        stream = QDataStream(data, QIODevice.OpenModeFlag.ReadOnly)
         source_slot = stream.readInt32()
         source_btn = self._button_at(source_slot)
         if not source_btn:
