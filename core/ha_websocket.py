@@ -167,10 +167,8 @@ class HAWebSocket(QObject):
                 if self._ws and not self._ws.closed:
                     try:
                         await self._send({"id": self._next_id(), "type": "ping"})
-                    except:
+                    except Exception:
                         break
-            except asyncio.CancelledError:
-                break
             except Exception as e:
                 if self._running:
                     self.error.emit(str(e))
@@ -271,12 +269,12 @@ class HAWebSocket(QObject):
         try:
             if self._ws and not self._ws.closed:
                 await self._ws.close()
-        except:
+        except Exception:
             pass
         try:
             if self._session and not self._session.closed:
                 await self._session.close()
-        except:
+        except Exception:
             pass
         # Only emit if object still exists
         try:
@@ -424,9 +422,7 @@ class HAWebSocket(QObject):
                     await asyncio.sleep(0.1)
                 
                 backoff = min(backoff * 2, max_backoff)
-                
-            except asyncio.CancelledError:
-                break
+
             except Exception as e:
                 self.logger.error(f"WebSocket Loop Error: {e}")
                 if self._should_stop_loop:

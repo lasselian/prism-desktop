@@ -144,7 +144,7 @@ def _get_machine_seed() -> bytes:
             import subprocess
             result = subprocess.run(
                 ["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True, text=True, timeout=5, check=False,
             )
             for line in result.stdout.splitlines():
                 if "IOPlatformUUID" in line:

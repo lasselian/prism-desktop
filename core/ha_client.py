@@ -7,6 +7,8 @@ from typing import AsyncIterator, Optional, Tuple
 import aiohttp
 from yarl import URL
 
+from core.utils import keep_task
+
 # Characters Home Assistant allows in a camera entity id. Checked before the id
 # goes into a URL path, so a hand-edited config cannot point the authenticated
 # request at another endpoint.
@@ -31,7 +33,7 @@ class HAClient:
         if self._session and not self._session.closed:
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(self._session.close())
+                keep_task(loop.create_task(self._session.close()))
             except RuntimeError:
                 pass  # No running event loop
         self._session = None

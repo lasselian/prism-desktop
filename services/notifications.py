@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import QSystemTrayIcon
 from PyQt6.QtCore import QObject, QUrl
 from PyQt6.QtGui import QDesktopServices
 
+from core.utils import keep_task
 from services.mobile_app import (
     build_notification_action_event_data,
     fire_notification_action_event,
@@ -32,6 +33,13 @@ MAX_ACTIONS = 3
 # Must be a valid URI scheme (no '_' — RFC 3986) or Windows silently drops
 # the button's arguments on click instead of returning them.
 WIN_TOKEN_PREFIX = "http:prism-action-"
+
+
+def _write_temp_image(data: bytes) -> str:
+    """Write notification image bytes to a temp file and return its path."""
+    with tempfile.NamedTemporaryFile(prefix='prism_notify_', suffix='.jpg', delete=False) as tmp:
+        tmp.write(data)
+        return tmp.name
 
 
 def sanitize_actions(raw) -> list:
@@ -132,9 +140,9 @@ class NotificationManager(QObject):
             self._show_windows(title, message, image_path, actions, action_data)
         elif system == 'Linux':
             if actions:
-                asyncio.ensure_future(
+                keep_task(asyncio.ensure_future(
                     self._show_linux_actions(title, message, image_path, actions, action_data)
-                )
+                ))
             else:
                 self._show_linux(title, message, image_path)
         elif system == 'Darwin':
@@ -357,7 +365,7 @@ class NotificationManager(QObject):
 
         if action_id == 'URI':
             return  # companion-app contract: URI-only action fires no event
-        asyncio.ensure_future(self._fire_action_event(action_id, action_data))
+        keep_task(asyncio.ensure_future(self._fire_action_event(action_id, action_data)))
 
     def _open_uri(self, uri: str):
         """Open a URI in the default browser."""
@@ -406,20 +414,12 @@ class NotificationManager(QObject):
                 image_bytes = await self.ha_client.get_camera_image(image_source)
             elif image_source.startswith('image.'):
                 image_bytes = await self.ha_client.get_entity_image(image_source)
-            elif image_source.startswith('/api/') or image_source.startswith('http'):
-                image_bytes = await self.ha_client.get_media_image(image_source)
-            else:
+            else:  # /api/... paths, absolute URLs and anything else HA serves as media
                 image_bytes = await self.ha_client.get_media_image(image_source)
 
             if not image_bytes:
                 return None
-
-            tmp = tempfile.NamedTemporaryFile(
-                prefix='prism_notify_', suffix='.jpg', delete=False
-            )
-            tmp.write(image_bytes)
-            tmp.close()
-            return tmp.name
+            return await asyncio.to_thread(_write_temp_image, image_bytes)
         except Exception as e:
             logger.warning(f"[Notify] Image download failed: {e}")
             return None
@@ -440,9 +440,9 @@ class NotificationManager(QObject):
             action_data = None
 
         if image_source and self.ha_client:
-            asyncio.ensure_future(
+            keep_task(asyncio.ensure_future(
                 self._show_with_image(title, message, image_source, actions, action_data)
-            )
+            ))
         else:
             self._show_notification(title, message, actions=actions, action_data=action_data)
 

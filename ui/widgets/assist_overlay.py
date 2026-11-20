@@ -391,7 +391,7 @@ class AssistOverlay(BaseOverlay):
         for _row, label, role in self._rows:
             self._style_bubble(label, role, pal)
 
-    def _style_bubble(self, label: QLabel, role: str, pal: dict = None):
+    def _style_bubble(self, label: QLabel, role: str, pal: dict | None = None):
         pal = pal or self._palette()
         bg, fg = pal.get(role, pal['assistant'])
         label.setStyleSheet(
@@ -575,7 +575,7 @@ class AssistOverlay(BaseOverlay):
         self.input.setFocus()
         self.content_changed.emit()
 
-    def measure_target_content_height(self, width: int = None) -> int:
+    def measure_target_content_height(self, width: int | None = None) -> int:
         """Natural height of the header/status/input chrome plus the chat
         content (bubbles, empty hint, typing dots), used by the parent window
         to size itself around this overlay's content.

@@ -520,13 +520,12 @@ class OverlayManager(QObject):
         # Calculate Rect
         if row_buttons:
             row_buttons.sort(key=lambda x: x[1].x())
-            first_btn, first_pos = row_buttons[0]
+            _, first_pos = row_buttons[0]
             last_btn, last_pos = row_buttons[-1]
             
             target_x = first_pos.x()
             target_width = (last_pos.x() + last_btn.width()) - first_pos.x()
             
-            from ui.constants import BUTTON_WIDTH, BUTTON_SPACING
             max_6_col_width = (6 * BUTTON_WIDTH) + (5 * BUTTON_SPACING)
 
             if target_width > max_6_col_width:
@@ -658,7 +657,7 @@ class OverlayManager(QObject):
              try:
                  temp_str = str(source_btn._value).replace('°', '').strip()
                  curr_temp = float(temp_str)
-             except: pass
+             except Exception: pass
              
         # Colors
         if self.theme_manager:
@@ -1263,7 +1262,6 @@ class OverlayManager(QObject):
         start_rect = self.parent_widget.mapFromGlobal(global_rect.topLeft())
         start_rect = QRect(start_rect, global_rect.size())
         
-        from ui.constants import BUTTON_HEIGHT, BUTTON_SPACING, BUTTON_WIDTH
         
         # Calculate max boundaries of the actual grid layout
         visible_rects = []

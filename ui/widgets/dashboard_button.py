@@ -17,6 +17,7 @@ from core.temperature_utils import format_temperature, is_temperature_entity
 from ui.widgets.dashboard_button_painter import DashboardButtonPainter
 from ui.widgets.dashboard_button_styles import DashboardButtonStyleManager
 import html
+import math
 import re
 import sys
 
@@ -154,7 +155,7 @@ class DashboardButton(QFrame):
     resize_requested = pyqtSignal(int, int, int) # slot, span_x, span_y
     resize_finished = pyqtSignal()
     
-    def __init__(self, slot: int, config: dict = None, theme_manager=None, parent=None):
+    def __init__(self, slot: int, config: dict | None = None, theme_manager=None, parent=None):
         super().__init__(parent)
         self.slot = slot
         self.config = config or {}
@@ -748,7 +749,6 @@ class DashboardButton(QFrame):
         scale = 0.15
         tw = max(20, int(self.width() * scale))
         th = max(16, int(self.height() * scale))
-        from PyQt6.QtGui import QPixmap
         self._anim_bg_tiny = QPixmap(tw, th)
         self._anim_bg_cache_key = cache_key
         self._anim_bg_frame = 0
@@ -1674,6 +1674,15 @@ class DashboardButton(QFrame):
                     self.bounce_anim.start()
         super().mousePressEvent(event)
 
+    def _fade_resize_handle(self, target: float) -> None:
+        """Fade the resize handle toward *target* opacity unless it is already heading there."""
+        current = self.resize_anim.endValue()  # None until the first fade
+        if current is not None and math.isclose(current, target):
+            return
+        self.resize_anim.stop()
+        self.resize_anim.setEndValue(target)
+        self.resize_anim.start()
+
     def mouseMoveEvent(self, event):
         """Handle drag start and hover effects."""
         # Check for resize handle hover (only for configured buttons, not Add buttons)
@@ -1688,16 +1697,10 @@ class DashboardButton(QFrame):
             # Only trigger if not already at target state or moving towards it.
             
             if in_corner:
-                 if self.resize_anim.endValue() != 1.0:
-                     self.resize_anim.stop()
-                     self.resize_anim.setEndValue(1.0)
-                     self.resize_anim.start()
+                 self._fade_resize_handle(1.0)
                  self.setCursor(Qt.CursorShape.SizeFDiagCursor)
             else:
-                 if self.resize_anim.endValue() != 0.0:
-                     self.resize_anim.stop()
-                     self.resize_anim.setEndValue(0.0)
-                     self.resize_anim.start()
+                 self._fade_resize_handle(0.0)
                  self.unsetCursor() # Use unsetCursor to revert to parent/default instead of forcing Hand
         
         if not (event.buttons() & Qt.MouseButton.LeftButton):
@@ -1801,7 +1804,6 @@ class DashboardButton(QFrame):
         drag.setMimeData(mime_data)
         
         # Build ghost pixmap: button content clipped to rounded rect
-        from PyQt6.QtGui import QPainterPath
 
         ghost = QPixmap(self.size())
         ghost.fill(Qt.GlobalColor.transparent)

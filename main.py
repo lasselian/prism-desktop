@@ -14,7 +14,7 @@ from typing import Optional
 import logging
 import requests
 
-from core.utils import configure_ssl
+from core.utils import configure_ssl, keep_task
 configure_ssl()
 
 from services.local_ipc import send_local_command
@@ -114,7 +114,7 @@ def _create_task_safe(coro):
     QTimer.singleShot(0, ...) to avoid re-entrant qasync timer-callback
     assertions (affects distro-packaged qasync on Raspbian/Pi 5).
     """
-    QTimer.singleShot(0, lambda: asyncio.create_task(coro))
+    QTimer.singleShot(0, lambda: keep_task(asyncio.create_task(coro)))
 
 class PrismDesktopApp(QObject):
     """Main application controller."""
@@ -154,6 +154,9 @@ class PrismDesktopApp(QObject):
 
         # System metrics reporting (CPU/RAM)
         self._metrics_task: Optional[asyncio.Task] = None
+
+        # Camera image polling
+        self._camera_task: Optional[asyncio.Task] = None
 
         # Lock to prevent TOCTOU race on pin_window toggle
         self._pin_lock = asyncio.Lock()
@@ -206,7 +209,7 @@ class PrismDesktopApp(QObject):
         # Defer task execution to the event loop so it occurs after QApplication begins
         def start_background_tasks():
             self.start_websocket()
-            asyncio.create_task(self._camera_refresh_loop())
+            self._camera_task = asyncio.create_task(self._camera_refresh_loop())
             
         QTimer.singleShot(0, start_background_tasks)
         
@@ -320,7 +323,6 @@ class PrismDesktopApp(QObject):
         try:
             from ApplicationServices import AXIsProcessTrusted, AXIsProcessTrustedWithOptions
             import CoreFoundation
-            from core.build_info import APP_VERSION
 
             # Already prompted for this version: silent check only
             prompted_version = self.config.get('macos_accessibility_prompted_version')
@@ -667,6 +669,9 @@ class PrismDesktopApp(QObject):
         """Stop all background threads."""
         self._stop_location_loop()
         self._stop_metrics_loop()
+        if self._camera_task and not self._camera_task.done():
+            self._camera_task.cancel()
+        self._camera_task = None
         self.stop_websocket()
 
         if self.tray_manager:
@@ -706,17 +711,12 @@ class PrismDesktopApp(QObject):
                                         and (is_active_overlay or (btn.span_x >= 2 and btn.span_y >= 2))):
                                     camera_buttons.append((btn, cam_entity_id))
                     
-                    # Create tasks for concurrent fetching
-                    tasks = []
-                    for btn, entity_id in camera_buttons:
-                        tasks.append(self._fetch_camera_image(entity_id))
-                    
+                    # Fetch all visible cameras concurrently
+                    tasks = [self._fetch_camera_image(entity_id) for _, entity_id in camera_buttons]
                     if tasks:
                         await asyncio.gather(*tasks)
                         
                 await asyncio.sleep(self._camera_refresh_interval)
-            except asyncio.CancelledError:
-                break
             except Exception as e:
                 logger.error(f"Camera loop error: {e}")
                 await asyncio.sleep(10)
@@ -887,7 +887,6 @@ class PrismDesktopApp(QObject):
             else:
                 self._stop_location_loop()
             # Sync metrics loop (loop exits immediately when no webhook_id, so safe to call always)
-            mobile_cfg = self.config.get('mobile_app', {})
             if self._metrics_wanted():
                 self._start_metrics_loop()
             else:
@@ -1094,7 +1093,7 @@ class PrismDesktopApp(QObject):
             for btn in buttons:
                 eid = btn.get('entity_id')
                 if eid and eid in self._media_art_cache:
-                    path, pixmap = self._media_art_cache[eid]
+                    _, pixmap = self._media_art_cache[eid]
                     if pixmap and not pixmap.isNull():
                          self.dashboard.update_media_art(eid, pixmap)
             
@@ -1378,14 +1377,11 @@ class PrismDesktopApp(QObject):
         webhook_id = self.config.get('mobile_app', {}).get('webhook_id', '')
         if not ha_url or not webhook_id:
             return
-        try:
-            while True:
-                location = await get_location()
-                if location:
-                    await send_location_update(ha_url, webhook_id, location)
-                await asyncio.sleep(900)  # 15 minutes
-        except asyncio.CancelledError:
-            pass
+        while True:
+            location = await get_location()
+            if location:
+                await send_location_update(ha_url, webhook_id, location)
+            await asyncio.sleep(900)  # 15 minutes
 
     def _start_metrics_loop(self):
         """Start (or restart) the periodic sensor reporting task."""
@@ -1425,37 +1421,34 @@ class PrismDesktopApp(QObject):
         fast_sensors = set(FAST_SENSORS)
         last_fast = {}
         last_slow = float('-inf')
-        try:
-            while True:
-                mobile_cfg = self.config.get('mobile_app', {})
-                extra_ids = enabled_sensor_ids(mobile_cfg)
-                fast_ids = extra_ids & fast_sensors
-                states = {}
+        while True:
+            mobile_cfg = self.config.get('mobile_app', {})
+            extra_ids = enabled_sensor_ids(mobile_cfg)
+            fast_ids = extra_ids & fast_sensors
+            states = {}
 
-                if time.monotonic() - last_slow >= 30:
-                    last_slow = time.monotonic()
-                    all_metrics = get_system_metrics()
-                    if mobile_cfg.get('send_cpu', False):
-                        states['cpu_usage'] = all_metrics['cpu_usage']
-                    if mobile_cfg.get('send_ram', False):
-                        states['ram_usage'] = all_metrics['ram_usage']
-                    slow_ids = extra_ids - fast_sensors
-                    if slow_ids:
-                        states.update(await loop.run_in_executor(None, collect_system_sensors, slow_ids))
+            if time.monotonic() - last_slow >= 30:
+                last_slow = time.monotonic()
+                all_metrics = get_system_metrics()
+                if mobile_cfg.get('send_cpu', False):
+                    states['cpu_usage'] = all_metrics['cpu_usage']
+                if mobile_cfg.get('send_ram', False):
+                    states['ram_usage'] = all_metrics['ram_usage']
+                slow_ids = extra_ids - fast_sensors
+                if slow_ids:
+                    states.update(await loop.run_in_executor(None, collect_system_sensors, slow_ids))
 
-                # Forget fast sensors that were switched off so they re-push when re-enabled
-                last_fast = {k: v for k, v in last_fast.items() if k in fast_ids}
-                fast_changed = {}
-                if fast_ids:
-                    fast_now = await loop.run_in_executor(None, collect_system_sensors, fast_ids)
-                    fast_changed = {k: v for k, v in fast_now.items() if k not in last_fast or last_fast[k] != v}
-                    states.update(fast_changed)
+            # Forget fast sensors that were switched off so they re-push when re-enabled
+            last_fast = {k: v for k, v in last_fast.items() if k in fast_ids}
+            fast_changed = {}
+            if fast_ids:
+                fast_now = await loop.run_in_executor(None, collect_system_sensors, fast_ids)
+                fast_changed = {k: v for k, v in fast_now.items() if k not in last_fast or last_fast[k] != v}
+                states.update(fast_changed)
 
-                if states and await update_sensor_states(ha_url, webhook_id, states):
-                    last_fast.update(fast_changed)
-                await asyncio.sleep(10 if fast_ids else 30)
-        except asyncio.CancelledError:
-            pass
+            if states and await update_sensor_states(ha_url, webhook_id, states):
+                last_fast.update(fast_changed)
+            await asyncio.sleep(10 if fast_ids else 30)
 
     @pyqtSlot()
     def on_ws_disconnected(self):

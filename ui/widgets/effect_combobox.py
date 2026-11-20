@@ -40,7 +40,7 @@ class EffectComboBox(QComboBox):
         self.fade_anim.start()
         
     def _on_fade_finished(self):
-        if self._border_opacity == 0.0:
+        if self._border_opacity <= 0.0:  # fully faded out
             self.anim.stop()
         
     def get_border_progress(self):

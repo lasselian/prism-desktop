@@ -107,8 +107,6 @@ class WaylandGlobalShortcut:
 
             # Keep the session alive until the backend is stopped.
             await asyncio.Future()
-        except asyncio.CancelledError:
-            raise
         finally:
             await self._cleanup()
 

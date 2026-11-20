@@ -103,7 +103,7 @@ class _X11:
         except OSError:
             path = ctypes.util.find_library("X11")
             if not path:
-                raise OSError("libX11 not found")
+                raise OSError("libX11 not found") from None
             x = ctypes.cdll.LoadLibrary(path)
         x.XOpenDisplay.restype = ctypes.c_void_p
         x.XOpenDisplay.argtypes = [ctypes.c_char_p]
