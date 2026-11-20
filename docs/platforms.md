@@ -41,6 +41,7 @@ When a release publishes a `SHA256SUMS` asset, an update is only installed if th
 ## Testing on a platform
 
 Behaviour that depends on the OS is only partly covered by automated tests;
-CI imports every module on Windows, macOS and Linux, but nothing beyond that.
+CI imports every module on Windows, macOS and Linux (skipping the
+D-Bus modules off Linux), but nothing beyond that.
 When you change a row in the table above, please say in the pull request which
 systems you tried it on.
