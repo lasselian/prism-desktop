@@ -34,6 +34,7 @@
 - The flag that triggers the post-update check now lives next to your config instead of the shared temp folder.
 - Raised minimum dependency versions so source installs don't pull in releases with known vulnerabilities. Running from source now needs Python 3.11 or newer.
 - Updated the workflow actions.
+- The icon list download requires TLS 1.2 or newer explicitly, instead of relying on the Python version's defaults.
 
 ## Earlier releases
 
