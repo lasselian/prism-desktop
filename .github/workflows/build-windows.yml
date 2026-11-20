@@ -1,0 +1,113 @@
+name: Build Windows Installer
+
+# Builds PrismDesktop.exe with PyInstaller (build_exe.py) and packs it into
+# PrismDesktopSetup.exe with Inno Setup (setup.iss). The GitHub Windows
+# runners ship with Inno Setup 6, so nothing has to be installed for it.
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '[0-9]*'
+  pull_request:
+    paths:
+      - build_exe.py
+      - setup.iss
+      - requirements.txt
+      - .github/workflows/build-windows.yml
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build installer (x64)
+    runs-on: windows-2025
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.11'
+          architecture: x64
+
+      # The installer's version comes from the app's own APP_VERSION, which
+      # the auto-updater compares with the release tag. A tag that does not
+      # match it would ship an app that keeps offering itself as an update.
+      - name: Read and check the version
+        id: version
+        run: |
+          $match = Select-String -Path core/build_info.py -Pattern '^APP_VERSION\s*=\s*"([^"]+)"'
+          if (-not $match) { Write-Error "APP_VERSION not found in core/build_info.py"; exit 1 }
+          $version = $match.Matches[0].Groups[1].Value
+          Write-Output "APP_VERSION: $version"
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $tag = $env:GITHUB_REF_NAME -replace '^v', ''
+            if ($tag -ne $version) {
+              Write-Output "::error::Tag $env:GITHUB_REF_NAME does not match APP_VERSION $version in core/build_info.py"
+              exit 1
+            }
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary --no-cache-dir -r requirements.txt pyinstaller
+
+      - name: Build PrismDesktop.exe
+        run: python build_exe.py
+
+      - name: Build PrismDesktopSetup.exe
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            $found = Get-Command iscc -ErrorAction SilentlyContinue
+            if (-not $found) { Write-Error "Inno Setup (ISCC.exe) not found on the runner"; exit 1 }
+            $iscc = $found.Source
+          }
+          & $iscc "/DMyAppVersion=${{ steps.version.outputs.version }}" setup.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path installer/PrismDesktopSetup.exe)) {
+            Write-Error "installer/PrismDesktopSetup.exe was not produced"; exit 1
+          }
+          Get-Item installer/PrismDesktopSetup.exe | Format-List Name, Length
+
+      - name: Upload Artifact to GitHub Actions Run
+        uses: actions/upload-artifact@v7
+        with:
+          name: PrismDesktop-Windows-x64
+          path: installer/PrismDesktopSetup.exe
+
+  release:
+    name: Attach installer to GitHub Release
+    needs: build-windows
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: PrismDesktop-Windows-x64
+          path: dist
+
+      # SHA256SUMS is not generated here (see build-macos.yml): run
+      # ./update_sha256sums.sh <tag> once every asset is on the release.
+      - name: Publish to GitHub Release
+        # Third-party action with release write access — pinned to the v3 commit.
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
+        with:
+          files: dist/PrismDesktopSetup.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

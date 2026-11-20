@@ -2,7 +2,10 @@
 ; Requires Inno Setup: https://jrsoftware.org/isdl.php
 
 #define MyAppName "Prism Desktop"
-#define MyAppVersion "1.7"
+; CI passes the version with /DMyAppVersion=<x>; local builds use this one.
+#ifndef MyAppVersion
+  #define MyAppVersion "1.7"
+#endif
 #define MyAppPublisher "Lasse Lian"
 #define MyAppExeName "PrismDesktop.exe"
 
