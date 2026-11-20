@@ -27,6 +27,7 @@
 - On large media tiles with album art, the label's frosted background now shows the part of the art that is behind it.
 - An empty or relative `XDG_CONFIG_HOME` (or an empty `APPDATA` on Windows) no longer puts the config in the folder Prism was started from.
 - Media tiles keep the same generated background for a track after a restart.
+- The Linux AppImage now starts on older distributions such as Ubuntu 22.04 and 24.04 and Debian 12. 1.7 needed glibc 2.44 and only ran on very new systems.
 
 ### Security
 
