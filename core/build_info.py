@@ -7,7 +7,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-APP_VERSION = "1.8"
+APP_VERSION = "1.8.1"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SHORT_COMMIT_LENGTH = 12
 

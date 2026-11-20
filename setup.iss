@@ -4,7 +4,7 @@
 #define MyAppName "Prism Desktop"
 ; CI passes the version with /DMyAppVersion=<x>; local builds use this one.
 #ifndef MyAppVersion
-  #define MyAppVersion "1.8"
+  #define MyAppVersion "1.8.1"
 #endif
 #define MyAppPublisher "Lasse Lian"
 #define MyAppExeName "PrismDesktop.exe"
