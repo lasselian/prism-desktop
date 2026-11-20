@@ -65,8 +65,15 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
 begin
-  { Force-kill all running instances including PyInstaller child processes (/T = process tree) }
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM PrismDesktop.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  { The in-app updater starts this installer and quits Prism about 1.5 s
+    later. Give it that time to exit cleanly (it records the update for the
+    post-update check), then stop any instance still running.
+    No /T: when the updater started this installer, the installer is part
+    of Prism's process tree, and /T killed the installer along with the app,
+    so the update never installed. The onedir build has no child processes. }
+  if WizardSilent then
+    Sleep(3000);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM PrismDesktop.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(1500);
   Result := '';
 end;
