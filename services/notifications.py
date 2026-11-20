@@ -143,14 +143,20 @@ class NotificationManager(QObject):
             self._show_fallback(title, message)
 
     def _get_icon_path(self) -> Optional[str]:
-        candidates = [
-            os.path.join(getattr(sys, '_MEIPASS', ''), 'icon.png'),
-            os.path.join(os.path.dirname(sys.executable), 'icon.png'),
-            os.path.join(os.path.dirname(__file__), '..', 'icon.png'),
-        ]
-        for p in candidates:
-            if p and os.path.isfile(p):
-                return os.path.abspath(p)
+        """Absolute path of icon.png, or None.
+
+        Frozen builds carry it in the bundle (_MEIPASS) or next to the exe;
+        source runs use the project root. Never the current directory: the
+        path is saved in the registry."""
+        if getattr(sys, 'frozen', False):
+            base_dirs = [getattr(sys, '_MEIPASS', None), os.path.dirname(sys.executable)]
+        else:
+            base_dirs = [os.path.dirname(os.path.dirname(os.path.abspath(__file__)))]
+        for base in base_dirs:
+            if base:
+                path = os.path.join(base, 'icon.png')
+                if os.path.isfile(path):
+                    return os.path.abspath(path)
         return None
 
     def _register_windows_app(self) -> None:
@@ -167,6 +173,13 @@ class NotificationManager(QObject):
                 icon_path = self._get_icon_path()
                 if icon_path:
                     winreg.SetValueEx(key, "IconUri", 0, winreg.REG_SZ, icon_path)
+                else:
+                    # Don't leave an IconUri from an earlier run pointing at
+                    # an old checkout or a file that is gone.
+                    try:
+                        winreg.DeleteValue(key, "IconUri")
+                    except FileNotFoundError:
+                        pass
             logger.info("[Notify] Registered Prism Desktop with Windows notification system")
         except Exception as e:
             # Don't retry; toasts work fine without this.

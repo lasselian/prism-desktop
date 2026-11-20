@@ -51,6 +51,11 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}
 [Registry]
 ; Start with Windows logic
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startup
+; Notification identity: name and icon in toasts and in Settings > Notifications from
+; the first run on, removed again on uninstall. The app writes the same values at
+; runtime as a fallback for source and portable runs.
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\com.prismdesktop.app"; ValueType: string; ValueName: "DisplayName"; ValueData: "{#MyAppName}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\com.prismdesktop.app"; ValueType: string; ValueName: "IconUri"; ValueData: "{app}\_internal\icon.png"
 
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;
