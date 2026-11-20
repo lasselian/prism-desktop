@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 1.8.1
+
+### Fixes
+
+- Updating from inside Prism on Windows works again. The update closed Prism without installing anything or reopening it, because the installer stopped itself along with the app.
+- If a silent Windows update ever fails, the installer now leaves `update-installer.log` next to your config.
+
+## 1.8
 
 ### Camera picture-in-picture
 
