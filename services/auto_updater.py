@@ -226,8 +226,11 @@ class AutoUpdateThread(QThread):
 
     def _apply_windows(self, installer_path: Path) -> None:
         """Launch the Inno Setup installer silently; its [Run] section (without
-        skipifsilent) relaunches the app once files are replaced — see setup.iss."""
-        args = [str(installer_path), "/VERYSILENT", "/NORESTART", "/NOCANCEL"]
+        skipifsilent) relaunches the app once files are replaced — see setup.iss.
+        The installer's log goes next to config.json, since a silent install
+        that fails shows nothing."""
+        log_path = get_config_path().with_name("update-installer.log")
+        args = [str(installer_path), "/VERYSILENT", "/NORESTART", "/NOCANCEL", f"/LOG={log_path}"]
         proc = subprocess.Popen(args, creationflags=subprocess.CREATE_NO_WINDOW)
         logger.info(f"Installer launched (pid={proc.pid}): {' '.join(args)}")
 
