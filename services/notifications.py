@@ -62,8 +62,7 @@ def sanitize_actions(raw) -> list:
             continue
         action = entry.get('action')
         title = entry.get('title')
-        if not isinstance(action, str) or not action.strip() \
-                or not isinstance(title, str) or not title.strip():
+        if not isinstance(action, str) or not action.strip() or not isinstance(title, str) or not title.strip():
             dropped += 1
             continue
         clean = {'action': action.strip(), 'title': title.strip()}
@@ -101,7 +100,7 @@ def parse_action_token(token, count) -> Optional[int]:
     if not isinstance(token, str):
         return None
     if token.startswith(WIN_TOKEN_PREFIX):
-        token = token[len(WIN_TOKEN_PREFIX):]
+        token = token[len(WIN_TOKEN_PREFIX) :]
     if not token.isdigit():
         return None
     idx = int(token)
@@ -114,8 +113,7 @@ class NotificationManager(QObject):
     APP_NAME = "Prism Desktop"
     APP_ID = "com.prismdesktop.app"
 
-    def __init__(self, tray_icon: QSystemTrayIcon = None, ha_client=None,
-                 config: Optional[dict] = None):
+    def __init__(self, tray_icon: QSystemTrayIcon = None, ha_client=None, config: Optional[dict] = None):
         super().__init__()
         self.tray_icon = tray_icon
         self.ha_client = ha_client
@@ -131,8 +129,14 @@ class NotificationManager(QObject):
 
     # ---- Platform dispatch ----
 
-    def _show_notification(self, title: str, message: str, image_path: Optional[str] = None,
-                           actions: Optional[list] = None, action_data: Optional[dict] = None):
+    def _show_notification(
+        self,
+        title: str,
+        message: str,
+        image_path: Optional[str] = None,
+        actions: Optional[list] = None,
+        action_data: Optional[dict] = None,
+    ):
         """Show a native notification on the current platform."""
         system = platform.system()
 
@@ -140,9 +144,9 @@ class NotificationManager(QObject):
             self._show_windows(title, message, image_path, actions, action_data)
         elif system == 'Linux':
             if actions:
-                keep_task(asyncio.ensure_future(
-                    self._show_linux_actions(title, message, image_path, actions, action_data)
-                ))
+                keep_task(
+                    asyncio.ensure_future(self._show_linux_actions(title, message, image_path, actions, action_data))
+                )
             else:
                 self._show_linux(title, message, image_path)
         elif system == 'Darwin':
@@ -175,6 +179,7 @@ class NotificationManager(QObject):
         under HKCU directly (no admin rights needed)."""
         try:
             import winreg
+
             key_path = rf"Software\Classes\AppUserModelId\{self.APP_ID}"
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
                 winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, self.APP_NAME)
@@ -195,8 +200,14 @@ class NotificationManager(QObject):
         finally:
             self._windows_registered = True
 
-    def _show_windows(self, title: str, message: str, image_path: Optional[str] = None,
-                      actions: Optional[list] = None, action_data: Optional[dict] = None):
+    def _show_windows(
+        self,
+        title: str,
+        message: str,
+        image_path: Optional[str] = None,
+        actions: Optional[list] = None,
+        action_data: Optional[dict] = None,
+    ):
         """Windows: native toast via win11toast. toast() blocks, so it
         runs on its own daemon thread to keep the UI loop free."""
         kwargs = {
@@ -213,11 +224,11 @@ class NotificationManager(QObject):
             daemon=True,
         ).start()
 
-    def _windows_toast_worker(self, title: str, message: str, kwargs: dict,
-                              actions: list, action_data: Optional[dict]):
+    def _windows_toast_worker(self, title: str, message: str, kwargs: dict, actions: list, action_data: Optional[dict]):
         """Runs on a per-toast daemon thread. Must not touch Qt."""
         try:
             from win11toast import toast
+
             with self._win_register_lock:
                 if not self._windows_registered:
                     self._register_windows_app()
@@ -232,9 +243,7 @@ class NotificationManager(QObject):
                     }
                     for i, a in enumerate(actions)
                 ]
-                kwargs['on_click'] = functools.partial(
-                    self._on_windows_click, actions, action_data
-                )
+                kwargs['on_click'] = functools.partial(self._on_windows_click, actions, action_data)
             toast(title, message, **kwargs)  # blocks until dismissed/activated
         except ImportError:
             logger.warning("[Notify] win11toast not installed, using fallback")
@@ -263,9 +272,7 @@ class NotificationManager(QObject):
             logger.warning("[Notify] No event loop to dispatch notification action")
             return
         try:
-            asyncio.run_coroutine_threadsafe(
-                self._handle_action_task(actions[idx], action_data), self._loop
-            )
+            asyncio.run_coroutine_threadsafe(self._handle_action_task(actions[idx], action_data), self._loop)
         except RuntimeError as e:
             logger.warning(f"[Notify] Could not dispatch notification action: {e}")
 
@@ -284,8 +291,9 @@ class NotificationManager(QObject):
         except (FileNotFoundError, subprocess.TimeoutExpired):
             self._show_fallback(title, message)
 
-    async def _show_linux_actions(self, title: str, message: str, image_path: Optional[str],
-                                  actions: list, action_data: Optional[dict]):
+    async def _show_linux_actions(
+        self, title: str, message: str, image_path: Optional[str], actions: list, action_data: Optional[dict]
+    ):
         """Linux notification with buttons via org.freedesktop.Notifications.
 
         Degrades to the plain notify-send path (no buttons) when the session
@@ -294,6 +302,7 @@ class NotificationManager(QObject):
         notifier = None
         try:
             from services.dbus_notifier import DBusNotifier
+
             if self._dbus_notifier is None:
                 self._dbus_notifier = DBusNotifier()
             notifier = self._dbus_notifier
@@ -306,7 +315,9 @@ class NotificationManager(QObject):
                 keys = [(str(i), a['title']) for i, a in enumerate(actions)]
                 on_action = functools.partial(self._on_linux_action, actions, action_data)
                 nid = await notifier.notify(
-                    self.APP_NAME, title, message,
+                    self.APP_NAME,
+                    title,
+                    message,
                     image_path=image_path or self._get_icon_path(),
                     actions=keys,
                     on_action=on_action,
@@ -326,17 +337,15 @@ class NotificationManager(QObject):
     def _show_macos(self, title: str, message: str):
         """macOS notification via Qt tray or osascript fallback."""
         if self.tray_icon and self.tray_icon.isSystemTrayAvailable():
-            self.tray_icon.showMessage(
-                title, message,
-                QSystemTrayIcon.MessageIcon.Information, 5000
-            )
+            self.tray_icon.showMessage(title, message, QSystemTrayIcon.MessageIcon.Information, 5000)
         else:
             try:
                 safe_title = title.replace('\\', '\\\\').replace('"', '\\"')
                 safe_msg = message.replace('\\', '\\\\').replace('"', '\\"')
                 subprocess.run(
                     ['osascript', '-e', f'display notification "{safe_msg}" with title "{safe_title}"'],
-                    check=False, timeout=5
+                    check=False,
+                    timeout=5,
                 )
             except Exception:
                 self._show_fallback(title, message)
@@ -344,10 +353,7 @@ class NotificationManager(QObject):
     def _show_fallback(self, title: str, message: str):
         """Fallback: Qt system tray balloon (no image support)."""
         if self.tray_icon and self.tray_icon.isSystemTrayAvailable():
-            self.tray_icon.showMessage(
-                title, message,
-                QSystemTrayIcon.MessageIcon.Information, 5000
-            )
+            self.tray_icon.showMessage(title, message, QSystemTrayIcon.MessageIcon.Information, 5000)
 
     # ---- Action dispatch ----
 
@@ -393,7 +399,8 @@ class NotificationManager(QObject):
             return
 
         event_data = build_notification_action_event_data(
-            action_id, action_data,
+            action_id,
+            action_data,
             mobile_cfg.get('device_id', ''),
             mobile_cfg.get('device_name', ''),
         )
@@ -440,15 +447,18 @@ class NotificationManager(QObject):
             action_data = None
 
         if image_source and self.ha_client:
-            keep_task(asyncio.ensure_future(
-                self._show_with_image(title, message, image_source, actions, action_data)
-            ))
+            keep_task(asyncio.ensure_future(self._show_with_image(title, message, image_source, actions, action_data)))
         else:
             self._show_notification(title, message, actions=actions, action_data=action_data)
 
-    async def _show_with_image(self, title: str, message: str, image_source: str,
-                               actions: Optional[list] = None,
-                               action_data: Optional[dict] = None):
+    async def _show_with_image(
+        self,
+        title: str,
+        message: str,
+        image_source: str,
+        actions: Optional[list] = None,
+        action_data: Optional[dict] = None,
+    ):
         """Download image, show notification, clean up."""
         image_path = await self._download_image(image_source)
         self._show_notification(title, message, image_path, actions, action_data)
