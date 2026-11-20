@@ -65,6 +65,7 @@ def build():
         "--onedir",
         "--name", "PrismDesktop",
         "--add-data", f"{font_path};.",  # Windows separator is ;
+        "--add-data", f"{icon_path};.",  # notification icon, registered by setup.iss
         "--exclude-module", "PySide6",  # Avoid Qt binding conflict
     ]
     
