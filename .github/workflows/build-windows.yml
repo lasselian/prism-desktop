@@ -87,13 +87,17 @@ jobs:
       # live app. The update must install and relaunch Prism from the install
       # folder.
       - name: In-app update test
+        timeout-minutes: 10
         run: |
           $inst = (Resolve-Path installer/PrismDesktopSetup.exe).Path
           $appDir = Join-Path $env:LOCALAPPDATA 'Programs\Prism Desktop'
           $tmp = $env:RUNNER_TEMP
 
           # 1. An existing install, as users have it
-          Start-Process $inst -ArgumentList '/VERYSILENT', '/NORESTART', '/SUPPRESSMSGBOXES', "/LOG=$tmp\first-install.log" -Wait
+          # Wait for the installer process only: -Wait would also wait for the
+          # Prism it launches at the end, which keeps running.
+          $first = Start-Process $inst -ArgumentList '/VERYSILENT', '/NORESTART', '/SUPPRESSMSGBOXES', "/LOG=$tmp\first-install.log" -PassThru
+          if (-not $first.WaitForExit(180000)) { Write-Output "::error::The first install did not finish in 3 minutes"; exit 1 }
           Start-Sleep -Seconds 5
           Get-Process PrismDesktop -ErrorAction SilentlyContinue | Stop-Process -Force
           if (-not (Test-Path "$appDir\PrismDesktop.exe")) {
