@@ -358,8 +358,10 @@ class PrismDesktopApp(QObject):
             # Already prompted for this version: silent check only
             prompted_version = self.config.get('macos_accessibility_prompted_version')
             if prompted_version == APP_VERSION:
-                is_trusted = AXIsProcessTrusted()
-                logger.info(f"macOS Accessibility: Silent check (trusted={is_trusted}).")
+                if AXIsProcessTrusted():
+                    logger.info("macOS Accessibility: Silent check, permission granted.")
+                else:
+                    logger.info("macOS Accessibility: Silent check, permission not granted.")
                 return
 
             # First launch of this version: prompt if not (or no longer) trusted
