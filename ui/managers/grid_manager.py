@@ -1,12 +1,4 @@
 from ui.grid_layout_engine import GridLayoutEngine, is_real_button
-from ui.constants import (
-    BUTTON_HEIGHT,
-    BUTTON_SPACING,
-    GRID_MARGIN_TOP,
-    GRID_MARGIN_BOTTOM,
-    FOOTER_HEIGHT,
-    FOOTER_MARGIN_BOTTOM,
-)
 from PyQt6.QtCore import QPropertyAnimation
 
 
@@ -79,9 +71,7 @@ class GridManager:
     def _update_height(self, preview_mode):
         """Grow or shrink the dashboard to fit the grid: at once in preview, else animated."""
         dash = self.dashboard
-        grid_h = (dash._rows * BUTTON_HEIGHT) + ((dash._rows - 1) * BUTTON_SPACING)
-        extras = GRID_MARGIN_TOP + GRID_MARGIN_BOTTOM + FOOTER_HEIGHT + FOOTER_MARGIN_BOTTOM + 20
-        new_height = grid_h + extras
+        new_height = dash._calculate_target_height()  # includes room for an open notice drawer
         start_h = dash.height()
         if start_h == new_height or dash._current_view != 'grid':
             return

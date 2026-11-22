@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Notifications
+
+- Messages now appear inside the dashboard instead of in a separate bar beside it. The dashboard smoothly grows a strip on the side away from the tray, the message slides out into it, and the dashboard shrinks back when it's gone. Nothing else moves: tiles and buttons stay where they are on screen.
+- If the screen has no room for the dashboard to grow, the message floats over the bottom of the dashboard instead.
+- Each message has an icon and colour for its type (info, success, warning, error). A thin line along the bottom shows how long it stays. Hovering pauses it, and moving away resumes it.
+- Messages queue instead of replacing each other, and a message no longer disappears because a question was showing. Back-to-back messages swap in place without the dashboard shrinking in between. Update progress, then the result, update one card in place.
+- Questions have clear buttons ("Remove" / "Cancel", "Install" / "Not now") instead of Yes/No, and wait 20 seconds instead of 5 before counting as "no".
+- Messages that arrive while the dashboard is closed wait until you next open it. If a shortcut triggers a button that is unavailable while the dashboard is closed, you get a system notification instead.
+- A message no longer closes an open control panel, such as a dimmer.
+- "Updated to …" links to what's new. The GeoClue message can copy the install command.
+
 ## 1.8.1
 
 ### Fixes

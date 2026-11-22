@@ -64,7 +64,8 @@ from ui.constants import (
     GLASS_MAX_INTERVAL_MS,
     GLASS_WORK_BUDGET,
 )
-from ui.widgets.notification_banner import NotificationBanner
+from ui.widgets.notification_pill import Notice
+from ui.managers.notice_center import NoticeCenter
 from ui.widgets.assist_overlay import AssistOverlay
 from ui.managers.overlay_manager import OverlayManager
 from ui.managers.grid_manager import GridManager
@@ -138,7 +139,7 @@ class Dashboard(QWidget):
         self._button_configs: list[dict] = []
         self._all_button_configs: list[dict] = []
         self._current_page: int = 0
-        self._active_banner: NotificationBanner | None = None
+        self.notice_center = NoticeCenter(self)
         self._page_count: int = 1
         self._entity_states: dict = {}  # Map entity_id -> full state dict
         self._settings_editor_target: tuple | None = None  # (page, row, col) stashed for the editor
@@ -390,89 +391,61 @@ class Dashboard(QWidget):
         """Whether the dashboard should stay pinned to the top edge."""
         return self._get_tray_position() == 'top'
 
-    def _calculate_target_height(self, rows: int | None = None) -> int:
-        """Calculate total window height for a given row count."""
+    def _calculate_target_height(self, rows: int | None = None, include_drawer: bool = True) -> int:
+        """Calculate total window height for a given row count (plus the notice drawer)."""
         if rows is None:
             rows = self._rows
         grid_h = (rows * BUTTON_HEIGHT) + ((rows - 1) * BUTTON_SPACING)
         extras = GRID_MARGIN_TOP + GRID_MARGIN_BOTTOM + FOOTER_HEIGHT + FOOTER_MARGIN_BOTTOM + (2 * ROOT_MARGIN)
-        return grid_h + extras
+        return grid_h + extras + (self._drawer_h() if include_drawer else 0)
 
-    # ── Notification Banner API ─────────────────────────────────────────
+    def _drawer_h(self) -> int:
+        """The notice drawer's share of the window height. Every window-height target
+        adds it, so a resize that starts while the drawer is out keeps its room; the
+        drawer itself holds still until that resize is over (see _window_busy)."""
+        center = getattr(self, 'notice_center', None)
+        return center.drawer_h if center is not None else 0
 
-    BANNER_DISMISS_MS = 5000  # shared auto-dismiss duration for all banners
+    def _window_busy(self) -> bool:
+        """True while something other than the notice drawer is resizing or moving the window,
+        or is about to."""
+        running = QPropertyAnimation.State.Running
+        anims = (self.height_anim, self.width_anim, self.assist_resize_anim, self.anim)
+        if any(a.state() == running for a in anims):
+            return True
+        if self._animation_timer.isActive() or self._is_resizing_window or self._assist_active:
+            return True
+        edit_timer = getattr(self, '_edit_resize_timer', None)
+        if edit_timer is not None and edit_timer.isActive():
+            return True
+        # Rows/cols changed in Settings wait for the return to the grid; that resize
+        # starts in the same callback that ends the view change, so it is covered above.
+        return self._pending_resize_cols is not None
 
-    def show_toast(self, message: str, duration_ms: int | None = None):
-        """Show an auto-dismissing floating notification banner."""
-        # Don't override an active confirm banner
-        if self._active_banner and self._active_banner.banner_type == "confirm":
-            return
-        self._dismiss_banner_immediate()
-        self._show_banner(message, "toast", auto_dismiss_ms=duration_ms or self.BANNER_DISMISS_MS)
+    # ── Notifications ───────────────────────────────────────────────────
+    # Messages go through ui/notifications.py, which builds a Notice; the
+    # NoticeCenter queues them and shows one at a time in a pill above the footer.
 
-    def show_confirm(self, message: str, on_confirm=None, on_reject=None):
-        """Show a floating confirmation banner with Yes/No buttons."""
-        self._dismiss_banner_immediate()
-        banner = self._show_banner(message, "confirm")
-        if on_confirm:
-            banner.confirmed.connect(on_confirm)
-        if on_reject:
-            banner.rejected.connect(on_reject)
+    TOAST_MS = 5000
+    CONFIRM_MS = 20000  # an unanswered question counts as "no" after this
 
-    def _show_banner(self, message: str, banner_type: str, auto_dismiss_ms: int | None = None):
-        """Create and show a floating notification banner outside the dashboard."""
-        if auto_dismiss_ms is None:
-            auto_dismiss_ms = self.BANNER_DISMISS_MS
-        if self.overlay_manager:
-            self.overlay_manager.close_all_overlays()
-        text_color = "#ffffff"
-        glass_is_light = False
-        if self.theme_manager:
-            text_color = self.theme_manager.get_colors().get('text', '#ffffff')
-            glass_is_light = self.theme_manager.get_effective_theme() == 'light'
-        banner = NotificationBanner(
-            message,
-            banner_type,
-            auto_dismiss_ms,
-            button_style=self._button_style,
-            border_effect=self._border_effect,
-            text_color=text_color,
-            glass_ui=self._glass_ui,
-            glass_is_light=glass_is_light,
-        )
-        banner.dismissed.connect(self._dismiss_banner)
-        banner.confirmed.connect(self._dismiss_banner)
-        banner.rejected.connect(self._dismiss_banner)
-        self._active_banner = banner
+    def notify(self, notice: Notice):
+        self.notice_center.post(notice)
 
-        above = not self._is_top_anchored()
-        if above:
-            container_edge = self.y() + ROOT_MARGIN  # top of visible container
-        else:
-            container_edge = self.y() + self.height() - ROOT_MARGIN  # bottom of visible container
+    def show_toast(self, message: str, duration_ms: int | None = None, **notice_fields):
+        """Show a self-dismissing message. Extra keyword arguments are Notice fields."""
+        self.notify(Notice(message, duration_ms=duration_ms or self.TOAST_MS, **notice_fields))
 
-        banner.show_at(self.x(), self.width(), container_edge, above)
-        return banner
+    def show_confirm(self, message: str, on_confirm=None, on_reject=None, **notice_fields):
+        """Ask a question. Extra keyword arguments are Notice fields (confirm_text, destructive…)."""
+        notice_fields.setdefault('confirm_text', t("notification_banner.yes"))
+        notice_fields.setdefault('cancel_text', t("notification_banner.no"))
+        notice_fields.setdefault('duration_ms', self.CONFIRM_MS)
+        self.notify(Notice(message, on_confirm=on_confirm, on_reject=on_reject, **notice_fields))
 
     def update_toast(self, message: str):
-        """Update the text of the active toast banner in-place; shows a new one if none is active."""
-        if self._active_banner and self._active_banner.banner_type == "toast":
-            self._active_banner.set_text(message)
-        else:
-            self.show_toast(message, duration_ms=60000)
-
-    def _dismiss_banner(self):
-        """Close and delete the active floating banner."""
-        self._dismiss_banner_immediate()
-
-    def _dismiss_banner_immediate(self):
-        """Close active banner without animation (for replacement)."""
-        if not self._active_banner:
-            return
-        banner = self._active_banner
-        self._active_banner = None
-        banner.hide()
-        banner.deleteLater()
+        """Progress text for the running update; each call replaces the last."""
+        self.notify(Notice(message, icon="progress-download", duration_ms=60000, key="update"))
 
     def refresh_tray_anchor(self, move_now: bool = False, tray_geometry: QRect | None = None):
         """Refresh cached tray geometry after config changes."""
@@ -877,7 +850,7 @@ class Dashboard(QWidget):
         self.save_config_requested.emit()
 
         # Store grid height
-        self._grid_height = self._calculate_target_height()
+        self._grid_height = self._calculate_target_height(include_drawer=False)
         # Lock only at the VERY end
         if self.height_anim.state() != QPropertyAnimation.State.Running:
             self.setFixedSize(self.width(), self.height())
@@ -924,9 +897,6 @@ class Dashboard(QWidget):
         self.content_layout = QVBoxLayout(self.container)
         self.content_layout.setSpacing(0)
         self.content_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Clear any active banner reference (setup_ui may be called multiple times)
-        self._active_banner = None
 
         # Stacked Widget for switching views (Grid / Settings)
         from PyQt6.QtWidgets import QStackedWidget
@@ -1055,6 +1025,8 @@ class Dashboard(QWidget):
         shadow.setOffset(0, 4)
         self.container.setGraphicsEffect(shadow)
 
+        self.notice_center.attach(self.container, self.footer_widget, self.content_layout)
+
         self.update_style()
 
         # Size Calculation
@@ -1108,6 +1080,8 @@ class Dashboard(QWidget):
         # fires right as the panel appears.
         self.assist_overlay.clear_chat()
 
+        # Close the notice drawer first: the ceiling below must not include it.
+        self.notice_center.set_held(True)
         self._assist_ceiling_height = self.height()
         self._assist_active = True
 
@@ -1283,12 +1257,14 @@ class Dashboard(QWidget):
             self.stack_widget.show()
             self.footer_widget.show()
             self._assist_active = False
+            self.notice_center.set_held(False)
             return
 
         self._fade_grid_for_assist(fade_in=True, then=self._on_assist_grid_restored)
 
     def _on_assist_grid_restored(self):
         self._assist_active = False
+        self.notice_center.set_held(False)
 
     def set_assist_enabled(self, enabled: bool):
         """Master on/off; force-closes any open Assist session when disabled."""
@@ -1664,6 +1640,8 @@ class Dashboard(QWidget):
         # Show without activating — activation happens after animation completes
         self.raise_()
         super().show()
+        # No showEvent if this interrupted a close animation; resume notices either way.
+        self.notice_center.dashboard_shown()
 
         # Start Entrance Animation
         self.anim.stop()
@@ -1698,11 +1676,12 @@ class Dashboard(QWidget):
         self.anim.stop()
         self.set_anim_progress(1.0)
         super().show()
+        self.notice_center.dashboard_shown()
         QTimer.singleShot(0, self._activate_after_show)
 
     def hide_instant(self):
         """Hide immediately with no fade/slide — the counterpart to show_for_assist()."""
-        self._dismiss_banner_immediate()
+        self.notice_center.dashboard_hidden()
         self.anim.stop()
         self.border_anim.stop()
         self._glass_refresh_timer.stop()
@@ -1712,7 +1691,7 @@ class Dashboard(QWidget):
 
     def close_animated(self):
         """Fade out and slide toward the tray edge, then hide."""
-        self._dismiss_banner_immediate()
+        self.notice_center.dashboard_closing()
         self.anim.stop()
         self.border_anim.stop()
         self._glass_refresh_timer.stop()
@@ -1738,6 +1717,7 @@ class Dashboard(QWidget):
             pass
 
     def _on_overlay_morph(self, progress: float):
+        self.notice_center.raise_pill()
         if not self._glass_ui:
             return
         # Pause only during transition; resume when fully open (1.0) or fully closed (0.0)
@@ -1826,9 +1806,6 @@ class Dashboard(QWidget):
         if self.config.get('appearance', {}).get('pin_window', False):
             return
 
-        if self._active_banner and self._active_banner.isActiveWindow():
-            return
-
         if not self.isActiveWindow():
             self.close_animated()
 
@@ -1863,9 +1840,15 @@ class Dashboard(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
+        self.notice_center.dashboard_shown()
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self.notice_center.dashboard_hidden()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self.notice_center.reposition_soon()
         if self._assist_active:
             return
         if hasattr(self, 'assist_overlay') and self.assist_overlay.isVisible():
@@ -2134,16 +2117,17 @@ class Dashboard(QWidget):
         if self._current_view == 'edit_button' and hasattr(self, 'edit_widget'):
             self.edit_widget.update_entities(entities)
 
-    def _calculate_view_height(self, view_name: str) -> int:
-        """Calculate target height for a given view."""
+    def _calculate_view_height(self, view_name: str, include_drawer: bool = True) -> int:
+        """Calculate target window height for a given view (plus the notice drawer)."""
+        drawer = self._drawer_h() if include_drawer else 0
         if view_name == 'grid':
             # The height the grid had, else one computed from the rows
-            return self._grid_height or (self._rows * 80) + ((self._rows - 1) * 8)
+            return (self._grid_height or (self._rows * 80) + ((self._rows - 1) * 8)) + drawer
         if view_name == 'settings':
-            return self._settings_view_height()
+            return self._settings_view_height() + drawer
         if view_name == 'edit_button':
-            return self._edit_view_height()
-        return 400  # unknown views
+            return self._edit_view_height() + drawer
+        return 400 + drawer  # unknown views
 
     def _settings_view_height(self) -> int:
         if self._settings_locked_height is not None:
@@ -2198,15 +2182,19 @@ class Dashboard(QWidget):
 
         # 1. Capture state before transition
         if self._current_view == 'grid':
-            self._grid_height = self.height()
+            self._grid_height = self.height() - self._drawer_h()
             self._captured_grid_widget_h = self.grid_widget.height()
+        # May close the notice drawer; the resize below starts from the current
+        # height, so it absorbs that without a jump.
+        self.notice_center.view_changed()
         if view_name == 'grid':
             self._restore_grid_width()
 
         # 2. Update view state and work out the heights
         self._current_view = view_name
         start_height = self.height()
-        target_height = self._calculate_view_height(view_name)
+        content_height = self._calculate_view_height(view_name, include_drawer=False)
+        target_height = content_height + self._drawer_h()
         # The glass background is not re-captured here: capturing while visible would
         # include the dashboard itself. show_near_tray() captures the full column up front.
 
@@ -2230,7 +2218,7 @@ class Dashboard(QWidget):
         # 5. Unlock window constraints, switch the stack, lock the content, animate
         self.setMinimumSize(0, 0)
         self.setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
-        self._lock_view_sizes(view_name, target_height)
+        self._lock_view_sizes(view_name, content_height)
         self._show_view_widget(view_name)
         self._animation_timer.start()
 
@@ -2257,7 +2245,6 @@ class Dashboard(QWidget):
 
     def show_settings(self):
         """Morph from Grid view to Settings view."""
-        self._dismiss_banner_immediate()
         if self.overlay_manager:
             self.overlay_manager.close_all_overlays()
 
@@ -2290,7 +2277,6 @@ class Dashboard(QWidget):
 
     def hide_settings(self):
         """Morph from Settings view back to Grid view."""
-        self._dismiss_banner_immediate()
         self._settings_locked_height = None
         grid_width = calculate_width(self._cols)
         self._anim_start_width = self.width()
@@ -2434,7 +2420,10 @@ class Dashboard(QWidget):
 
         # Re-lock the window to its final size
         # Use target height from animation vars or calculate fresh
-        t_height = self._grid_height if self._current_view == 'grid' else self._anim_target_height
+        if self._current_view == 'grid':
+            t_height = self._grid_height + self._drawer_h() if self._grid_height else None
+        else:
+            t_height = self._anim_target_height
 
         # Safety fallback
         if not t_height:
@@ -2502,7 +2491,6 @@ class Dashboard(QWidget):
                 mode = 'left'
 
             if mode:
-                self._dismiss_banner_immediate()
                 self._is_resizing_window = True
                 self._resize_mode = mode
                 self._resize_start_pos = event.globalPosition().toPoint()
@@ -2611,6 +2599,7 @@ class Dashboard(QWidget):
 
     def _get_rows_at_height(self, target_h):
         """Find nearest row count for a target window height."""
+        target_h -= self._drawer_h()
         best_rows = self._rows
         min_diff = float('inf')
 

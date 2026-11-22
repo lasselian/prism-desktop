@@ -350,6 +350,10 @@ class NotificationManager(QObject):
             except Exception:
                 self._show_fallback(title, message)
 
+    def show_app_notification(self, message: str):
+        """A plain notification from Prism itself (no image, no actions)."""
+        self._show_notification(self.APP_NAME, message)
+
     def _show_fallback(self, title: str, message: str):
         """Fallback: Qt system tray balloon (no image support)."""
         if self.tray_icon and self.tray_icon.isSystemTrayAvailable():

@@ -46,6 +46,5 @@ def calculate_width(cols: int) -> int:
     return inner + GRID_MARGIN_LEFT + GRID_MARGIN_RIGHT + (ROOT_MARGIN * 2)
 
 
-# Notification Banner
-BANNER_HEIGHT = 46
+# Welcome banner
 BANNER_VERTICAL_MARGIN = 12
