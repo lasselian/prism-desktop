@@ -13,7 +13,9 @@ hides. Platform details are in ui/utils/floating_window.py.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, pyqtSignal
+import sys
+
+from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QCursor,
@@ -58,6 +60,9 @@ class CameraPipWindow(QWidget):
         self._status: str | None = None
         self._hover = False
         self._drag: tuple | None = None
+        self._hover_poll = QTimer(self)
+        self._hover_poll.setInterval(100)
+        self._hover_poll.timeout.connect(self._poll_hover)
 
         self.setWindowFlags(
             Qt.WindowType.Tool
@@ -146,6 +151,25 @@ class CameraPipWindow(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         floating_window.apply_after_show(self)
+        if sys.platform == "darwin":
+            self._hover_poll.start()
+
+    def hideEvent(self, event):
+        self._hover_poll.stop()
+        super().hideEvent(event)
+
+    def _poll_hover(self):
+        # macOS sends this panel no enter or leave events while another app is
+        # in front, so the controls (close, name, resize handle) never showed
+        # then. The pointer position is available either way.
+        if self._drag is not None:
+            return
+        inside = self.geometry().contains(QCursor.pos())
+        if inside != self._hover:
+            self._hover = inside
+            if not inside:
+                self.unsetCursor()
+            self.update()
 
     # -- mouse -------------------------------------------------------------------
 
