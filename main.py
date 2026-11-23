@@ -109,6 +109,7 @@ from core.ha_client import HAClient
 from core.ha_websocket import HAWebSocket
 from ui.dashboard import Dashboard
 from ui.grid_layout_engine import is_real_button, plan_move
+from ui.widgets.dashboard_button import pip_camera_entity
 
 from ui.tray_manager import TrayManager
 from services.notifications import NotificationManager
@@ -429,6 +430,18 @@ class PrismDesktopApp(QObject):
         """Sync ButtonShortcutManager with current button configs."""
         buttons = self.config.get('buttons', [])
         self.button_shortcut_manager.update_shortcuts(buttons)
+
+    def _close_orphaned_pips(self):
+        """Close the camera PiP windows whose camera no tile uses any more.
+
+        Call it once the final tile list is in self.config. A PiP is meant to
+        outlive the dashboard, so only the tiles decide, not whether it is open.
+        The window position stays in the config for when the tile comes back.
+        """
+        wanted = {pip_camera_entity(cfg) for cfg in self.config.get('buttons', [])}
+        for entity_id in self.camera_pip.open_entities():
+            if entity_id not in wanted:
+                self.camera_pip.close(entity_id)
 
     def _on_button_shortcut_triggered(self, config: dict):
         """Fire the button action for a globally triggered button shortcut."""
@@ -852,6 +865,8 @@ class PrismDesktopApp(QObject):
             clear_token()
 
         glass_ui_enabled = self._adopt_config(new_config)
+        # Before a restart of the HA connections, so no stream is restarted just to be closed.
+        self._close_orphaned_pips()
         self._apply_layout_settings()
         self._apply_shortcut_settings()
         if glass_ui_enabled and self.dashboard:
@@ -1024,6 +1039,7 @@ class PrismDesktopApp(QObject):
 
         self.config['buttons'] = buttons
         self.save_config()
+        self._close_orphaned_pips()
 
         # Update Dashboard
         if self.dashboard:
@@ -1060,6 +1076,7 @@ class PrismDesktopApp(QObject):
         buttons.append(new_config)
         self.config['buttons'] = buttons
         self.save_config()
+        self._close_orphaned_pips()
 
         if self.dashboard:
             self.dashboard.set_buttons(buttons, self.config.get('appearance', {}))
@@ -1095,6 +1112,7 @@ class PrismDesktopApp(QObject):
 
         self.config['buttons'] = buttons
         self.save_config()
+        self._close_orphaned_pips()
         if self.dashboard:
             self._rebuild_dashboard_buttons(buttons)
 
@@ -1130,6 +1148,7 @@ class PrismDesktopApp(QObject):
             b for b in buttons if not (b.get('row') == row and b.get('col') == col and b.get('page', 0) == page)
         ]
         self.save_config()
+        self._close_orphaned_pips()
         if self.dashboard:
             self.dashboard.set_buttons(self.config['buttons'], self.config.get('appearance', {}))
 
@@ -1180,6 +1199,7 @@ class PrismDesktopApp(QObject):
                 btns.append(new_cfg)
                 self.config['buttons'] = btns
                 self.save_config()
+                self._close_orphaned_pips()
                 self.dashboard.set_buttons(btns, self.config.get('appearance', {}))
 
             from ui.notifications import notify_move_as_1x1
@@ -1201,6 +1221,7 @@ class PrismDesktopApp(QObject):
 
         self.config['buttons'] = buttons
         self.save_config()
+        self._close_orphaned_pips()
         self.dashboard.set_buttons(buttons, self.config.get('appearance', {}))
 
     @pyqtSlot(dict)

@@ -111,6 +111,10 @@ class CameraPipManager:
     def is_open(self, entity_id: str) -> bool:
         return entity_id in self._windows
 
+    def open_entities(self) -> list[str]:
+        """The cameras that have a window open (a copy, safe to close() while looping)."""
+        return list(self._windows)
+
     def open(self, entity_id: str, title: str = "") -> Optional[CameraPipWindow]:
         """Open a PiP window for a camera, or bring back the one already open."""
         if not isinstance(entity_id, str) or not CAMERA_ENTITY_RE.fullmatch(entity_id):

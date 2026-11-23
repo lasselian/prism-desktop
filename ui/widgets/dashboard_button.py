@@ -77,6 +77,18 @@ _OVERLAY_REQUESTS = {
 }
 
 
+def pip_camera_entity(cfg: dict | None) -> str:
+    """The camera a tile config can pop out into picture-in-picture, or ''."""
+    cfg = cfg or {}
+    if cfg.get('type') == 'camera':
+        entity_id = cfg.get('entity_id') or ''
+    elif cfg.get('type') == '3d_printer':
+        entity_id = cfg.get('printer_camera_entity') or ''
+    else:
+        return ''
+    return entity_id if entity_id.startswith('camera.') else ''
+
+
 def _media_thirds_action(x: float, width: float) -> str:
     """Left third: previous, right third: next, middle: play/pause."""
     if x < width / 3:
@@ -2020,14 +2032,7 @@ class DashboardButton(QFrame):
 
     def _pip_camera_entity(self) -> str:
         """The camera this tile can pop out into picture-in-picture, or ''."""
-        cfg = self.config or {}
-        if cfg.get('type') == 'camera':
-            entity_id = cfg.get('entity_id') or ''
-        elif cfg.get('type') == '3d_printer':
-            entity_id = cfg.get('printer_camera_entity') or ''
-        else:
-            return ''
-        return entity_id if entity_id.startswith('camera.') else ''
+        return pip_camera_entity(self.config)
 
     def simulate_click(self):
         """Programmatically trigger a click."""
