@@ -13,7 +13,8 @@ Linux (xcb, which Prism forces on Wayland):
 macOS:
   - Qt makes a Tool window an NSPanel that hides when the app deactivates and
     moves to the active Space. We want it on every Space, over fullscreen
-    apps, and not activating Prism when clicked.
+    apps, not activating Prism when clicked, and without the native resize
+    border Qt leaves on it.
 Windows needs nothing: Qt already gives WS_EX_TOOLWINDOW, WS_EX_NOACTIVATE
 and HWND_TOPMOST.
 
@@ -38,6 +39,7 @@ _NS_CAN_JOIN_ALL_SPACES = 1 << 0
 _NS_MOVE_TO_ACTIVE_SPACE = 1 << 1
 _NS_FULLSCREEN_AUXILIARY = 1 << 8
 _NS_NONACTIVATING_PANEL = 1 << 7
+_NS_RESIZABLE = 1 << 3
 
 
 def prepare_before_show(widget: QWidget) -> None:
@@ -87,9 +89,15 @@ def _macos_tweak(widget: QWidget) -> None:
     behavior |= _NS_CAN_JOIN_ALL_SPACES | _NS_FULLSCREEN_AUXILIARY
     win.setCollectionBehavior_(behavior)
     win.setHidesOnDeactivate_(False)
+    mask = int(win.styleMask())
+    # Qt leaves the frameless panel resizable, which gives it an invisible
+    # resize border: macOS then resizes it from the edges without the aspect
+    # lock. The window resizes itself in code, which needs no such flag.
+    mask &= ~_NS_RESIZABLE
     if win.isKindOfClass_(NSPanel):
         # Clicking a non-activating panel doesn't bring Prism to the front.
-        win.setStyleMask_(int(win.styleMask()) | _NS_NONACTIVATING_PANEL)
+        mask |= _NS_NONACTIVATING_PANEL
+    win.setStyleMask_(mask)
 
 
 # -- X11 -----------------------------------------------------------------------
