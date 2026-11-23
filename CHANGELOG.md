@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.8.2
 
 ### Notifications
 
@@ -12,6 +12,16 @@
 - Messages that arrive while the dashboard is closed wait until you next open it. If a shortcut triggers a button that is unavailable while the dashboard is closed, you get a system notification instead.
 - A message no longer closes an open control panel, such as a dimmer.
 - "Updated to …" links to what's new. The GeoClue message can copy the install command.
+
+### Fixes
+
+- On macOS, the camera picture-in-picture window no longer changes shape when you double-click or drag near its edge. That cropped or stretched the picture.
+- On macOS, the close button, camera name and resize handle of the picture-in-picture window now show while another app is in front.
+- Removing a camera tile, or pointing it at another camera, now closes its picture-in-picture window. It kept playing before.
+
+### Security
+
+- `prism.log` no longer contains your GPS coordinates when Prism gets a location fix, only how accurate it is.
 
 ## 1.8.1
 
