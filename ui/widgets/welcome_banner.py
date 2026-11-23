@@ -1,6 +1,6 @@
 """
 Multi-step welcome banner shown on first launch.
-Visually identical to NotificationBanner — same floating position, slide+fade
+A floating window just outside the dashboard, with a slide+fade
 animation, specular highlight, and glassmorphism support.
 """
 

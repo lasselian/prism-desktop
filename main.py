@@ -457,6 +457,8 @@ class PrismDesktopApp(QObject):
             cols=cols,
         )
         self.dashboard.set_buttons(self.config.get('buttons', []), self.config.get('appearance', {}))
+        # Messages that can't wait for the dashboard to open go out as OS notifications.
+        self.dashboard.notice_center.system_notify = self.notification_manager.show_app_notification
 
         # Connect signals
         self.dashboard.button_clicked.connect(self.on_button_clicked)
