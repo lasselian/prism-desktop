@@ -197,7 +197,7 @@ async def _get_windows_location() -> Optional[dict]:
         lon = coord.longitude
         accuracy = coord.accuracy  # metres
 
-        logger.info("[Location] Fix acquired: (%.5f, %.5f) ±%.0fm", lat, lon, accuracy)
+        logger.info("[Location] Fix acquired (±%.0fm)", accuracy)
         return {"gps": [lat, lon], "gps_accuracy": accuracy}
 
     except Exception as e:
@@ -308,7 +308,7 @@ async def _geoclue2_get_position() -> Optional[dict]:
         # --- Stop client ---
         await client.call_stop()
 
-        logger.info("[Location] Fix acquired: (%.5f, %.5f) ±%.0fm", lat, lon, accuracy)
+        logger.info("[Location] Fix acquired (±%.0fm)", accuracy)
         return {"gps": [lat, lon], "gps_accuracy": accuracy}
 
     finally:
