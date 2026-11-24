@@ -9,6 +9,7 @@ from PyQt6.QtCore import QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices, QGuiApplication
 
 from core.localization_manager import t
+from ui.widgets.notification_pill import Guide, Notice
 
 _RELEASES_URL = "https://github.com/lasselian/prism-desktop/releases"
 # Update progress, restart and failure share a key so each replaces the last.
@@ -177,3 +178,38 @@ def notify_geoclue2_missing(dashboard, install_cmd: str):
 def notify_language_restart(dashboard):
     """Shown when the user saves a language change that requires a restart."""
     dashboard.show_toast(t("notifications.language_restart"), duration_ms=8000, icon="translate")
+
+
+# ── First run ────────────────────────────────────────────────────────────────
+
+_WELCOME_KEY = "welcome"
+_WELCOME_STEPS = 5
+
+
+def notify_welcome(dashboard, on_done):
+    """The first-run walkthrough: one card in the drawer that turns its pages.
+
+    `on_done` runs once however it ends: Done, Skip, or dismiss_welcome().
+    """
+    guide = Guide(
+        pages=[(t(f"welcome.step_{i}.title"), t(f"welcome.step_{i}.body")) for i in range(1, _WELCOME_STEPS + 1)],
+        skip_text=t("welcome.btn_skip"),
+        next_text=t("welcome.btn_next"),
+        done_text=t("welcome.btn_done"),
+    )
+    dashboard.notify(
+        Notice(
+            t("welcome.step_1.title"),
+            icon="hand-wave-outline",
+            duration_ms=0,
+            key=_WELCOME_KEY,
+            guide=guide,
+            on_confirm=on_done,
+            on_reject=on_done,
+        )
+    )
+
+
+def dismiss_welcome(dashboard):
+    """End the walkthrough early (the user went to Settings), shown or still waiting."""
+    dashboard.dismiss_notice(_WELCOME_KEY)

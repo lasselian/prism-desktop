@@ -18,6 +18,10 @@ What shows when:
   Urgent notices are about a moment that has passed by then, so closing the
   dashboard drops them, and switching views drops urgent questions.
 - While Assist has the dashboard, notices wait until it gives it back.
+- A guide (a notice with pages, such as the first-run walkthrough) turns its
+  pages in this same pill and stays until it is finished or skipped. It is a
+  question, so closing the dashboard puts it back at the front of the queue,
+  on the page it had reached.
 """
 
 from __future__ import annotations
@@ -71,6 +75,7 @@ class NoticeCenter(QObject):
         self.pill.installEventFilter(self)
         self.pill.finished.connect(self._on_finished)
         self.pill.gone.connect(self._on_pill_gone)
+        self.pill.advanced.connect(self._on_guide_advanced)
         self.drawer = NoticeDrawer(dashboard)
         self.drawer.changed.connect(self._on_drawer_changed)
 
@@ -155,6 +160,15 @@ class NoticeCenter(QObject):
         self._mode = self._ride = None
         self.drawer.attach(content_layout)
         self.reposition_soon()
+
+    def dismiss(self, key: str):
+        """Take away the notice with `key`, whether it is on screen or waiting.
+
+        A question counts as answered "no", as when it is discarded unseen.
+        """
+        self._discard(lambda n: n.key == key)
+        if self._current is not None and self._current.key == key:
+            self.pill.leave("dismiss")
 
     def dashboard_shown(self):
         self._open = True
@@ -452,6 +466,11 @@ class NoticeCenter(QObject):
     def _on_pill_gone(self):
         self._mode = None
         self._pump_soon(self.NEXT_DELAY_MS)
+
+    def _on_guide_advanced(self):
+        """A guide turned a page: show its new text, and grow or shrink the drawer to fit."""
+        if self._current is not None and self._current is self.pill.notice:
+            self._replace_current(self._current)
 
     def _on_drawer_changed(self, h: int):
         if self._mode != "drawer" or not self.pill.isVisible():

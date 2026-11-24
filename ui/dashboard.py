@@ -432,6 +432,10 @@ class Dashboard(QWidget):
     def notify(self, notice: Notice):
         self.notice_center.post(notice)
 
+    def dismiss_notice(self, key: str):
+        """Take away the notice with this key, shown or waiting."""
+        self.notice_center.dismiss(key)
+
     def show_toast(self, message: str, duration_ms: int | None = None, **notice_fields):
         """Show a self-dismissing message. Extra keyword arguments are Notice fields."""
         self.notify(Notice(message, duration_ms=duration_ms or self.TOAST_MS, **notice_fields))
