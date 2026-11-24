@@ -1,0 +1,138 @@
+name: Release
+
+# Pushing a version tag (1.8.3 or v1.8.3) builds Prism on every platform and
+# publishes the GitHub release by itself: title "Prism Desktop v1.8.3", notes
+# from CHANGELOG.md, every installer, and SHA256SUMS (the auto-updater only
+# installs a download that SHA256SUMS lists).
+#
+# One job owns the release, after all three builds have passed:
+# - If any build fails, no release is created. Fix it and re-run the failed jobs.
+# - The release is created as a draft and published last, so "latest" never
+#   points at a release that is still missing files.
+# - A tag with no matching section in CHANGELOG.md fails the release.
+#
+# To rehearse everything except publishing, run this workflow by hand
+# (Actions > Release > Run workflow) with a version: it builds the branch you
+# pick and attaches the notes and checksums it would publish to the run.
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '[0-9]*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to rehearse, for example 1.8.3. Nothing is published.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows
+    uses: ./.github/workflows/build-windows.yml
+
+  linux:
+    name: Linux
+    uses: ./.github/workflows/build-linux.yml
+
+  macos:
+    name: macOS
+    uses: ./.github/workflows/build-macos.yml
+
+  publish:
+    name: Publish GitHub Release
+    needs: [windows, linux, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+      RAW_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
+      REHEARSAL: ${{ github.ref_type != 'tag' }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      # The files the auto-updater and the install table in the notes expect.
+      # A platform that built without producing one of them stops the release.
+      - name: Check the version and the files
+        run: |
+          set -euo pipefail
+          version="${RAW_VERSION#v}"
+          app_version="$(sed -n 's/^APP_VERSION = "\(.*\)"/\1/p' core/build_info.py)"
+          if [ "$app_version" != "$version" ]; then
+            echo "::error::Version $version does not match APP_VERSION $app_version in core/build_info.py"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+          missing=0
+          for f in PrismDesktopSetup.exe PrismDesktop-x86_64.AppImage \
+                   PrismDesktop-macOS-arm64.dmg PrismDesktop-macOS-arm64.zip \
+                   PrismDesktop-macOS-x86_64.dmg PrismDesktop-macOS-x86_64.zip; do
+            if [ ! -s "dist/$f" ]; then echo "::error::dist/$f is missing or empty"; missing=1; fi
+          done
+          [ "$missing" = 0 ] || exit 1
+          ls -l dist
+
+      - name: Write the release notes
+        run: python3 .github/scripts/release_notes.py "$VERSION" > notes.md
+
+      - name: Write SHA256SUMS
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum -- *.exe *.AppImage *.dmg *.zip > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish the release
+        if: env.REHEARSAL != 'true'
+        run: |
+          set -euo pipefail
+          title="Prism Desktop v$VERSION"
+          # A release for this tag may already exist (a re-run, or one made by
+          # hand); then it is completed rather than created.
+          existing="$(gh release list --limit 200 --json tagName --jq '.[].tagName')"
+          if grep -qxF "$TAG" <<< "$existing"; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --verify-tag --draft --title "$title" --notes-file notes.md
+          fi
+          gh release edit "$TAG" --title "$title" --notes-file notes.md --draft=false
+          gh release view "$TAG" --json url --jq .url
+
+      - name: Show what would be published
+        if: env.REHEARSAL == 'true'
+        run: |
+          {
+            echo "## Rehearsal: nothing was published"
+            echo
+            echo "Title: **Prism Desktop v$VERSION**"
+            echo
+            echo '```'
+            cat dist/SHA256SUMS
+            echo '```'
+            echo
+            cat notes.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the notes and checksums of a rehearsal
+        if: env.REHEARSAL == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-rehearsal
+          path: |
+            notes.md
+            dist/SHA256SUMS

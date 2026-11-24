@@ -63,6 +63,21 @@ a file in `translations/`.
   it on**. Much of the app behaves differently on Windows, Linux and macOS.
 - Write commit messages that say what changed and why.
 
+## Releasing
+
+1. In a pull request, set the version in `core/build_info.py` and `setup.iss`
+   and rename `## Unreleased` in `CHANGELOG.md` to `## <version>`. The
+   changelog section becomes the release notes: `### Fixes` and `### Security`
+   keep their headings, and any other `###` heading is listed under "New".
+2. After it is merged, tag the merge commit with the version and push the tag:
+   `git tag 1.8.3 <commit> && git push origin 1.8.3`.
+
+The Release workflow does the rest: it builds every platform, then publishes
+the release as "Prism Desktop v1.8.3" with the notes, every installer and
+`SHA256SUMS`. If a build fails, nothing is published; fix it and re-run the
+failed jobs. To check the whole pipeline without publishing, run the Release
+workflow by hand (Actions > Release > Run workflow) with the version.
+
 ## Reporting bugs
 
 Open an issue with your OS, Prism version (Settings shows it), what you did
