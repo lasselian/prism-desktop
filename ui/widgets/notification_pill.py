@@ -29,7 +29,15 @@ from PyQt6.QtCore import (
     pyqtSignal,
 )
 from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
-from PyQt6.QtWidgets import QGraphicsOpacityEffect, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QWidget
+from PyQt6.QtWidgets import (
+    QGraphicsOpacityEffect,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QWidget,
+)
 
 from core.localization_manager import t
 from core.utils import SYSTEM_FONT
@@ -42,6 +50,9 @@ SPACING = 8
 ICON_W = 20
 CONTROL_H = 26
 MIN_WIDTH = 240
+GUIDE_GAP = 6  # between the rows of a guide
+DOT = 6  # step dot diameter
+DOT_PITCH = 10
 
 KINDS = ("info", "success", "warning", "error")
 _KIND_ICONS = {
@@ -60,8 +71,29 @@ _KIND_COLORS = {
 
 
 @dataclass
+class Guide:
+    """A short walkthrough that turns its pages inside one pill.
+
+    The card shows the page's title and text, a dot per page, Skip, and Next
+    (Done on the last page). `page` is where the reader is. It lives here, not
+    in the pill, so a guide that goes back in the queue (the dashboard closed)
+    carries on from that page.
+    """
+
+    pages: list[tuple[str, str]]  # (title, text)
+    skip_text: str
+    next_text: str
+    done_text: str
+    page: int = 0
+
+
+@dataclass
 class Notice:
-    """One message for the pill. A notice with `confirm_text` is a question."""
+    """One message for the pill. A notice with `confirm_text` is a question.
+
+    A notice with a `guide` is a question too: Done is "yes" (`on_confirm`),
+    and Skip, or anything else that ends it early, is "no" (`on_reject`).
+    """
 
     message: str
     kind: str = "info"
@@ -77,11 +109,12 @@ class Notice:
     destructive: bool = False
     on_confirm: Callable[[], None] | None = None
     on_reject: Callable[[], None] | None = None
+    guide: Guide | None = None
     shown_at: float = field(default=0.0, compare=False)
 
     @property
     def is_confirm(self) -> bool:
-        return self.confirm_text is not None
+        return self.confirm_text is not None or self.guide is not None
 
     def seen_for(self) -> float:
         """Seconds this notice has been on screen in its current showing."""
@@ -135,6 +168,33 @@ class _PillShadow(QWidget):
         p.end()
 
 
+class _StepDots(QWidget):
+    """One dot per page of a guide, the current one filled."""
+
+    def __init__(self, count: int, step: int, dark: bool):
+        super().__init__()
+        self._count = count
+        self._step = step
+        self._dark = dark
+        self.setFixedSize(count * DOT_PITCH - (DOT_PITCH - DOT), 16)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cy = self.height() // 2
+        for i in range(self._count):
+            center = QPoint(i * DOT_PITCH + DOT // 2, cy)
+            if i == self._step:
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QColor(255, 255, 255, 220) if self._dark else QColor(0, 0, 0, 200))
+            else:
+                p.setPen(QPen(QColor(255, 255, 255, 90) if self._dark else QColor(0, 0, 0, 80), 1.2))
+                p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawEllipse(center, DOT // 2, DOT // 2)
+        p.end()
+
+
 class _PillButton(QPushButton):
     """Flat text button (`color`) or filled one (`fill`), sized for the pill."""
 
@@ -167,6 +227,8 @@ class NotificationPill(QWidget):
     finished = pyqtSignal(str)
     # The leave animation is over and the pill is hidden
     gone = pyqtSignal()
+    # A guide turned a page: the card has new text and may need a new height
+    advanced = pyqtSignal()
 
     def __init__(self, parent: QWidget, shadow_parent: QWidget | None = None):
         """`parent` may be a clipping holder; the shadow goes on `shadow_parent` (default: `parent`)."""
@@ -210,6 +272,36 @@ class NotificationPill(QWidget):
         self.label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._layout.addWidget(self.icon_label, 0, Qt.AlignmentFlag.AlignVCenter)
         self._layout.addWidget(self.label, 1, Qt.AlignmentFlag.AlignVCenter)
+
+        # A guide uses this instead of the icon/label row: icon and title on top,
+        # the page's text under the title, dots and buttons along the bottom.
+        self._guide_box = QWidget()
+        grid = QGridLayout(self._guide_box)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(SPACING)
+        grid.setVerticalSpacing(GUIDE_GAP)
+        self.guide_icon = QLabel()
+        self.guide_icon.setFixedWidth(ICON_W)
+        self.guide_icon.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+        self.guide_title = QLabel()
+        self.guide_title.setTextFormat(Qt.TextFormat.PlainText)
+        self.guide_title.setWordWrap(True)
+        self.guide_title.setFont(QFont(SYSTEM_FONT, 11, QFont.Weight.DemiBold))
+        self.guide_body = QLabel()
+        self.guide_body.setTextFormat(Qt.TextFormat.PlainText)
+        self.guide_body.setWordWrap(True)
+        self.guide_body.setFont(QFont(SYSTEM_FONT, 10))
+        self._guide_foot = QHBoxLayout()
+        self._guide_foot.setContentsMargins(0, 0, 0, 0)
+        self._guide_foot.setSpacing(SPACING)
+        grid.addWidget(self.guide_icon, 0, 0, 2, 1, Qt.AlignmentFlag.AlignTop)
+        grid.addWidget(self.guide_title, 0, 1)
+        grid.addWidget(self.guide_body, 1, 1)
+        grid.addLayout(self._guide_foot, 2, 0, 1, 2)
+        grid.setColumnStretch(1, 1)
+        self._layout.addWidget(self._guide_box, 1)
+        self._guide_box.hide()
+
         self._controls: list[QWidget] = []
         self.close_button: QPushButton | None = None
         self.confirm_button: QPushButton | None = None
@@ -232,12 +324,6 @@ class NotificationPill(QWidget):
             glyph = get_icon(glyph)
         mdi = QFont(get_mdi_font())
         mdi.setPixelSize(18)
-        self.icon_label.setFont(mdi)
-        self.icon_label.setText(glyph)
-        self.icon_label.setStyleSheet(f"color: {accent}; background: transparent;")
-
-        self.label.setText(notice.message)
-        self.label.setStyleSheet(f"color: {style.text}; background: transparent;")
 
         for w in self._controls:
             self._layout.removeWidget(w)
@@ -248,6 +334,26 @@ class NotificationPill(QWidget):
         secondary = QColor(style.text)
         secondary.setAlphaF(0.72)
         secondary_css = secondary.name(QColor.NameFormat.HexArgb)
+
+        guide = notice.guide
+        self._guide_box.setVisible(guide is not None)
+        self.icon_label.setVisible(guide is None)
+        self.label.setVisible(guide is None)
+        if guide is not None:
+            self._apply_guide(guide, style, accent, glyph, mdi, secondary_css)
+            self._leaving = False
+            self._countdown.stop()
+            self._progress = 0.0
+            self.update()
+            return
+
+        self.icon_label.setFont(mdi)
+        self.icon_label.setText(glyph)
+        self.icon_label.setStyleSheet(f"color: {accent}; background: transparent;")
+
+        self.label.setText(notice.message)
+        self.label.setStyleSheet(f"color: {style.text}; background: transparent;")
+
         if notice.is_confirm:
             cancel = notice.cancel_text or t("notification_banner.cancel")
             self.cancel_button = _PillButton(cancel, style, color=secondary_css)
@@ -278,6 +384,52 @@ class NotificationPill(QWidget):
         self._progress = 0.0
         self.update()
 
+    def _apply_guide(self, guide: Guide, style: PillStyle, accent: str, glyph: str, mdi: QFont, secondary_css: str):
+        title, text = guide.pages[guide.page]
+        self.guide_icon.setFont(mdi)
+        self.guide_icon.setText(glyph)
+        self.guide_icon.setStyleSheet(f"color: {accent}; background: transparent;")
+        self.guide_title.setText(title)
+        self.guide_title.setStyleSheet(f"color: {style.text}; background: transparent;")
+        self.guide_body.setText(text)
+        self.guide_body.setStyleSheet(f"color: {style.text}; background: transparent;")
+
+        while self._guide_foot.count():
+            widget = self._guide_foot.takeAt(0).widget()
+            if widget is not None:
+                widget.deleteLater()
+        last = guide.page == len(guide.pages) - 1
+        self._guide_foot.addWidget(
+            _StepDots(len(guide.pages), guide.page, style.dark), 0, Qt.AlignmentFlag.AlignVCenter
+        )
+        self._guide_foot.addStretch(1)
+        self.cancel_button = _PillButton(guide.skip_text, style, color=secondary_css)
+        self.cancel_button.clicked.connect(lambda: self.leave("reject"))
+        self.confirm_button = _PillButton(
+            guide.done_text if last else guide.next_text, style, fill="#2f7de1" if style.dark else "#1f6fd1"
+        )
+        self.confirm_button.clicked.connect(self._guide_next)
+        self._guide_foot.addWidget(self.cancel_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._guide_foot.addWidget(self.confirm_button, 0, Qt.AlignmentFlag.AlignVCenter)
+
+    def _guide_next(self):
+        guide = self.notice.guide if self.notice else None
+        if guide is None or self._leaving:
+            return
+        if guide.page < len(guide.pages) - 1:
+            guide.page += 1
+            self.advanced.emit()
+        else:
+            self.leave("confirm")
+
+    def _guide_height(self, width: int) -> int:
+        text_w = max(40, width - PAD_LEFT - PAD_RIGHT - ICON_W - SPACING)
+        for label in (self.guide_title, self.guide_body):
+            label.ensurePolished()
+        title_h = max(self.guide_title.heightForWidth(text_w), ICON_W)
+        body_h = self.guide_body.heightForWidth(text_w)
+        return PAD_V * 2 + title_h + GUIDE_GAP + body_h + GUIDE_GAP + CONTROL_H
+
     def _chrome_width(self) -> int:
         controls_w = 0
         for w in self._controls:
@@ -287,6 +439,8 @@ class NotificationPill(QWidget):
 
     def height_for(self, width: int) -> int:
         """Height of the pill at exactly `width` (the message wraps to fit)."""
+        if self.notice is not None and self.notice.guide is not None:
+            return self._guide_height(width)
         label_w = max(40, width - self._chrome_width())
         self.label.ensurePolished()
         label_h = self.label.heightForWidth(label_w)
@@ -296,6 +450,8 @@ class NotificationPill(QWidget):
 
     def size_for(self, max_width: int) -> QSize:
         """Width that fits the message on one line if it can, else `max_width` with wrapping."""
+        if self.notice is not None and self.notice.guide is not None:
+            return QSize(max_width, self._guide_height(max_width))
         self.label.ensurePolished()
         text_w = self.label.fontMetrics().horizontalAdvance(self.label.text()) + 4
         width = min(max_width, max(MIN_WIDTH, self._chrome_width() + text_w))

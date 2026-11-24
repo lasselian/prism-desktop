@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Notifications
+
+- The first-run walkthrough now appears in the notification drawer inside the dashboard, like every other message, instead of in a separate floating window. If you close the dashboard part-way through it carries on from the same page, and opening Settings ends it.
+
 ## 1.8.2
 
 ### Notifications

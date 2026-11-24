@@ -44,7 +44,3 @@ def calculate_width(cols: int) -> int:
     """
     inner = cols * BUTTON_WIDTH + (cols - 1) * BUTTON_SPACING
     return inner + GRID_MARGIN_LEFT + GRID_MARGIN_RIGHT + (ROOT_MARGIN * 2)
-
-
-# Welcome banner
-BANNER_VERTICAL_MARGIN = 12
