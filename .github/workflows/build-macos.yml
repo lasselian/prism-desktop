@@ -1,10 +1,14 @@
 name: Build macOS Release
 
 on:
-  push:
-    tags:
-      - 'v*'
-      - '[0-9]*'
+  # release.yml calls this on a version tag and publishes once every platform has built.
+  workflow_call:
+    inputs:
+      ref:
+        description: Tag or commit to build (empty = the ref that started the run).
+        required: false
+        default: ''
+        type: string
   workflow_dispatch:
     inputs:
       ref:
@@ -152,32 +156,4 @@ jobs:
           path: |
             dist/*.dmg
             dist/*.zip
-
-  release:
-    name: Publish GitHub Release
-    needs: build-macos
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download Build Artifacts
-        uses: actions/download-artifact@v8
-        with:
-          path: dist
-          merge-multiple: true
-
-      # SHA256SUMS is not generated here: it must also cover the AppImage and
-      # Windows installer, which are uploaded by hand. Run
-      # ./update_sha256sums.sh <tag> once every asset is on the release.
-      - name: Publish to GitHub Release
-        # Third-party action with release write access — pinned to the v3 commit.
-        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
-        with:
-          files: |
-            dist/*.dmg
-            dist/*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          if-no-files-found: error

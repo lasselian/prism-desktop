@@ -21,6 +21,7 @@ Usage:
 """
 
 import sys
+import time
 import shutil
 import plistlib
 import argparse
@@ -253,6 +254,10 @@ def create_zip_archive(app_bundle: Path, output_zip: Path) -> bool:
         return False
 
 
+DMG_ATTEMPTS = 3
+DMG_RETRY_SECONDS = 10
+
+
 def create_dmg_package(app_bundle: Path, output_dmg: Path, vol_name: str = "Prism Desktop") -> bool:
     """Create a drag-and-drop .dmg package with /Applications shortcut."""
     print(f"💿 Packaging into DMG: {output_dmg.name}...")
@@ -261,7 +266,7 @@ def create_dmg_package(app_bundle: Path, output_dmg: Path, vol_name: str = "Pris
 
     hdiutil = shutil.which("hdiutil")
     if not hdiutil:
-        print("⚠️ 'hdiutil' not found — skipping DMG creation.")
+        print("⚠️ 'hdiutil' not found. Pass --no-dmg to build without a DMG.")
         return False
 
     with tempfile.TemporaryDirectory(prefix="prism_dmg_") as temp_dir:
@@ -278,31 +283,37 @@ def create_dmg_package(app_bundle: Path, output_dmg: Path, vol_name: str = "Pris
         except Exception:
             pass
 
-        try:
-            subprocess.run(
-                [
-                    "hdiutil",
-                    "create",
-                    "-volname",
-                    vol_name,
-                    "-srcfolder",
-                    str(temp_path),
-                    "-ov",
-                    "-format",
-                    "UDZO",
-                    "-imagekey",
-                    "zlib-level=9",
-                    str(output_dmg),
-                ],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-            )
-            print(f"✅ DMG package created ({output_dmg.stat().st_size / (1024*1024):.1f} MB)")
-            return True
-        except subprocess.CalledProcessError as e:
-            print(f"❌ DMG creation failed: {e.stderr.decode() if isinstance(e.stderr, bytes) else e.stderr}")
-            return False
+        # hdiutil sometimes fails on CI runners with "Resource busy" and works a moment later.
+        for attempt in range(1, DMG_ATTEMPTS + 1):
+            try:
+                subprocess.run(
+                    [
+                        "hdiutil",
+                        "create",
+                        "-volname",
+                        vol_name,
+                        "-srcfolder",
+                        str(temp_path),
+                        "-ov",
+                        "-format",
+                        "UDZO",
+                        "-imagekey",
+                        "zlib-level=9",
+                        str(output_dmg),
+                    ],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                )
+                print(f"✅ DMG package created ({output_dmg.stat().st_size / (1024*1024):.1f} MB)")
+                return True
+            except subprocess.CalledProcessError as e:
+                print(
+                    f"❌ DMG creation failed (attempt {attempt}/{DMG_ATTEMPTS}): {e.stderr.decode() if isinstance(e.stderr, bytes) else e.stderr}"
+                )
+                if attempt < DMG_ATTEMPTS:
+                    time.sleep(DMG_RETRY_SECONDS)
+        return False
 
 
 def run_pyinstaller(cmd: list, cwd: Path, target_arch: str) -> str:
@@ -393,8 +404,10 @@ def build_macos(
     output_dmg = dist_dir / f"PrismDesktop-macOS-{arch_suffix}.dmg"
     if make_zip:
         create_zip_archive(app_bundle, output_zip)
-    if make_dmg:
-        create_dmg_package(app_bundle, output_dmg)
+    if make_dmg and not create_dmg_package(app_bundle, output_dmg):
+        # A release needs the DMG; building on without one would publish a release that lacks it.
+        print("❌ No DMG was created, so the build fails. Pass --no-dmg to build without one.")
+        sys.exit(1)
     _print_build_summary(final_arch, app_bundle, output_zip if make_zip else None, output_dmg if make_dmg else None)
 
 

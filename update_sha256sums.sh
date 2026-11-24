@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Regenerate SHA256SUMS for a GitHub release from every asset on it.
 #
-# Run this after the last asset (AppImage, Windows installer, macOS builds) is
-# uploaded. The auto-updater refuses a download that SHA256SUMS does not list,
-# so a release whose sums file misses an asset cannot update that platform.
+# The Release workflow writes SHA256SUMS itself, so this is only for repairing
+# a release by hand (an asset replaced after publishing, say). Run it after the
+# last asset is uploaded. The auto-updater refuses a download that SHA256SUMS
+# does not list, so a release whose sums file misses an asset cannot update
+# that platform.
 #
 # Usage: ./update_sha256sums.sh <tag>
 set -euo pipefail
