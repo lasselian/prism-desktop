@@ -582,13 +582,10 @@ async def create_ha_power_switch(
         power_cfg["switch_entry_id"] = entry_id
     save_config_fn()
 
+    # No device name or MAC address here: prism.log gets shared in bug reports.
     logger.info(
-        "[PowerControl] Home Assistant switch %s ('%s', mac=%s, notify=%s, wol_available=%s); remote shutdown enabled",
+        "[PowerControl] Home Assistant switch %s; remote shutdown enabled",
         "updated" if updated else "created",
-        target_name,
-        mac,
-        notify_service,
-        wol_available,
     )
     return PowerSwitchResult(
         ok=True,
