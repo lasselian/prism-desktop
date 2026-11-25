@@ -41,6 +41,7 @@ class HAWebSocket(QObject):
     disconnected = pyqtSignal()
     state_changed = pyqtSignal(str, dict)  # entity_id, new_state
     notification_received = pyqtSignal(dict)  # full notification payload dict
+    command_received = pyqtSignal(str, dict)  # mobile_app command_* message, extra data dict
     error = pyqtSignal(str)
 
     def __init__(self, url: str = "", token: str = ""):
@@ -232,10 +233,16 @@ class HAWebSocket(QObject):
         message_text = event.get('message', '')
         if not message_text:
             return
-        payload = {'title': event.get('title', DEFAULT_NOTIFICATION_TITLE), 'message': message_text}
         extra = event.get('data', {})
-        if isinstance(extra, dict):
-            payload = {**payload, **extra}
+        extra_dict = extra if isinstance(extra, dict) else {}
+        if isinstance(message_text, str):
+            normalized = message_text.strip().lower()
+            if normalized.startswith('command_'):
+                self.command_received.emit(normalized, extra_dict)
+                return
+        payload = {'title': event.get('title', DEFAULT_NOTIFICATION_TITLE), 'message': message_text}
+        if extra_dict:
+            payload = {**payload, **extra_dict}
         self.notification_received.emit(payload)
 
     def _handle_state_changed(self, event_data: dict):

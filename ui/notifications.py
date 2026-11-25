@@ -213,3 +213,41 @@ def notify_welcome(dashboard, on_done):
 def dismiss_welcome(dashboard):
     """End the walkthrough early (the user went to Settings), shown or still waiting."""
     dashboard.dismiss_notice(_WELCOME_KEY)
+
+
+# ── PC Power Control ──────────────────────────────────────────────────────────
+
+
+def notify_power_switch_result(dashboard, result):
+    """Shown after creating or updating the Home Assistant PC power switch."""
+    if not result.ok:
+        dashboard.show_toast(
+            t("settings.power.switch_failed", error=result.error),
+            duration_ms=8000,
+            kind="error",
+            icon="power",
+            key="power_switch",
+            urgent=True,
+        )
+        return
+
+    if not result.wol_available:
+        dashboard.show_toast(
+            t("settings.power.switch_wol_hint", name=result.switch_name),
+            duration_ms=10000,
+            kind="warning",
+            icon="power",
+            key="power_switch",
+            urgent=True,
+        )
+        return
+
+    key = "settings.power.switch_updated" if result.updated else "settings.power.switch_created"
+    dashboard.show_toast(
+        t(key, name=result.switch_name),
+        duration_ms=6000,
+        kind="success",
+        icon="power",
+        key="power_switch",
+        urgent=True,
+    )

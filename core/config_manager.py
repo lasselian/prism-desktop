@@ -81,6 +81,15 @@ class ConfigManager:
                 "auto_listen": False,
                 "speak_replies": True,
             },
+            "power_control": {
+                "allow_shutdown": False,
+                "allow_restart": False,
+                "allow_sleep": False,
+                "allow_hibernate": False,
+                "allow_lock": False,
+                "wol_mac": "",
+                "switch_entry_id": "",
+            },
             "buttons": [],
             "welcome_shown": False,
         }

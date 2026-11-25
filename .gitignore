@@ -16,13 +16,11 @@ AppDir/
 *.AppImage
 appimagetool*
 
-# Tests (kept local, not published)
-tests/
-
 # Python
 __pycache__/
 *.py[cod]
 *.so
+.pytest_cache/
 core/_generated_build_info.py
 
 # IDEs
