@@ -15,6 +15,7 @@ SERVICE_CALL_TIMEOUT = 10  # seconds
 # goes into a URL path, so a hand-edited config cannot point the authenticated
 # request at another endpoint.
 CAMERA_ENTITY_RE = re.compile(r"camera\.[a-z0-9_]+")
+FLOW_ID_RE = re.compile(r"[A-Za-z0-9_-]+")
 
 
 class HAClient:
@@ -162,6 +163,82 @@ class HAClient:
         except Exception as e:
             self.logger.error(f"Error fetching entities: {e}")
             return []
+
+    async def get_services(self) -> list[dict]:
+        """Fetch all available Home Assistant service domains and their services."""
+        status, data = await self._request_json("GET", "/api/services")
+        return data if status == 200 and isinstance(data, list) else []
+
+    async def _request_json(
+        self,
+        method: str,
+        path: str,
+        payload: Optional[dict] = None,
+        timeout: int = 10,
+    ) -> tuple[int, object]:
+        """Send an authenticated JSON request to HA. Returns (http_status, parsed_json_or_text).
+
+        Status 0 indicates a transport/client error or missing credentials.
+        """
+        if not self.url or not self.token:
+            return 0, "URL and token are required"
+        try:
+            session = self._get_session()
+            kwargs: dict = {"timeout": timeout, "allow_redirects": False}
+            if payload is not None:
+                kwargs["json"] = payload
+            async with session.request(method, f"{self.url}{path}", **kwargs) as response:
+                try:
+                    body = await response.json(content_type=None)
+                except Exception:
+                    body = await response.text()
+                return response.status, body
+        except Exception as e:
+            detail = str(e) or type(e).__name__
+            self.logger.error(f"HA request {method} {path} failed: {detail}")
+            return 0, detail
+
+    async def get_config_entries(self) -> tuple[int, object]:
+        """List Home Assistant config entries."""
+        return await self._request_json("GET", "/api/config/config_entries/entry")
+
+    async def start_config_flow(self, handler: str, show_advanced_options: bool = False) -> tuple[int, object]:
+        """Start a Home Assistant config entry flow for `handler` (e.g. 'template')."""
+        return await self._request_json(
+            "POST",
+            "/api/config/config_entries/flow",
+            {"handler": handler, "show_advanced_options": show_advanced_options},
+        )
+
+    async def continue_config_flow(self, flow_id: str, user_input: dict) -> tuple[int, object]:
+        """Submit the next step of an active Home Assistant config flow."""
+        if not isinstance(flow_id, str) or not FLOW_ID_RE.fullmatch(flow_id):
+            return 0, "Invalid flow_id"
+        return await self._request_json("POST", f"/api/config/config_entries/flow/{flow_id}", user_input)
+
+    async def abort_config_flow(self, flow_id: str) -> bool:
+        """Abort an in-progress Home Assistant config flow."""
+        if not isinstance(flow_id, str) or not FLOW_ID_RE.fullmatch(flow_id):
+            return False
+        status, _ = await self._request_json("DELETE", f"/api/config/config_entries/flow/{flow_id}")
+        return status == 200
+
+    async def start_options_flow(self, entry_id: str) -> tuple[int, object]:
+        """Start an options flow for an existing Home Assistant config entry."""
+        return await self._request_json("POST", "/api/config/config_entries/options/flow", {"handler": entry_id})
+
+    async def continue_options_flow(self, flow_id: str, user_input: dict) -> tuple[int, object]:
+        """Submit the next step of an active Home Assistant options flow."""
+        if not isinstance(flow_id, str) or not FLOW_ID_RE.fullmatch(flow_id):
+            return 0, "Invalid flow_id"
+        return await self._request_json("POST", f"/api/config/config_entries/options/flow/{flow_id}", user_input)
+
+    async def abort_options_flow(self, flow_id: str) -> bool:
+        """Abort an in-progress Home Assistant options flow."""
+        if not isinstance(flow_id, str) or not FLOW_ID_RE.fullmatch(flow_id):
+            return False
+        status, _ = await self._request_json("DELETE", f"/api/config/config_entries/options/flow/{flow_id}")
+        return status == 200
 
     async def get_config(self) -> Optional[dict]:
         """Fetch Home Assistant instance config."""

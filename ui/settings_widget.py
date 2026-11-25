@@ -50,6 +50,7 @@ from services.location_manager import (
     get_distro_info,
     get_geoclue2_install_hint,
 )
+from services.power_control import detect_mac_address, is_action_supported
 
 # The record button's dot (idle); a rounded square while recording
 RECORD_ICON_IDLE_STYLE = 'background-color: white; border-radius: 6px;'
@@ -221,6 +222,7 @@ class SettingsWidget(QWidget):
     open_button_editor_requested = pyqtSignal(dict)
     request_delete_shortcut = pyqtSignal(dict)
     shortcut_deleted = pyqtSignal()
+    create_power_switch_requested = pyqtSignal(str)
 
     def __init__(
         self,
@@ -594,6 +596,7 @@ class SettingsWidget(QWidget):
             t("settings.section.appearance").title(),
             t("settings.section.shortcut").title(),
             t("settings.section.assist").title(),
+            t("settings.section.power").title(),
             t("settings.section.support").title(),
         ]
 
@@ -625,6 +628,7 @@ class SettingsWidget(QWidget):
             self._build_appearance_panel,
             self._build_shortcut_panel,
             self._build_assist_panel,
+            self._build_power_panel,
             self._build_support_panel,
         ]
         for i, builder in enumerate(panel_builders):
@@ -1084,6 +1088,121 @@ class SettingsWidget(QWidget):
         idx = combo.findData(value)
         combo.setCurrentIndex(idx if idx >= 0 else 0)
 
+    def _build_power_panel(self) -> QWidget:
+        container = QWidget()
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(8)
+
+        # Remote commands pill
+        cmd_frame, cmd_form = self._make_pill_panel()
+        cmd_vbox = cmd_frame.layout()
+        cmd_vbox.insertWidget(0, self._make_section_header(t("settings.power.commands_label")))
+
+        cmd_hint = QLabel(t("settings.power.commands_hint"))
+        cmd_hint.setWordWrap(True)
+        cmd_hint.setStyleSheet(HINT_LABEL_STYLE)
+        cmd_vbox.insertWidget(1, cmd_hint)
+
+        self.power_shutdown_check = ToggleSwitch(t("settings.power.shutdown_toggle"))
+        self.power_shutdown_check.setToolTip(t("settings.power.shutdown_tooltip"))
+        cmd_form.addRow("", self.power_shutdown_check)
+
+        self.power_restart_check = ToggleSwitch(t("settings.power.restart_toggle"))
+        self.power_restart_check.setToolTip(t("settings.power.restart_tooltip"))
+        cmd_form.addRow("", self.power_restart_check)
+
+        self.power_sleep_check = ToggleSwitch(t("settings.power.sleep_toggle"))
+        self.power_sleep_check.setToolTip(t("settings.power.sleep_tooltip"))
+        cmd_form.addRow("", self.power_sleep_check)
+
+        self.power_hibernate_check = ToggleSwitch(t("settings.power.hibernate_toggle"))
+        self.power_hibernate_check.setToolTip(t("settings.power.hibernate_tooltip"))
+        if not is_action_supported("hibernate"):
+            self.power_hibernate_check.setVisible(False)
+        cmd_form.addRow("", self.power_hibernate_check)
+
+        self.power_lock_check = ToggleSwitch(t("settings.power.lock_toggle"))
+        self.power_lock_check.setToolTip(t("settings.power.lock_tooltip"))
+        cmd_form.addRow("", self.power_lock_check)
+
+        vbox.addWidget(cmd_frame)
+
+        # Home Assistant switch pill
+        switch_frame, switch_form = self._make_pill_panel()
+        switch_vbox = switch_frame.layout()
+        switch_vbox.insertWidget(0, self._make_section_header(t("settings.power.switch_label")))
+
+        switch_hint = QLabel(t("settings.power.switch_hint"))
+        switch_hint.setWordWrap(True)
+        switch_hint.setStyleSheet(HINT_LABEL_STYLE)
+        switch_vbox.insertWidget(1, switch_hint)
+
+        self.power_mac_input = QLineEdit()
+        self.power_mac_input.setPlaceholderText(t("settings.power.mac_placeholder"))
+        switch_form.addRow(t("settings.power.mac_label"), self.power_mac_input)
+
+        self.create_power_switch_btn = QPushButton(t("settings.power.create_switch_btn"))
+        self.create_power_switch_btn.setObjectName("updateBtn")
+        self.create_power_switch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.create_power_switch_btn.clicked.connect(self._on_create_power_switch_clicked)
+        switch_vbox.addWidget(self.create_power_switch_btn)
+
+        self._power_switch_status_label = QLabel()
+        self._power_switch_status_label.setWordWrap(True)
+        self._power_switch_status_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+        self._power_switch_status_label.hide()
+        switch_vbox.addWidget(self._power_switch_status_label)
+
+        vbox.addWidget(switch_frame)
+        vbox.addStretch(1)
+        return container
+
+    def _on_create_power_switch_clicked(self):
+        self.create_power_switch_btn.setEnabled(False)
+        self._set_power_switch_status("working", t("settings.power.creating"))
+        self.create_power_switch_requested.emit(self.power_mac_input.text().strip())
+
+    def _set_power_switch_status(self, state: str, text: str = ""):
+        if state == "idle":
+            self._power_switch_status_label.hide()
+            QTimer.singleShot(0, self.content_height_changed.emit)
+            return
+        color = {
+            "working": "#8e8e93",
+            "ok": "#34A853",
+            "warning": "#FF8C00",
+            "error": "#e53935",
+        }.get(state, "#8e8e93")
+        self._power_switch_status_label.setStyleSheet(f"font-size: 11px; color: {color};")
+        self._power_switch_status_label.setText(f"●  {text}")
+        self._power_switch_status_label.show()
+        QTimer.singleShot(0, self.content_height_changed.emit)
+
+    def _refresh_power_switch_btn_text(self):
+        has_switch = bool(self.config.get("power_control", {}).get("switch_entry_id"))
+        key = "settings.power.update_switch_btn" if has_switch else "settings.power.create_switch_btn"
+        self.create_power_switch_btn.setText(t(key))
+
+    def on_power_switch_result(self, result):
+        """Update Power Control UI after creating/updating the Home Assistant switch."""
+        self.create_power_switch_btn.setEnabled(True)
+        if not result.ok:
+            self._set_power_switch_status("error", t("settings.power.switch_failed", error=result.error))
+            return
+
+        self.power_shutdown_check.setChecked(True)
+        if result.mac:
+            self.power_mac_input.setText(result.mac)
+        self._refresh_power_switch_btn_text()
+
+        if not result.wol_available:
+            self._set_power_switch_status("warning", t("settings.power.switch_wol_hint", name=result.switch_name))
+        elif result.updated:
+            self._set_power_switch_status("ok", t("settings.power.switch_updated", name=result.switch_name))
+        else:
+            self._set_power_switch_status("ok", t("settings.power.switch_created", name=result.switch_name))
+
     def _build_support_panel(self) -> QWidget:
         container = QWidget()
         vbox = QVBoxLayout(container)
@@ -1407,6 +1526,18 @@ class SettingsWidget(QWidget):
         self._select_combo_data(self.assist_speaker_combo, assist_cfg.get('speaker_device_id', ''))
         self._update_assist_controls_enabled(self.assist_enabled_check.isChecked())
 
+        power_cfg = self.config.get('power_control', {})
+        self.power_shutdown_check.setChecked(bool(power_cfg.get('allow_shutdown', False)))
+        self.power_restart_check.setChecked(bool(power_cfg.get('allow_restart', False)))
+        self.power_sleep_check.setChecked(bool(power_cfg.get('allow_sleep', False)))
+        self.power_hibernate_check.setChecked(
+            bool(power_cfg.get('allow_hibernate', False)) and is_action_supported("hibernate")
+        )
+        self.power_lock_check.setChecked(bool(power_cfg.get('allow_lock', False)))
+        saved_mac = power_cfg.get('wol_mac', '')
+        self.power_mac_input.setText(saved_mac or (detect_mac_address(ha.get('url', '')) or ''))
+        self._refresh_power_switch_btn_text()
+
     def save_settings(self):
         """Save and emit config."""
         self._cleanup_threads()
@@ -1461,6 +1592,14 @@ class SettingsWidget(QWidget):
         self.config['assist']['speak_replies'] = self.assist_speak_replies_check.isChecked()
         self.config['assist']['mic_device_id'] = self.assist_mic_combo.currentData() or ""
         self.config['assist']['speaker_device_id'] = self.assist_speaker_combo.currentData() or ""
+
+        power_cfg = self.config.setdefault('power_control', {})
+        power_cfg['allow_shutdown'] = self.power_shutdown_check.isChecked()
+        power_cfg['allow_restart'] = self.power_restart_check.isChecked()
+        power_cfg['allow_sleep'] = self.power_sleep_check.isChecked()
+        power_cfg['allow_hibernate'] = self.power_hibernate_check.isChecked() and is_action_supported("hibernate")
+        power_cfg['allow_lock'] = self.power_lock_check.isChecked()
+        power_cfg['wol_mac'] = self.power_mac_input.text().strip()
 
         if 'shortcut' not in self.config:
             self.config['shortcut'] = {}

@@ -15,6 +15,7 @@ those places, so a change for one platform doesn't break another.
 | Idle time | `GetLastInputInfo` | Mutter `IdleMonitor` (GNOME, also on Wayland), else `xprintidle` | `ioreg` `HIDIdleTime` |
 | Screen locked | Input desktop check | `loginctl` `LockedHint` | `ioreg` `CGSSessionScreenIsLocked` |
 | Mic / camera in use | Capability consent store in the registry | `pactl` capture streams / `/dev/video*` held open | — |
+| Power control | `shutdown /s /r /h`, `SetSuspendState` (sleep), `LockWorkStation` | `systemctl` / `loginctl` (`poweroff`, `reboot`, `suspend`, `hibernate`, `lock-session`) | `osascript` System Events (shut down, restart, lock), `pmset sleepnow` (sleep); hibernate unsupported |
 | Camera picture-in-picture | Tool window | xcb: `WM_TAKE_FOCUS` removed and `SKIP_TASKBAR` set via libX11 (`ui/utils/floating_window.py`) | Non-activating panel on all Spaces |
 | Updates | Downloads and runs the Inno Setup installer silently; it relaunches the app | Replaces the AppImage in place (written beside it, then renamed) | Swaps the `.app` bundle, rolling back if the second move fails |
 | Packaging | `build_exe.py` (PyInstaller) + `setup.iss` | `build_linux.py` (AppImage), `flake.nix` | `build_macos.py` (`.app`, `.dmg`, `.zip`; universal2 with a host-arch fallback) |

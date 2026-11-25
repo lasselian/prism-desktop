@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### PC power control
+
+- Home Assistant can now shut down, restart, sleep, hibernate or lock this PC (hibernate is not available on macOS). Every command is off until you turn it on under Settings > Power Control.
+- A button there creates an on/off switch for the PC in Home Assistant. "On" uses Wake-on-LAN, "off" shuts the PC down, and creating the switch turns on remote shutdown.
+
 ### Notifications
 
 - The first-run walkthrough now appears in the notification drawer inside the dashboard, like every other message, instead of in a separate floating window. If you close the dashboard part-way through it carries on from the same page, and opening Settings ends it.

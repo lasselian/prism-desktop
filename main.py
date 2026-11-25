@@ -126,6 +126,13 @@ from services.mobile_app import (
     get_system_metrics,
 )
 from services.system_sensors import FAST_SENSORS, collect as collect_system_sensors, enabled_sensor_ids
+from services.power_control import (
+    OFFLINE_ACTIONS,
+    create_ha_power_switch,
+    execute_power_action,
+    is_action_allowed,
+    parse_power_command,
+)
 from services.location_manager import get_location
 from ui.icons import load_mdi_font, icon_signals
 from services.update_checker import UpdateCheckerThread
@@ -474,6 +481,7 @@ class PrismDesktopApp(QObject):
         sw = self.dashboard.settings_widget
         sw.shortcut_deleted.connect(self._update_button_shortcuts)
         sw.shortcut_deleted.connect(self.save_config)
+        sw.create_power_switch_requested.connect(self._on_create_power_switch_requested)
 
         self._init_assist()
         self._apply_assist_visibility()
@@ -634,6 +642,7 @@ class PrismDesktopApp(QObject):
 
         self._ha_websocket.state_changed.connect(self.on_state_changed)
         self._ha_websocket.notification_received.connect(self.on_notification)
+        self._ha_websocket.command_received.connect(self.on_command_received)
         self._ha_websocket.connected.connect(self.on_ws_connected)
         self._ha_websocket.disconnected.connect(self.on_ws_disconnected)
         self._ha_websocket.error.connect(self.on_ws_error)
@@ -661,6 +670,7 @@ class PrismDesktopApp(QObject):
             try:
                 ws.state_changed.disconnect()
                 ws.notification_received.disconnect()
+                ws.command_received.disconnect()
                 ws.connected.disconnect()
                 ws.disconnected.disconnect()
                 ws.error.disconnect()
@@ -899,8 +909,9 @@ class PrismDesktopApp(QObject):
 
     async def _restart_ha_connections(self):
         logger.info("HA config changed, restarting connections...")
-        # Clear mobile_app registration so we re-register with the new HA instance
+        # Clear mobile_app registration and HA-specific switch entry so we re-register with the new HA instance
         self.config.setdefault("mobile_app", {}).pop("webhook_id", None)
+        self.config.setdefault("power_control", {}).pop("switch_entry_id", None)
         self._stop_location_loop()
         self._stop_metrics_loop()
         self.stop_websocket()
@@ -1305,6 +1316,51 @@ class PrismDesktopApp(QObject):
     @pyqtSlot(dict)
     def on_notification(self, payload: dict):
         self.notification_manager.show_ha_notification(payload)
+
+    @pyqtSlot(str, dict)
+    def on_command_received(self, command: str, data: dict):
+        action = parse_power_command(command)
+        if not action:
+            logger.debug(f"[PowerControl] Ignoring unknown mobile_app command: {command!r}")
+            return
+        if not is_action_allowed(self.config, action):
+            logger.warning(f"[PowerControl] Refused '{action}' command — disabled in settings")
+            return
+        _create_task_safe(self._run_power_command(action))
+
+    async def _run_power_command(self, action: str):
+        if action in OFFLINE_ACTIONS:
+            await self._push_sensor_state(False)
+        ok, detail = await asyncio.to_thread(execute_power_action, action)
+        if not ok:
+            logger.error(f"[PowerControl] Failed to run '{action}': {detail}")
+
+    @pyqtSlot(str)
+    def _on_create_power_switch_requested(self, mac_text: str):
+        _create_task_safe(self._create_power_switch(mac_text))
+
+    async def _create_power_switch(self, mac_text: str):
+        had_webhook = bool(self.config.get('mobile_app', {}).get('webhook_id'))
+        result = await create_ha_power_switch(
+            self.ha_client,
+            self.config,
+            self.save_config,
+            mac_address=mac_text,
+        )
+        # If switch creation also performed a brand-new mobile_app registration,
+        # reconnect the WS so it subscribes to push_notification_channel.
+        new_webhook = self.config.get('mobile_app', {}).get('webhook_id', '')
+        if not had_webhook and new_webhook and self._ha_websocket and not self._ha_websocket._webhook_id:
+            self._ha_websocket.set_webhook_id(new_webhook)
+            self.stop_websocket()
+            self.start_websocket()
+
+        if self.dashboard:
+            if getattr(self.dashboard, 'settings_widget', None):
+                self.dashboard.settings_widget.on_power_switch_result(result)
+            from ui.notifications import notify_power_switch_result
+
+            notify_power_switch_result(self.dashboard, result)
 
     @pyqtSlot()
     def on_ws_connected(self):
