@@ -20,7 +20,7 @@ those places, so a change for one platform doesn't break another.
 | Updates | Downloads and runs the Inno Setup installer silently; it relaunches the app | Replaces the AppImage in place (written beside it, then renamed) | Swaps the `.app` bundle, rolling back if the second move fails |
 | Packaging | `build_exe.py` (PyInstaller) + `setup.iss` | `build_linux.py` (AppImage), `flake.nix` | `build_macos.py` (`.app`, `.dmg`, `.zip`; universal2 with a host-arch fallback) |
 
-When a release publishes a `SHA256SUMS` asset, an update is only installed if the download is listed there with a matching hash. Releases without one install unchecked.
+An update is only installed if the release has a `SHA256SUMS` asset and the download is listed there with a matching hash.
 
 ## Platform workarounds worth knowing
 

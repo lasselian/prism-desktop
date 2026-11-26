@@ -11,6 +11,10 @@
 
 - The first-run walkthrough now appears in the notification drawer inside the dashboard, like every other message, instead of in a separate floating window. If you close the dashboard part-way through it carries on from the same page, and opening Settings ends it.
 
+### Security
+
+- The auto-updater now requires the release's `SHA256SUMS` file. A release without it is refused, instead of being installed unchecked. Thanks to [@aubierr](https://github.com/aubierr), who made this change first in their fork, `aubierr/prism-desktop`.
+
 ## 1.8.2
 
 ### Notifications
