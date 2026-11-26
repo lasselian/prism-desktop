@@ -407,6 +407,15 @@ def restart_app() -> None:
     QApplication.quit()
 
 
+def relaunch_app() -> None:
+    """Restart the application as it is; unlike restart_app, no update is involved."""
+    # Its own session, so the new instance outlives this one's process group.
+    detach = {} if sys.platform.startswith("win") else {"start_new_session": True}
+    # With no installer running, a packaged Windows build starts itself again.
+    subprocess.Popen(_relaunch_command() or [sys.executable], **detach)
+    QApplication.quit()
+
+
 def _relaunch_command() -> list[str] | None:
     """How to start the updated app, or None when the installer does it."""
     if not getattr(sys, "frozen", False):

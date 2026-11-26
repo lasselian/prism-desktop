@@ -120,17 +120,24 @@ class NoticeDrawer(QObject):
     def room_for(self, h: int) -> bool:
         """Whether the window can grow to fit a drawer of height `h` on its screen."""
         dash = self._dash
-        try:
-            screen = dash.screen() or QApplication.primaryScreen()
-        except RuntimeError:
-            screen = QApplication.primaryScreen()
-        if screen is None:
+        avail = self._available_rect()
+        if avail is None:
             return True
-        avail = screen.availableGeometry()
         grow = h - self._h
         if self.anchored_top:
             return dash.y() + dash.height() + grow <= avail.y() + avail.height()
         return dash.y() - grow >= avail.y()
+
+    def _available_rect(self) -> QRect | None:
+        """The area the window may grow into, in the coordinates of its position."""
+        stage = getattr(self._dash, '_wayland_stage', None)
+        if stage is not None:
+            return stage.rect()
+        try:
+            screen = self._dash.screen() or QApplication.primaryScreen()
+        except RuntimeError:
+            screen = QApplication.primaryScreen()
+        return None if screen is None else screen.availableGeometry()
 
     def animate_to(self, h: int, on_done: Callable[[], None] | None = None):
         """Grow or shrink to `h`, as soon as the dashboard isn't resizing itself."""

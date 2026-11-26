@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Glass UI on GNOME
+
+- Glass UI now works on GNOME 51+ (Wayland) using Mutter's native `ext-background-effect-v1` background blur, with frosted glass behind the dashboard, settings, editor, and Assist chat.
+- Switching Glass UI on or off on GNOME switches between native Wayland and XWayland on restart, with a one-click Restart button in the notification drawer.
+- The dashboard anchors to the tray corner with smooth fade-in and fade-out transitions, works cleanly alongside GNOME Shell extensions such as Blur my Shell, and camera picture-in-picture windows can be dragged and resized natively on Wayland.
+
 ### PC power control
 
 - Home Assistant can now shut down, restart, sleep, hibernate or lock this PC (hibernate is not available on macOS). Every command is off until you turn it on under Settings > Power Control.

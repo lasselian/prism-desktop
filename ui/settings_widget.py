@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QSizePolicy,
+    QLayout,
 )
 from ui.widgets.toggle_switch import ToggleSwitch
 from PyQt6.QtCore import (
@@ -36,13 +37,14 @@ from PyQt6.QtCore import (
     QObject,
     QEvent,
 )
-from PyQt6.QtGui import QColor, QDesktopServices, QIcon, QPixmap, QPainter
+from PyQt6.QtGui import QColor, QDesktopServices, QGuiApplication, QIcon, QPixmap, QPainter
 from PyQt6.QtWidgets import QGraphicsOpacityEffect
 from core.localization_manager import t, current_language, supported_languages, init_localization
 
 from core.build_info import APP_VERSION, get_display_version
 from core.worker_threads import ConnectionTestThread
 from ui.icons import Icons, get_mdi_font
+from ui.utils.wayland_blur import is_glass_ui_supported, is_gnome_glass_supported
 from services.update_checker import UpdateCheckerThread
 from services.location_manager import (
     is_geoclue2_available,
@@ -843,9 +845,16 @@ class SettingsWidget(QWidget):
 
         self.glass_ui_check = ToggleSwitch(t("settings.appearance.glass_toggle"))
         self.glass_ui_check.setToolTip(t("settings.appearance.glass_tooltip"))
-        if sys.platform.startswith('linux'):
+        if not is_glass_ui_supported():
             self.glass_ui_check.setVisible(False)
         toggle_form.addRow("", self.glass_ui_check)
+
+        self._glass_restart_note = QLabel(t("settings.appearance.glass_restart_note"))
+        self._glass_restart_note.setStyleSheet(HINT_LABEL_STYLE)
+        self._glass_restart_note.setWordWrap(True)
+        self._glass_restart_note.hide()
+        toggle_form.addRow("", self._glass_restart_note)
+        self.glass_ui_check.toggled.connect(self._update_glass_restart_note)
 
         self.pin_check = ToggleSwitch(t("settings.appearance.pin_toggle"))
         self.pin_check.setToolTip(t("settings.appearance.pin_tooltip"))
@@ -1432,6 +1441,11 @@ class SettingsWidget(QWidget):
         Temporarily cycles through each panel to measure it, then restores the active one.
         """
         original_idx = self._active_panel_idx
+        # Leave room for the Glass UI restart hint: it can appear after the
+        # window height has been locked to this value.
+        note_hidden = self._glass_restart_note.isHidden()
+        if is_gnome_glass_supported():
+            self._set_glass_note_visible(True)
         max_h = 0
         for i in range(len(self._panels)):
             for j, p in enumerate(self._panels):
@@ -1442,8 +1456,16 @@ class SettingsWidget(QWidget):
                 max_h = h
         for j, p in enumerate(self._panels):
             p.setVisible(j == original_idx)
+        self._set_glass_note_visible(not note_hidden)
         self._activate_all_layouts()
         return max_h
+
+    def _set_glass_note_visible(self, visible: bool):
+        self._glass_restart_note.setVisible(visible)
+        # The note sits in a nested layout, whose cached size would otherwise
+        # survive into an immediate sizeHint().
+        for layout in self.findChildren(QLayout):
+            layout.invalidate()
 
     # -------------------------------------------------------------------------
     # Config load / save
@@ -1484,7 +1506,8 @@ class SettingsWidget(QWidget):
 
         self.show_dimming_check.setChecked(app.get('show_dimming', False))
         self.refresh_indicator_check.setChecked(app.get('refresh_indicators', False))
-        self.glass_ui_check.setChecked(app.get('glass_ui', False) and not sys.platform.startswith('linux'))
+        self.glass_ui_check.setChecked(bool(app.get('glass_ui', False)) and is_glass_ui_supported())
+        self._update_glass_restart_note()
         self.pin_check.setChecked(app.get('pin_window', False))
 
         pages = app.get('pages', 3)
@@ -1654,6 +1677,15 @@ class SettingsWidget(QWidget):
         init_localization(selected_lang)
         self._language_restart_note.setText(t("settings.appearance.language_restart_note"))
         self._language_restart_note.show()
+
+    def _update_glass_restart_note(self, *_):
+        """Show the hint while the toggle and the running Qt platform disagree (GNOME only)."""
+        needed = is_gnome_glass_supported() and self.glass_ui_check.isChecked() != (
+            QGuiApplication.platformName().startswith('wayland')
+        )
+        if needed == self._glass_restart_note.isHidden():
+            self._glass_restart_note.setVisible(needed)
+            QTimer.singleShot(0, self.content_height_changed.emit)
 
     def on_border_effect_changed(self, text):
         self.border_effect_combo.set_effect(text)

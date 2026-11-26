@@ -80,6 +80,8 @@ from ui.visuals.dashboard_effects import (
     capture_glass_background,
 )
 from ui.utils.key_events import event_matches_shortcut
+from ui.utils.wayland_blur import attach_wayland_blur, is_native_wayland_blur_active
+from ui.utils.wayland_stage import WaylandStageWindow
 
 FOOTER_BUTTON_STYLE = 'background: rgba(255,255,255,0.1); border: none; border-radius: 4px; color: #888;'
 
@@ -128,6 +130,9 @@ class Dashboard(QWidget):
         parent=None,
     ):
         super().__init__(parent)
+        # Native Wayland lets no window position itself, so there the dashboard is
+        # placed inside a see-through maximized one. None everywhere else.
+        self._wayland_stage = WaylandStageWindow(self) if is_native_wayland_blur_active() else None
         self.config = config
         self.theme_manager = theme_manager
         self.input_manager = input_manager
@@ -173,7 +178,8 @@ class Dashboard(QWidget):
         self._border_effect = app_config.get('border_effect', 'Rainbow')
         self._show_dimming = app_config.get('show_dimming', False)
         self._refresh_indicators_enabled = app_config.get('refresh_indicators', False)
-        self._glass_ui = app_config.get('glass_ui', False) and not sys.platform.startswith('linux')
+        self._glass_ui = bool(app_config.get('glass_ui', False)) and self._glass_ui_usable()
+        self._wayland_blur = None  # compositor blur handle, attached in setup_ui()
         self._button_style = app_config.get('button_style', 'Gradient').capitalize()
         self._temperature_unit = app_config.get('temperature_unit', 'celsius')
 
@@ -457,6 +463,16 @@ class Dashboard(QWidget):
         if not screen:
             return
 
+        if self._wayland_stage is None:
+            self._target_pos = self._screen_anchor(screen)
+        else:
+            self._target_pos = self._stage_anchor(screen)
+
+        if move_now and self.isVisible():
+            self.move(self._target_pos)
+
+    def _screen_anchor(self, screen) -> QPoint:
+        """The window position, in screen coordinates, next to the tray."""
         screen_rect = screen.availableGeometry()
         target_x = screen_rect.right() - self.width() - 10
         if self._is_top_anchored():
@@ -471,10 +487,46 @@ class Dashboard(QWidget):
                 safe_target_y = full_rect.bottom() - self.height() - 60
                 target_y = min(target_y, safe_target_y)
 
-        self._target_pos = QPoint(target_x, target_y)
+        return QPoint(target_x, target_y)
 
-        if move_now and self.isVisible():
+    def _stage_anchor(self, screen) -> QPoint:
+        """The same corner inside the Wayland stage, whose area already clears the panels."""
+        area = self._wayland_stage.bounds(screen)
+        x = max(0, area.width() - self.width() - 10)
+        y = 10 if self._is_top_anchored() else max(0, area.height() - self.height() - 10)
+        return QPoint(x, y)
+
+    def on_stage_resized(self):
+        """The compositor sized the Wayland stage: keep the dashboard in its corner."""
+        if self._is_resizing_window:
+            return
+        self.refresh_tray_anchor()
+        if self.anim.state() == QPropertyAnimation.State.Running:
+            self.set_anim_progress(self._anim_progress)  # keeps the slide offset
+        elif hasattr(self, '_target_pos'):
             self.move(self._target_pos)
+
+    def setVisible(self, visible: bool):
+        if visible and getattr(self, '_wayland_stage', None) is not None:
+            self._present_stage()
+        super().setVisible(visible)
+
+    def _present_stage(self):
+        """Open the stage, with the dashboard already in its corner."""
+        if self._wayland_stage.isVisible():
+            self._wayland_stage.present()
+            return
+        screen = self._screen_for_tray_geometry()
+        self.refresh_tray_anchor()
+        if hasattr(self, '_target_pos'):
+            self.move(self._target_pos)
+        self._wayland_stage.present(screen)
+
+    def _raise_stage(self):
+        """Bring the Wayland stage forward; raising the dashboard only restacks it inside."""
+        if self._wayland_stage is not None:
+            self._wayland_stage.raise_()
+            self._wayland_stage.activateWindow()
 
     def set_anim_height(self, h):
         h = int(h)
@@ -487,6 +539,7 @@ class Dashboard(QWidget):
                 self._height_anim_anchor_bottom = self.y() + self.height()
             new_y = self._height_anim_anchor_bottom - h
         self.setGeometry(self.x(), new_y, self.width(), h)
+        self._sync_wayland_blur()
 
         # Keep the (opaque) Assist overlay locked to the window's rect on
         # every frame of an Assist-driven resize, so the grid underneath is
@@ -509,6 +562,7 @@ class Dashboard(QWidget):
 
         # Use setGeometry for atomic move+resize (smoother)
         self.setGeometry(new_x, self.y(), w, self.height())
+        self._sync_wayland_blur()
 
     anim_width = pyqtProperty(float, get_anim_width, set_anim_width)
 
@@ -868,8 +922,10 @@ class Dashboard(QWidget):
         if self.layout():
             QWidget().setLayout(self.layout())
 
-        # Frameless window
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
+        # Frameless window (on the Wayland stage, the stage is the window)
+        if self._wayland_stage is None:
+            flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint
+            self.setWindowFlags(flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
@@ -896,6 +952,9 @@ class Dashboard(QWidget):
                     child.widget().deleteLater()
 
         root_layout.addWidget(self.container)
+
+        blur_window = self if self._wayland_stage is None else self._wayland_stage
+        self._wayland_blur = attach_wayland_blur(blur_window, self._wayland_blur_region, enabled=self._glass_ui)
 
         # Container Layout (Stack + Footer)
         self.content_layout = QVBoxLayout(self.container)
@@ -1119,7 +1178,12 @@ class Dashboard(QWidget):
 
             self.assist_overlay.set_border_effect(self._border_effect)
             self.assist_overlay.open_fade_in(
-                target_rect, color=accent_color, base_color=base_color, instant_close=instant, instant=instant
+                target_rect,
+                color=accent_color,
+                base_color=base_color,
+                instant_close=instant,
+                instant=instant,
+                glass=self._glass_ui,
             )
 
         if instant:
@@ -1188,11 +1252,10 @@ class Dashboard(QWidget):
 
         def _on_finished():
             curtain.setGraphicsEffect(None)
-            if fade_in:
-                curtain.hide()
-            else:
+            if not fade_in:
                 self.stack_widget.hide()
                 self.footer_widget.hide()
+            curtain.hide()
             self._assist_grid_fade_anim = None
             if then is not None:
                 then()
@@ -1462,7 +1525,7 @@ class Dashboard(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         # Glass UI: Draw frosted desktop blur behind the container
-        if self._glass_ui and hasattr(self, '_glass_bg_pixmap') and self._glass_bg_pixmap:
+        if self._uses_glass_capture() and getattr(self, '_glass_bg_pixmap', None):
             container_geo = self.container.geometry()
 
             # Clip to container's rounded rect
@@ -1486,10 +1549,12 @@ class Dashboard(QWidget):
 
             painter.setClipPath(QPainterPath())  # Reset clip
 
-        # Ensure window receives mouse events (transparent windows pass events through on Windows)
-        painter.setBrush(QColor(0, 0, 0, 1))  # Alpha 1/255
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRect(self.rect())
+        # Ensure window receives mouse events (transparent windows pass events through on Windows).
+        # Wayland delivers them anyway, and the margin around the blurred container stays clear.
+        if not is_native_wayland_blur_active():
+            painter.setBrush(QColor(0, 0, 0, 1))  # Alpha 1/255
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRect(self.rect())
         painter.end()
 
         # Only draw if animating and effect is active
@@ -1623,12 +1688,24 @@ class Dashboard(QWidget):
 
         self.refresh_tray_anchor(tray_geometry=tray_geometry)
 
+        if self._wayland_stage is not None:
+            self.anim.stop()
+            self._anim_progress = 0.0
+            self.move(self._target_pos)
+            self._ignore_focus_loss = True
+            self._wayland_stage.present_fade_in(
+                screen,
+                blur_enabled=self._glass_ui,
+                on_finished=self._on_stage_fade_in_finished,
+            )
+            return
+
         # Set initial state (Hidden & Positioned) BEFORE showing
         # This prevents the window from flashing in the center/wrong place
         self.set_anim_progress(0.0)
 
         # Capture frosted glass background BEFORE showing (so we grab the clean desktop)
-        if self._glass_ui:
+        if self._uses_glass_capture():
             # Exclude this window from OS screen grabs so live refresh doesn't capture itself
             self._set_capture_exclusion(True)
             # Position the window first so geometry is correct for capture
@@ -1663,7 +1740,30 @@ class Dashboard(QWidget):
 
         self._trigger_button_entry_animations()
 
+    def _on_stage_fade_in_finished(self):
+        """Finish opening after WaylandStageWindow's in-place fade completes."""
+        self._anim_progress = 1.0
+        self._ignore_focus_loss = False
+        self._raise_stage()
+        self.raise_()
+        self.activateWindow()
+        self.setFocus()
+        self.notice_center.dashboard_shown()
+
+        self.border_anim.stop()
+        self.border_anim.setStartValue(0.0)
+        self.border_anim.setEndValue(1.0)
+        self.border_anim.start()
+
+        self._trigger_button_entry_animations()
+
     def toggle(self, tray_geometry: QRect | None = None):
+        if self._wayland_stage is not None:
+            if self._wayland_stage.is_showing():
+                self.close_animated()
+            else:
+                self.show_near_tray(tray_geometry=tray_geometry)
+            return
         if self.isVisible() and self.windowOpacity() > 0.1:
             self.close_animated()
         else:
@@ -1691,6 +1791,9 @@ class Dashboard(QWidget):
         self._glass_refresh_timer.stop()
         self._set_capture_exclusion(False)
         self.set_anim_progress(0.0)
+        if self._wayland_stage is not None:
+            self._wayland_stage.hide_immediately()
+            return
         super().hide()
 
     def close_animated(self):
@@ -1700,6 +1803,10 @@ class Dashboard(QWidget):
         self.border_anim.stop()
         self._glass_refresh_timer.stop()
 
+        if self._wayland_stage is not None:
+            self._wayland_stage.fade_out_and_hide()
+            return
+
         # Recalculate target position from current window position
         self._target_pos = QPoint(self.x(), self.y())
 
@@ -1708,6 +1815,39 @@ class Dashboard(QWidget):
         self.anim.setStartValue(self._anim_progress)
         self.anim.setEndValue(0.0)
         self.anim.start()
+
+    # ── Glass UI ────────────────────────────────────────────────────────────
+
+    def _glass_ui_usable(self) -> bool:
+        """On Linux Glass UI needs the compositor's blur, so also a native Wayland window."""
+        if not sys.platform.startswith('linux'):
+            return True
+        return is_native_wayland_blur_active()
+
+    def _uses_glass_capture(self) -> bool:
+        """True if Glass UI is on and Prism has to blur a screen capture itself."""
+        return self._glass_ui and not is_native_wayland_blur_active()
+
+    def set_glass_ui(self, requested: bool):
+        """Apply the Glass UI setting, as far as this session can show it."""
+        self._glass_ui = bool(requested) and self._glass_ui_usable()
+        self._sync_wayland_blur()
+
+    def _wayland_blur_region(self) -> tuple[int, int, int, int, int]:
+        """The container's rect in the blurred window's coordinates, and its corner radius."""
+        geo = self.container.geometry()
+        if self._wayland_stage is not None:
+            geo = geo.translated(self.pos())
+        return geo.x(), geo.y(), geo.width(), geo.height(), 12
+
+    def _sync_wayland_blur(self):
+        if self._wayland_stage is not None:
+            self._wayland_stage.set_blur_wanted(self._glass_ui)
+            if self._wayland_blur is not None and not self._wayland_stage.blur_suppressed:
+                self._wayland_blur.set_enabled(self._glass_ui)
+            self._wayland_stage.sync_child_region()
+        elif self._wayland_blur is not None:
+            self._wayland_blur.set_enabled(self._glass_ui)
 
     def _set_capture_exclusion(self, exclude: bool):
         """Hide/show this window from grabWindow() so the glass capture doesn't include itself."""
@@ -1722,7 +1862,7 @@ class Dashboard(QWidget):
 
     def _on_overlay_morph(self, progress: float):
         self.notice_center.raise_pill()
-        if not self._glass_ui:
+        if not self._uses_glass_capture():
             return
         # Pause only during transition; resume when fully open (1.0) or fully closed (0.0)
         if progress <= 0 or progress >= 1:
@@ -1732,7 +1872,7 @@ class Dashboard(QWidget):
             self._glass_refresh_timer.stop()
 
     def _refresh_glass_background(self):
-        if self._glass_ui and self.isVisible():
+        if self._uses_glass_capture() and self.isVisible():
             t0 = time.perf_counter()
             self._glass_bg_pixmap, self._glass_capture_pos = capture_glass_background(self)
             cost_ms = (time.perf_counter() - t0) * 1000.0
@@ -1768,10 +1908,11 @@ class Dashboard(QWidget):
             # Activate only after the window is fully visible — prevents focus theft
             # at opacity 0 which causes the previous window's title bar to flash.
             self._ignore_focus_loss = False
+            self._raise_stage()
             self.raise_()
             self.activateWindow()
             self.setFocus()
-            if self._glass_ui and not self._glass_refresh_timer.isActive():
+            if self._uses_glass_capture() and not self._glass_refresh_timer.isActive():
                 # Start optimistic at the FPS cap; adapt down only if captures prove slow
                 self._glass_cost_ema = None
                 self._glass_refresh_timer.setInterval(GLASS_MIN_INTERVAL_MS)
@@ -1819,8 +1960,9 @@ class Dashboard(QWidget):
     def set_anim_progress(self, val):
         self._anim_progress = val
 
-        # 1. Opacity
-        self.setWindowOpacity(val)
+        # 1. Opacity (QtWayland has none, and warns on every call)
+        if not QApplication.platformName().startswith('wayland'):
+            self.setWindowOpacity(val)
 
         # 2. Slide relative to the tray edge.
         if hasattr(self, '_target_pos'):
@@ -1844,6 +1986,7 @@ class Dashboard(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._sync_wayland_blur()
         self.notice_center.dashboard_shown()
 
     def hideEvent(self, event):
@@ -1852,6 +1995,7 @@ class Dashboard(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._sync_wayland_blur()
         self.notice_center.reposition_soon()
         if self._assist_active:
             return
@@ -1862,6 +2006,7 @@ class Dashboard(QWidget):
     def _activate_after_show(self):
         """Activate the window after a no-animation show (fallback path)."""
         self._ignore_focus_loss = False
+        self._raise_stage()
         self.activateWindow()
         self.setFocus()
 
@@ -1941,8 +2086,8 @@ class Dashboard(QWidget):
         # Update custom colors
         self._show_dimming = app.get('show_dimming', False)
         self._refresh_indicators_enabled = app.get('refresh_indicators', False)
-        self._glass_ui = app.get('glass_ui', False) and not sys.platform.startswith('linux')
-        if self._glass_ui:
+        self.set_glass_ui(app.get('glass_ui', False))
+        if self._uses_glass_capture():
             self._set_capture_exclusion(True)
             self._glass_bg_pixmap, self._glass_capture_pos = capture_glass_background(self)
             if not self._glass_refresh_timer.isActive():
@@ -2139,18 +2284,28 @@ class Dashboard(QWidget):
         if not self.settings_widget:
             return 450
         # Called before show_settings locked a height: fit the content, within the screen.
-        screen = QApplication.primaryScreen()
-        max_h = int(screen.availableGeometry().height() * 0.9) if screen else 800
+        room = self._room_height()
+        max_h = int(room * 0.9) if room else 800
         return max(300, min(self.settings_widget.get_content_height() + 30, max_h))
 
     def _edit_view_height(self) -> int:
         if not hasattr(self, 'edit_widget'):
             return 400
         h = self.edit_widget.get_content_height() + 30  # container margins
-        screen = QApplication.primaryScreen()
-        if screen:
-            h = min(h, int(screen.availableGeometry().height() * 0.95))  # never taller than the screen
+        room = self._room_height()
+        if room:
+            h = min(h, int(room * 0.95))  # never taller than the screen
         return max(300, min(h, 2000))
+
+    def _room_height(self) -> int | None:
+        """How tall the window could be: the work area, or None if there is no screen."""
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return None
+        if self._wayland_stage is not None:
+            # availableGeometry() ignores panels on Wayland; the stage's size doesn't.
+            return self._wayland_stage.bounds(self._screen_for_tray_geometry()).height()
+        return screen.availableGeometry().height()
 
     def _lock_view_sizes(self, target_view: str, target_height: int):
         """Lock widget sizes before animation to prevent jitter."""
@@ -2263,10 +2418,9 @@ class Dashboard(QWidget):
             self.settings_widget.setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
             content_h = self.settings_widget.get_max_content_height()
             settings_height = content_h + 30
-            screen = QApplication.primaryScreen()
-            if screen:
-                max_screen_h = screen.availableGeometry().height() * 0.9
-                settings_height = max(300, min(settings_height, int(max_screen_h)))
+            room = self._room_height()
+            if room:
+                settings_height = max(300, min(settings_height, int(room * 0.9)))
             else:
                 settings_height = max(300, min(settings_height, 800))
             self._settings_locked_height = settings_height
@@ -2448,6 +2602,9 @@ class Dashboard(QWidget):
 
     def _reposition_after_morph(self):
         """Reposition window to keep it anchored to the configured tray edge."""
+        if self._wayland_stage is not None:
+            self.refresh_tray_anchor(move_now=True)
+            return
         try:
             screen = self.screen()
         except RuntimeError:  # underlying C++ window already deleted
@@ -2497,7 +2654,7 @@ class Dashboard(QWidget):
             if mode:
                 self._is_resizing_window = True
                 self._resize_mode = mode
-                self._resize_start_pos = event.globalPosition().toPoint()
+                self._resize_start_pos = self._drag_position(event)
                 self._glass_refresh_timer.stop()
                 self._resize_start_geo = (self.x(), self.y(), self.width(), self.height())
                 self._resize_start_rows = self._rows
@@ -2546,7 +2703,7 @@ class Dashboard(QWidget):
             super().mouseMoveEvent(event)
             return
 
-        target_rows, target_cols = self._resize_drag_target(event.globalPosition().toPoint() - self._resize_start_pos)
+        target_rows, target_cols = self._resize_drag_target(self._drag_position(event) - self._resize_start_pos)
         # Snap to whole rows and columns.
         current_rows = getattr(self, '_pending_rows_update', None)
         if current_rows is None:
@@ -2556,6 +2713,20 @@ class Dashboard(QWidget):
         if target_cols != self._cols:
             self.set_cols(target_cols)
         event.accept()
+
+    def _drag_position(self, event) -> QPoint:
+        """The pointer position that a resize drag is measured with.
+
+        On native Wayland the window stays put while Qt believes setGeometry
+        moved it, so global positions jump at every step; local ones don't.
+        On the Wayland stage the dashboard really moves, inside a window that
+        doesn't, so stage coordinates are the steady ones.
+        """
+        if self._wayland_stage is not None:
+            return self.mapToParent(event.position().toPoint())
+        if QApplication.platformName().startswith('wayland'):
+            return event.position().toPoint()
+        return event.globalPosition().toPoint()
 
     def _update_resize_cursor(self, x: float, y: float):
         """Resize cursor over the draggable edges: the left edge, and the edge away from the tray."""
@@ -2588,7 +2759,7 @@ class Dashboard(QWidget):
             self.unsetCursor()
 
             # Resume live glass capture after resize
-            if self._glass_ui:
+            if self._uses_glass_capture():
                 self._refresh_glass_background()
                 self._glass_refresh_timer.start()
 

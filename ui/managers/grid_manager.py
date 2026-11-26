@@ -137,7 +137,7 @@ class GridManager:
         dash._border_effect = appearance.get('border_effect', 'Rainbow')
         dash._show_dimming = appearance.get('show_dimming', False)
         dash._refresh_indicators_enabled = appearance.get('refresh_indicators', False)
-        dash._glass_ui = appearance.get('glass_ui', False)
+        dash.set_glass_ui(appearance.get('glass_ui', False))
         dash._button_style = appearance.get('button_style', 'Gradient')
         dash._temperature_unit = appearance.get('temperature_unit', 'celsius')
         dash.overlay_manager.set_temperature_unit_preference(dash._temperature_unit)
