@@ -1208,5 +1208,5 @@ def _tile_temperature(source_btn) -> float:
     """The temperature a climate tile shows (e.g. "21.5°"), or 20 when it shows none."""
     try:
         return float(str(source_btn._value).replace('°', '').strip())
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         return 20.0

@@ -11,6 +11,11 @@
 
 - The first-run walkthrough now appears in the notification drawer inside the dashboard, like every other message, instead of in a separate floating window. If you close the dashboard part-way through it carries on from the same page, and opening Settings ends it.
 
+### Fixes
+
+- Error handling now catches only the errors it expects, so a real bug is no longer silently ignored. Unexpected errors in the Home Assistant connection, the updater and the connection test now leave a traceback in `prism.log`. Thanks to [@aubierr](https://github.com/aubierr), who made this change first in their fork, `aubierr/prism-desktop`.
+- The shortcut and icon code now logs to `prism.log` instead of printing to a console that packaged builds don't have. Thanks to [@aubierr](https://github.com/aubierr), who made this change first in their fork, `aubierr/prism-desktop`.
+
 ### Security
 
 - The auto-updater now requires the release's `SHA256SUMS` file. A release without it is refused, instead of being installed unchecked. Thanks to [@aubierr](https://github.com/aubierr), who made this change first in their fork, `aubierr/prism-desktop`.

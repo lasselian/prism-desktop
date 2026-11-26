@@ -54,7 +54,7 @@ def get_resource_path(relative_path: str) -> Path:
         # PyInstaller extracts to a temp folder and sets _MEIPASS
         base_path = sys._MEIPASS
         return Path(base_path) / relative_path
-    except Exception:
+    except AttributeError:  # not a PyInstaller build
         return Path(__file__).parent.parent / relative_path
 
 

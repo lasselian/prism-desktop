@@ -157,6 +157,7 @@ class HAWebSocket(QObject):
                 keep_going = await self._receive_one()
             except Exception as e:
                 if self._running:
+                    self.logger.warning(f"WebSocket message loop error: {e}", exc_info=True)
                     self.error.emit(str(e))
                 break
             if not keep_going:
@@ -424,7 +425,7 @@ class HAWebSocket(QObject):
                 backoff = min(backoff * 2, max_backoff)
 
             except Exception as e:
-                self.logger.error(f"WebSocket Loop Error: {e}")
+                self.logger.error(f"WebSocket Loop Error: {e}", exc_info=True)
                 if self._should_stop_loop:
                     break
                 await asyncio.sleep(1)

@@ -1590,7 +1590,7 @@ class WeatherOverlay(BaseOverlay):
         """Weekday, condition icon, high and (when known) low."""
         try:
             day_str = datetime.fromisoformat(forecast.get('datetime', '')).strftime("%a")
-        except Exception:
+        except (TypeError, ValueError):
             day_str = "-"
         pref = self._temperature_unit_preference
         high = format_temperature(forecast.get('temperature', '--'), source_unit, pref, precision=1)

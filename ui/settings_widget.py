@@ -67,7 +67,7 @@ try:
         is_wayland_session,
         supports_wayland_global_shortcuts,
     )
-except Exception:
+except ImportError:  # dbus_next not installed (Windows, macOS, minimal Linux)
 
     def is_kde_wayland_session():
         return False

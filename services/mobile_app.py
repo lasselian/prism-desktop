@@ -74,7 +74,7 @@ def _get_device_name() -> str:
     """Return a human-readable device name based on hostname."""
     try:
         return socket.gethostname()
-    except Exception:
+    except OSError:
         return APP_DISPLAY_NAME
 
 
