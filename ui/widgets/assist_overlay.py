@@ -216,6 +216,7 @@ class AssistOverlay(BaseOverlay):
         self._text = "Assist"
         self._color = QColor("#7C4DFF")
         self._base_color = QColor("#2d2d2d")
+        self._glass = False
         self._listening = False
         self._busy = False
         self._speaking = False
@@ -420,6 +421,7 @@ class AssistOverlay(BaseOverlay):
         base_color: QColor = None,
         instant_close: bool = False,
         instant: bool = False,
+        glass: bool = False,
     ):
         """Show the panel directly at its final size/position and fade it
         in. With instant=True, appear immediately with no fade at all —
@@ -427,12 +429,13 @@ class AssistOverlay(BaseOverlay):
         open, so nothing should flash."""
         self._color = color or QColor("#7C4DFF")
         self._base_color = base_color or QColor("#2d2d2d")
+        self._glass = bool(glass)
         # Listening/busy/speaking and the status line are NOT reset here: they
         # follow the controller's signals, and auto-listen may already have
         # started the mic during the grid fade that precedes this call.
         # Closing resets them (controller.cancel() + request_close).
         self._instant_close = instant_close
-        self._content.setVisible(False)
+        self._content.setVisible(self._glass)
         self.input.clear()
         self._history_idx = None
         self.clear_chat()
@@ -465,7 +468,8 @@ class AssistOverlay(BaseOverlay):
         dashboard was hidden — a fade would reveal the grid), otherwise a
         quick fade-out."""
         self.input.clearFocus()
-        self._content.setVisible(False)
+        if not self._glass or self._instant_close:
+            self._content.setVisible(False)
         self.status_label.setText("")
         self._listening = self._busy = self._speaking = False
         self._update_action_button()
@@ -480,6 +484,7 @@ class AssistOverlay(BaseOverlay):
             self._fade(1.0, 0.0, QEasingCurve.Type.Linear, self._on_fade_out_finished)
 
     def _on_fade_out_finished(self):
+        self._content.setVisible(False)
         self.hide()
         self.finished.emit()
 
@@ -727,8 +732,9 @@ class AssistOverlay(BaseOverlay):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         rect = self.rect()
-        self._draw_background(painter, rect)
-        DashboardButtonPainter.draw_image_edge_effects(
-            painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg()
-        )
+        if not self._glass:
+            self._draw_background(painter, rect)
+            DashboardButtonPainter.draw_image_edge_effects(
+                painter, QRectF(rect), is_top_clamped=False, is_light=self._is_light_bg()
+            )
         self._draw_border_animation(painter, rect)

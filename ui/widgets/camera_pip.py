@@ -60,6 +60,12 @@ class CameraPipWindow(QWidget):
         self._status: str | None = None
         self._hover = False
         self._drag: tuple | None = None
+        self._restored_pos: tuple[int, int] | None = None
+        self._wayland_resizing = False
+        self._wayland_aspect_timer = QTimer(self)
+        self._wayland_aspect_timer.setSingleShot(True)
+        self._wayland_aspect_timer.setInterval(80)
+        self._wayland_aspect_timer.timeout.connect(self._refit_after_wayland_resize)
         self._hover_poll = QTimer(self)
         self._hover_poll.setInterval(100)
         self._hover_poll.timeout.connect(self._poll_hover)
@@ -139,11 +145,15 @@ class CameraPipWindow(QWidget):
             return False
         area = best.availableGeometry()
         rect.setSize(self._fit_size(rect.width(), area))
-        self.setGeometry(self._clamped(rect, area))
+        clamped = self._clamped(rect, area)
+        self._restored_pos = (clamped.x(), clamped.y())
+        self.setGeometry(clamped)
         return True
 
     def saved_geometry(self) -> dict:
         g = self.geometry()
+        if _is_wayland() and self._restored_pos is not None:
+            return {"x": self._restored_pos[0], "y": self._restored_pos[1], "w": g.width()}
         return {"x": g.x(), "y": g.y(), "w": g.width()}
 
     # -- native ------------------------------------------------------------------
@@ -190,8 +200,23 @@ class CameraPipWindow(QWidget):
         if self._close_rect().contains(pos):
             self.close_requested.emit()
             return
-        geo = self.geometry()
         corner = self._corner_at(pos)
+        if _is_wayland():
+            wh = self.windowHandle()
+            if wh is not None:
+                if corner:
+                    edges = {
+                        "tl": Qt.Edge.TopEdge | Qt.Edge.LeftEdge,
+                        "tr": Qt.Edge.TopEdge | Qt.Edge.RightEdge,
+                        "bl": Qt.Edge.BottomEdge | Qt.Edge.LeftEdge,
+                        "br": Qt.Edge.BottomEdge | Qt.Edge.RightEdge,
+                    }[corner]
+                    self._wayland_resizing = True
+                    wh.startSystemResize(edges)
+                else:
+                    wh.startSystemMove()
+                return
+        geo = self.geometry()
         if corner:
             # The corner opposite the one being dragged stays put.
             anchor = {
@@ -229,6 +254,19 @@ class CameraPipWindow(QWidget):
         self.unsetCursor()
         if dragged:
             self.geometry_committed.emit()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._wayland_resizing:
+            self._wayland_aspect_timer.start()
+
+    def _refit_after_wayland_resize(self):
+        self._wayland_resizing = False
+        area = _screen_for(QCursor.pos()).availableGeometry()
+        size = self._fit_size(self.width(), area)
+        if size != self.size():
+            self.resize(size)
+        self.geometry_committed.emit()
 
     # -- geometry ----------------------------------------------------------------
 
@@ -395,6 +433,10 @@ class CameraPipWindow(QWidget):
         p.drawRoundedRect(pill, th / 2, th / 2)
         p.setPen(QColor("#e8e8e8"))
         p.drawText(pill, Qt.AlignmentFlag.AlignCenter, text)
+
+
+def _is_wayland() -> bool:
+    return QGuiApplication.platformName().startswith("wayland")
 
 
 def _screen_for(point: QPoint):

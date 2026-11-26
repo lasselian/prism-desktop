@@ -22,9 +22,14 @@ from services.local_ipc import send_local_command
 
 # Force XWayland on Wayland sessions — Qt's QWidget.move() is silently ignored
 # under native Wayland, causing the dashboard to appear centered instead of
-# anchored to the system tray corner. Must be set before QApplication is created.
-if os.environ.get('XDG_SESSION_TYPE') == 'wayland':
-    os.environ['QT_QPA_PLATFORM'] = 'xcb'
+# anchored to the system tray corner. The exception is Glass UI on a GNOME that
+# can blur behind windows, which only works on native Wayland. Assigned rather
+# than defaulted: a restart inherits the previous choice. Must be set before
+# QApplication is created.
+if os.environ.get('XDG_SESSION_TYPE') == 'wayland' and os.environ.get('QT_QPA_PLATFORM') != 'offscreen':
+    from ui.utils.wayland_blur import should_use_native_wayland
+
+    os.environ['QT_QPA_PLATFORM'] = 'wayland;xcb' if should_use_native_wayland() else 'xcb'
 
 # Configure Logging — stdout plus a rotating file next to config.json, so
 # packaged builds (no console) still produce a log users can attach to issues.
@@ -99,12 +104,13 @@ from core import py315_compat
 py315_compat.apply()  # before dbus_next is imported and before any socket I/O
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QObject, pyqtSlot, QTimer, QRect, Qt
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QGuiApplication, QPixmap
 
 from core.config_manager import ConfigManager
 from core.token_storage import clear_token
 from core.service_dispatcher import ServiceDispatcher
 from ui.theme_manager import ThemeManager
+from ui.utils.wayland_blur import is_gnome_glass_supported
 from core.ha_client import HAClient
 from core.ha_websocket import HAWebSocket
 from ui.dashboard import Dashboard
@@ -853,15 +859,13 @@ class PrismDesktopApp(QObject):
             # token, so without this the old one would come back on the next start.
             clear_token()
 
+        glass_was_active = self._glass_ui_active
         glass_ui_enabled = self._adopt_config(new_config)
         # Before a restart of the HA connections, so no stream is restarted just to be closed.
         self._close_orphaned_pips()
         self._apply_layout_settings()
         self._apply_shortcut_settings()
-        if glass_ui_enabled and self.dashboard:
-            from ui.notifications import notify_glass_ui_warning
-
-            notify_glass_ui_warning(self.dashboard)
+        self._notify_glass_ui_change(glass_was_active, glass_ui_enabled)
 
         if ha_changed:
             await self._restart_ha_connections()
@@ -886,6 +890,24 @@ class PrismDesktopApp(QObject):
         self._temperature_unit_initialized = 'temperature_unit' in self.config.get('appearance', {})
         self.save_config()
         return glass_ui_enabled
+
+    def _notify_glass_ui_change(self, was_active: bool, just_enabled: bool):
+        """Tell the user what a Glass UI change still needs, or that it is experimental."""
+        if not self.dashboard:
+            return
+        from ui.notifications import notify_glass_ui_restart, notify_glass_ui_warning
+
+        if is_gnome_glass_supported():
+            # GNOME blurs native Wayland windows only, and Qt picks its platform at startup.
+            running_wayland = QGuiApplication.platformName().startswith('wayland')
+            if self._glass_ui_active and not running_wayland:
+                notify_glass_ui_restart(self.dashboard, enabling=True)
+                return
+            if not self._glass_ui_active and running_wayland and was_active:
+                notify_glass_ui_restart(self.dashboard, enabling=False)
+                return
+        if just_enabled:
+            notify_glass_ui_warning(self.dashboard)
 
     def _apply_layout_settings(self):
         if not self.dashboard:

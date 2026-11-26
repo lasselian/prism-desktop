@@ -43,6 +43,27 @@ def notify_glass_ui_warning(dashboard):
     QTimer.singleShot(600, lambda: dashboard.show_toast(msg, duration_ms=8000, kind="warning"))
 
 
+def notify_glass_ui_restart(dashboard, enabling: bool = True):
+    """Shown on GNOME when a Glass UI change needs Qt restarted on the other platform."""
+    from services.auto_updater import relaunch_app
+
+    if enabling:
+        msg = t("notifications.glass_ui_restart_enable")
+    else:
+        msg = t("notifications.glass_ui_restart_disable")
+    QTimer.singleShot(
+        600,
+        lambda: dashboard.show_toast(
+            msg,
+            duration_ms=10000,
+            icon="restart",
+            key="glass_ui_restart",
+            action_text=t("notifications.restart_now"),
+            on_action=relaunch_app,
+        ),
+    )
+
+
 # ── Button / grid ─────────────────────────────────────────────────────────────
 
 
