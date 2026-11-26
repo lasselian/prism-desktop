@@ -10,7 +10,7 @@ those places, so a change for one platform doesn't break another.
 | Global shortcut | `pynput` | X11: `pynput`. Wayland: the XDG `GlobalShortcuts` portal on KDE Plasma (`services/wayland_global_shortcut.py`); other Wayland desktops can bind `--toggle` instead | `pynput`, with a fix for keyboard-layout queries off the main thread (see below); needs Accessibility permission |
 | Toggle from outside (`--toggle`, `--assist`) | Named pipe `\\.\pipe\prism-desktop-<hash>` | Unix socket in the temp folder | Unix socket in `$TMPDIR` |
 | Token storage | Windows Credential Locker | Secret Service (GNOME Keyring, KWallet) | Encrypted file only: the Keychain needs a paid Developer ID certificate; this protects the token at rest, not from other processes of the same user |
-| Encrypted-file key | `MachineGuid` | `/etc/machine-id` | `IOPlatformUUID` |
+| Encrypted-file key | DPAPI (the Windows account); `MachineGuid` if DPAPI fails | `/etc/machine-id` | `IOPlatformUUID` |
 | Location sensor | WinRT `Windows.Devices.Geolocation` | GeoClue2 over the system D-Bus | — |
 | Idle time | `GetLastInputInfo` | Mutter `IdleMonitor` (GNOME, also on Wayland), else `xprintidle` | `ioreg` `HIDIdleTime` |
 | Screen locked | Input desktop check | `loginctl` `LockedHint` | `ioreg` `CGSSessionScreenIsLocked` |
@@ -20,7 +20,7 @@ those places, so a change for one platform doesn't break another.
 | Updates | Downloads and runs the Inno Setup installer silently; it relaunches the app | Replaces the AppImage in place (written beside it, then renamed) | Swaps the `.app` bundle, rolling back if the second move fails |
 | Packaging | `build_exe.py` (PyInstaller) + `setup.iss` | `build_linux.py` (AppImage), `flake.nix` | `build_macos.py` (`.app`, `.dmg`, `.zip`; universal2 with a host-arch fallback) |
 
-When a release publishes a `SHA256SUMS` asset, an update is only installed if the download is listed there with a matching hash. Releases without one install unchecked.
+An update is only installed if the release has a `SHA256SUMS` asset and the download is listed there with a matching hash.
 
 ## Platform workarounds worth knowing
 

@@ -118,6 +118,7 @@ class AutoUpdateThread(QThread):
         except FileNotFoundError:
             self.error.emit("git is not available on this system.")
         except Exception as exc:
+            logger.error(f"Auto-update failed: {exc}", exc_info=True)
             self.error.emit(str(exc))
 
     # ── Frozen/packaged install (GitHub release asset) ────────────────────────
@@ -156,7 +157,7 @@ class AutoUpdateThread(QThread):
                             if total:
                                 self.progress.emit(f"Downloading update… {done * 100 // total}%")
 
-            # 3. Verify checksum if a SHA256SUMS asset is present in the release
+            # 3. Verify the checksum against the release's SHA256SUMS (required)
             if not self._verify_checksum(tmp_path, asset_name, assets):
                 self.error.emit(
                     "Checksum verification failed — the download is missing from "
@@ -175,6 +176,7 @@ class AutoUpdateThread(QThread):
         except OSError as exc:
             self.error.emit(f"Could not apply update: {exc}")
         except Exception as exc:
+            logger.error(f"Auto-update failed: {exc}", exc_info=True)
             self.error.emit(str(exc))
         finally:
             # On Windows, the installer file must stay alive while the installer
@@ -185,14 +187,15 @@ class AutoUpdateThread(QThread):
 
     def _verify_checksum(self, file_path: Path, asset_name: str, assets: list) -> bool:
         """
-        Verify SHA-256 checksum against a SHA256SUMS release asset if one exists.
-        Returns True (pass) when no checksum asset is published — verification is
-        opportunistic, not mandatory, until checksums are part of every release.
-        Returns False when the sums file exists but has no line for asset_name.
+        Verify the download's SHA-256 against the release's SHA256SUMS asset.
+        The sums file is required: the release workflow publishes one with every
+        release. Returns False when it is missing, has no line for asset_name,
+        or lists a different hash.
         """
         sums_asset = next((a for a in assets if a["name"] in ("SHA256SUMS", "sha256sums.txt")), None)
         if not sums_asset:
-            return True
+            logger.error("Release has no SHA256SUMS asset; refusing to apply %s", asset_name)
+            return False
 
         resp = requests.get(sums_asset["browser_download_url"], headers=_GH_HEADERS, timeout=self._NET_TIMEOUT)
         resp.raise_for_status()
@@ -281,7 +284,7 @@ class AutoUpdateThread(QThread):
         extract_dir.mkdir(exist_ok=True)
         try:
             subprocess.run(["ditto", "-xk", str(zip_path), str(extract_dir)], check=True)
-        except Exception:
+        except (OSError, subprocess.CalledProcessError):
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extractall(extract_dir)
 
@@ -299,7 +302,7 @@ class AutoUpdateThread(QThread):
         try:
             subprocess.run(["xattr", "-cr", str(app)], check=False)
             subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(app)], check=False)
-        except Exception:
+        except OSError:  # tool missing
             pass
 
     @staticmethod

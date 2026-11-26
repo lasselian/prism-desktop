@@ -985,7 +985,7 @@ def _temperature_pair(actual, target, unit, pref, show_target: bool) -> str:
         if show_target and target and target != 'unknown':
             return f"{fmt(value)}/{fmt(float(target))}"
         return fmt(value)
-    except Exception:
+    except (TypeError, ValueError):
         return fmt(actual)
 
 
@@ -1290,7 +1290,7 @@ def _day_fraction(rising_str, setting_str):
         sunrise = _parse_iso(rising_str) - timedelta(days=1)
         total = (_parse_iso(setting_str) - sunrise).total_seconds()
         return max(0.0, min(1.0, (now - sunrise).total_seconds() / total)) if total > 0 else 0.5
-    except Exception:
+    except (AttributeError, TypeError, ValueError, OverflowError):  # missing or malformed timestamps
         return 0.5
 
 
@@ -1303,7 +1303,7 @@ def _night_fraction(rising_str, setting_str):
         prev_sunset = _parse_iso(setting_str) - timedelta(days=1)
         total = (_parse_iso(rising_str) - prev_sunset).total_seconds()
         return max(0.0, min(1.0, (now - prev_sunset).total_seconds() / total)) if total > 0 else 0.5
-    except Exception:
+    except (AttributeError, TypeError, ValueError, OverflowError):  # missing or malformed timestamps
         return 0.5
 
 
@@ -1313,7 +1313,7 @@ def _sun_time_remaining(until_str):
         return None
     try:
         secs = int((_parse_iso(until_str) - datetime.now(timezone.utc)).total_seconds())
-    except Exception:
+    except (AttributeError, TypeError, ValueError):  # missing or malformed timestamps
         return None
     if secs <= 0:
         return None

@@ -107,7 +107,7 @@ class HAClient:
 
             same_origin = (url.scheme, url.raw_host, url.port) == (base.scheme, base.raw_host, base.port)
             return url, same_origin
-        except Exception:
+        except (TypeError, ValueError):  # yarl rejects the URL
             return None
 
     async def close(self):

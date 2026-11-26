@@ -2,15 +2,18 @@
 Secure Token Storage
 
 Storage: OS keyring (GNOME Keyring, macOS Keychain, Windows Credential Locker)
-with an encrypted-file fallback (Fernet + machine-derived key). A successful
-keyring store deletes the fallback file, so on load the file — when present —
-is always the freshest copy and is checked first.
+with an encrypted-file fallback: DPAPI on Windows, Fernet + machine-derived key
+elsewhere (and on Windows if DPAPI fails). A legacy Windows file in the Fernet
+format is migrated to DPAPI when it is read. A successful keyring store deletes
+the fallback file, so on load the file — when present — is always the freshest
+copy and is checked first.
 
 The module probes the keyring once on first use and caches the result.
 """
 
 import functools
 import os
+import subprocess
 import sys
 import logging
 import platform
@@ -128,7 +131,7 @@ def _linux_machine_id() -> str | None:
     for path in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
         try:
             seed = Path(path).read_text().strip()
-        except Exception:
+        except (OSError, ValueError):
             continue
         if seed:
             return seed
@@ -146,14 +149,12 @@ def _windows_machine_guid() -> str | None:
         seed, _ = winreg.QueryValueEx(key, "MachineGuid")
         winreg.CloseKey(key)
         return seed
-    except Exception:
+    except (ImportError, OSError):  # no winreg, or key or value missing
         return None
 
 
 def _macos_platform_uuid() -> str | None:
     try:
-        import subprocess
-
         result = subprocess.run(
             ["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
             capture_output=True,
@@ -164,7 +165,7 @@ def _macos_platform_uuid() -> str | None:
         for line in result.stdout.splitlines():
             if "IOPlatformUUID" in line:
                 return line.split('"')[-2]
-    except Exception:
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):  # ValueError: undecodable output
         pass
     return None
 
@@ -190,8 +191,8 @@ _MACHINE_ID_READERS = {
 def _write_private(path: Path, data: bytes) -> None:
     """Atomically write `data` to `path`, readable by the current user only.
 
-    The key is derived from the (world-readable) machine id plus the salt, so
-    file permissions are what actually keep other local users out.
+    A Fernet key is derived from the (world-readable) machine id plus the salt,
+    so for those files permissions are what actually keep other local users out.
     """
     tmp = path.with_name(path.name + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -229,11 +230,102 @@ def _derive_key(salt: bytes) -> bytes:
     return base64.urlsafe_b64encode(raw)
 
 
+# ---------------------------------------------------------------------------
+# Windows DPAPI
+# ---------------------------------------------------------------------------
+# On Windows the encrypted file is sealed with DPAPI (CryptProtectData) instead
+# of a key derived from MachineGuid, which any local program can read. DPAPI
+# keys come from the user's Windows login, so the file only opens for this
+# user. It still opens for any program running as this user: like the keyring,
+# it protects the token at rest, not from local malware.
+
+# Marks a DPAPI file. Fernet tokens are base64 ("gAAAA..."), so they never
+# start with this.
+_DPAPI_MAGIC = b"PRISM-DPAPI1\n"
+_DPAPI_ENTROPY = b"PrismDesktop/ha_token/v1"
+_CRYPTPROTECT_UI_FORBIDDEN = 0x1
+
+
+def _dpapi_call(func_name: str, data: bytes) -> bytes:
+    """Run CryptProtectData or CryptUnprotectData on `data`. Raises OSError."""
+    # The platform check also tells type checkers on other systems to skip the
+    # Windows-only ctypes names below.
+    if sys.platform != "win32":
+        raise OSError("DPAPI is only available on Windows")
+
+    import ctypes
+    from ctypes import wintypes
+
+    class DataBlob(ctypes.Structure):
+        _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+    def blob(raw: bytes):
+        # The buffer is returned too: it must outlive the call that reads it.
+        buf = ctypes.create_string_buffer(raw, len(raw))
+        return DataBlob(len(raw), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char))), buf
+
+    crypt32 = ctypes.WinDLL("crypt32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    func = getattr(crypt32, func_name)
+    func.argtypes = [
+        ctypes.POINTER(DataBlob),  # input
+        ctypes.c_void_p,  # description
+        ctypes.POINTER(DataBlob),  # entropy
+        ctypes.c_void_p,  # reserved
+        ctypes.c_void_p,  # prompt
+        wintypes.DWORD,  # flags
+        ctypes.POINTER(DataBlob),  # output
+    ]
+    func.restype = wintypes.BOOL
+    kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel32.LocalFree.restype = ctypes.c_void_p
+
+    data_in, _keep_in = blob(data)
+    entropy, _keep_entropy = blob(_DPAPI_ENTROPY)
+    data_out = DataBlob()
+    if not func(
+        ctypes.byref(data_in),
+        None,
+        ctypes.byref(entropy),
+        None,
+        None,
+        _CRYPTPROTECT_UI_FORBIDDEN,
+        ctypes.byref(data_out),
+    ):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        return ctypes.string_at(data_out.pbData, data_out.cbData)
+    finally:
+        kernel32.LocalFree(ctypes.cast(data_out.pbData, ctypes.c_void_p))
+
+
+def _dpapi_protect(data: bytes) -> bytes:
+    return _dpapi_call("CryptProtectData", data)
+
+
+def _dpapi_unprotect(data: bytes) -> bytes:
+    return _dpapi_call("CryptUnprotectData", data)
+
+
 def _enc_store(token: str) -> None:
     """Encrypt and write the token to disk."""
     enc_dir = _get_enc_dir()
     salt_path = enc_dir / _SALT_FILENAME
     enc_path = enc_dir / _ENC_FILENAME
+
+    if sys.platform == "win32":
+        try:
+            sealed = _DPAPI_MAGIC + _dpapi_protect(token.encode("utf-8"))
+        except OSError as e:
+            logger.warning(f"[TokenStorage] DPAPI unavailable ({e}), using machine-key encryption.")
+        else:
+            _write_private(enc_path, sealed)
+            try:
+                salt_path.unlink()  # only the Fernet format needs a salt
+            except OSError:
+                pass  # none there, or locked: a leftover salt is harmless
+            logger.info("[TokenStorage] Token stored in DPAPI-encrypted file.")
+            return
 
     # Load or create salt
     if salt_path.exists():
@@ -255,19 +347,38 @@ def _enc_load() -> str:
     salt_path = enc_dir / _SALT_FILENAME
     enc_path = enc_dir / _ENC_FILENAME
 
-    if not enc_path.exists() or not salt_path.exists():
+    if not enc_path.exists():
         return ""
 
     try:
         _tighten(enc_path)
+        data = enc_path.read_bytes()
+        if data.startswith(_DPAPI_MAGIC):
+            if sys.platform != "win32":
+                logger.error(
+                    "[TokenStorage] The token file is sealed with Windows DPAPI and cannot be decrypted "
+                    "on this platform."
+                )
+                return ""
+            return _dpapi_unprotect(data[len(_DPAPI_MAGIC) :]).decode("utf-8")
+
+        if not salt_path.exists():
+            return ""
         _tighten(salt_path)
-        salt = salt_path.read_bytes()
-        key = _derive_key(salt)
-        f = Fernet(key)
-        return f.decrypt(enc_path.read_bytes()).decode("utf-8")
+        key = _derive_key(salt_path.read_bytes())
+        token = Fernet(key).decrypt(data).decode("utf-8")
     except (InvalidToken, Exception):
         logger.exception("[TokenStorage] Failed to decrypt token file")
         return ""
+
+    if sys.platform == "win32" and token:
+        # Older versions sealed the file with the MachineGuid-derived key;
+        # re-seal it with DPAPI now that we can read it.
+        try:
+            _enc_store(token)
+        except OSError as e:
+            logger.warning(f"[TokenStorage] Could not move token file to DPAPI: {e}")
+    return token
 
 
 def _enc_delete() -> None:

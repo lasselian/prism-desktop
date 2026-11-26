@@ -1717,7 +1717,7 @@ class Dashboard(QWidget):
             hwnd = int(self.winId())
             affinity = 0x00000011 if exclude else 0x00000000  # WDA_EXCLUDEFROMCAPTURE / WDA_NONE
             ctypes.windll.user32.SetWindowDisplayAffinity(hwnd, affinity)
-        except Exception:
+        except (OSError, AttributeError, ValueError, RuntimeError, ctypes.ArgumentError):
             pass
 
     def _on_overlay_morph(self, progress: float):
@@ -2391,7 +2391,7 @@ class Dashboard(QWidget):
             # but disconnect in case a stale connection still exists.
             if hasattr(self, 'height_anim') and self.height_anim:
                 self.height_anim.finished.disconnect(self._on_transition_done)
-        except Exception:
+        except TypeError:  # not connected
             pass
 
         # Unlock grid size so it behaves normally (if we are in grid view)
@@ -2450,7 +2450,7 @@ class Dashboard(QWidget):
         """Reposition window to keep it anchored to the configured tray edge."""
         try:
             screen = self.screen()
-        except Exception:
+        except RuntimeError:  # underlying C++ window already deleted
             screen = QApplication.primaryScreen()
 
         if not screen:

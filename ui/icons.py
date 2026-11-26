@@ -4,12 +4,15 @@ Material Design Icons via icon font.
 """
 
 import json
+import logging
 import re
 import urllib.request
 import ssl
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QFontDatabase, QFont
 from core.utils import get_resource_path, get_config_path
+
+logger = logging.getLogger(__name__)
 
 MDI_MAPPING_FILE = 'mdi_mapping.json'
 
@@ -35,19 +38,19 @@ def load_mdi_font():
 
     font_path = get_resource_path("materialdesignicons-webfont.ttf")
     if not font_path.exists():
-        print(f"MDI font not found at {font_path}")
+        logger.warning(f"MDI font not found at {font_path}")
         return False
 
     font_id = QFontDatabase.addApplicationFont(str(font_path))
     if font_id == -1:
-        print("Failed to load MDI font")
+        logger.warning("Failed to load MDI font")
         return False
 
     families = QFontDatabase.applicationFontFamilies(font_id)
     if families:
         global MDI_FONT_FAMILY
         MDI_FONT_FAMILY = families[0]
-        print(f"Loaded MDI font: {MDI_FONT_FAMILY}")
+        logger.info(f"Loaded MDI font: {MDI_FONT_FAMILY}")
 
     _font_loaded = True
     return True
@@ -200,7 +203,7 @@ def fetch_mdi_mapping_worker():
     """Background worker to fetch MDI mapping."""
     global _mdi_cache, _is_fetching
     try:
-        print("Fetching MDI mapping in background...")
+        logger.info("Fetching MDI mapping in background...")
         # Verified TLS; the CA bundle comes from configure_ssl() (SSL_CERT_FILE)
         context = ssl.create_default_context()
         context.minimum_version = ssl.TLSVersion.TLSv1_2
@@ -221,11 +224,11 @@ def fetch_mdi_mapping_worker():
         with open(mapping_file, 'w', encoding='utf-8') as f:
             json.dump(mapping, f)
 
-        print(f"Saved {len(mapping)} icons to {mapping_file}")
+        logger.info(f"Saved {len(mapping)} icons to {MDI_MAPPING_FILE}")
         _mdi_cache = mapping
         icon_signals.mapping_loaded.emit()
     except Exception as e:
-        print(f"Failed to fetch MDI mapping: {e}")
+        logger.warning(f"Failed to fetch MDI mapping: {e}")
     finally:
         _is_fetching = False
 

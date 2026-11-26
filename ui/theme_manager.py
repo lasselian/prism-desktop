@@ -118,7 +118,7 @@ def _windows_theme() -> str:
         value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
         winreg.CloseKey(key)
         return 'light' if value == 1 else 'dark'
-    except Exception:
+    except (ImportError, OSError):  # no winreg, or key or value missing
         return 'dark'
 
 

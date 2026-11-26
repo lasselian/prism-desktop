@@ -3,8 +3,11 @@ Worker Threads for Prism Desktop
 """
 
 import asyncio
+import logging
 from PyQt6.QtCore import QThread, pyqtSignal
 from core.ha_client import HAClient
+
+logger = logging.getLogger(__name__)
 
 
 class ConnectionTestThread(QThread):
@@ -22,6 +25,7 @@ class ConnectionTestThread(QThread):
         try:
             asyncio.run(self._async_run())
         except Exception as e:
+            logger.error(f"Connection test crashed: {e}", exc_info=True)
             self.finished.emit(False, str(e))
 
     async def _async_run(self):
