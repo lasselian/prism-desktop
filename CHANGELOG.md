@@ -14,6 +14,7 @@
 ### Security
 
 - The auto-updater now requires the release's `SHA256SUMS` file. A release without it is refused, instead of being installed unchecked. Thanks to [@aubierr](https://github.com/aubierr), who made this change first in their fork, `aubierr/prism-desktop`.
+- On Windows, when the Credential Manager can't be used, the token file is now encrypted with your Windows account (DPAPI) instead of a key derived from the machine ID. An existing token file is converted the next time Prism reads it. Thanks to [@aubierr](https://github.com/aubierr), who made this change first in their fork, `aubierr/prism-desktop`.
 
 ## 1.8.2
 

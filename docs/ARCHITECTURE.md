@@ -111,8 +111,9 @@ used.
   config folder (`%APPDATA%`, `~/Library/Application Support`,
   `$XDG_CONFIG_HOME`).
 - The access token never stays in `config.json`. `core/token_storage.py`
-  keeps it in the OS keyring, with an encrypted-file fallback keyed to the
-  machine. A plaintext token from an old config is migrated on start.
+  keeps it in the OS keyring, with an encrypted-file fallback: sealed with DPAPI
+  on Windows, keyed to the machine elsewhere. A plaintext token from an old
+  config is migrated on start.
 
 ## Home Assistant mobile_app integration
 
