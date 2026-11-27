@@ -83,6 +83,13 @@ def button_entity_ids(config: dict) -> list[str]:
     return [config[key] for key in keys if config.get(key)]
 
 
+def _friendly_name(state: Optional[dict]) -> str:
+    """The stripped friendly_name of a HA state dict, or ''."""
+    attributes = (state or {}).get('attributes')
+    name = attributes.get('friendly_name') if isinstance(attributes, dict) else None
+    return name.strip() if isinstance(name, str) else ''
+
+
 # Domains whose entities sit at 'unknown' until they are first activated.
 STATELESS_TRIGGER_DOMAINS = ('scene', 'button', 'input_button')
 
@@ -121,7 +128,12 @@ from ui.tray_manager import TrayManager
 from services.notifications import NotificationManager
 from services.input_manager import InputManager, ButtonShortcutManager
 from services.assist_controller import AssistController
-from services.camera_pip import CameraPipManager
+from services.camera_pip import (
+    CAMERA_PIP_COMMANDS,
+    CameraPipCommand,
+    CameraPipManager,
+    parse_camera_pip_command,
+)
 from services.local_ipc import LocalCommandServer
 from services.mobile_app import (
     register_mobile_app,
@@ -427,11 +439,12 @@ class PrismDesktopApp(QObject):
 
         Call it once the final tile list is in self.config. A PiP is meant to
         outlive the dashboard, so only the tiles decide, not whether it is open.
+        Remotely-triggered PiPs are left alone: they aren't tied to a tile.
         The window position stays in the config for when the tile comes back.
         """
         wanted = {pip_camera_entity(cfg) for cfg in self.config.get('buttons', [])}
         for entity_id in self.camera_pip.open_entities():
-            if entity_id not in wanted:
+            if entity_id not in wanted and not self.camera_pip.is_remote(entity_id):
                 self.camera_pip.close(entity_id)
 
     def _on_button_shortcut_triggered(self, config: dict):
@@ -1342,6 +1355,11 @@ class PrismDesktopApp(QObject):
 
     @pyqtSlot(str, dict)
     def on_command_received(self, command: str, data: dict):
+        if isinstance(command, str) and command.strip().lower() in CAMERA_PIP_COMMANDS:
+            pip_cmd = parse_camera_pip_command(command, data)
+            if pip_cmd is not None:
+                self._handle_camera_pip_command(pip_cmd)
+            return
         action = parse_power_command(command)
         if not action:
             logger.debug(f"[PowerControl] Ignoring unknown mobile_app command: {command!r}")
@@ -1350,6 +1368,30 @@ class PrismDesktopApp(QObject):
             logger.warning(f"[PowerControl] Refused '{action}' command — disabled in settings")
             return
         _create_task_safe(self._run_power_command(action))
+
+    def _handle_camera_pip_command(self, cmd: CameraPipCommand):
+        if cmd.action == "close":
+            if cmd.entity_id:
+                self.camera_pip.close(cmd.entity_id)
+            else:
+                self.camera_pip.close_all()
+        elif cmd.entity_id:
+            title = cmd.title or self._resolve_camera_title(cmd.entity_id)
+            self.camera_pip.open(cmd.entity_id, title, duration=cmd.duration, remote=True)
+
+    def _resolve_camera_title(self, entity_id: str) -> str:
+        """The tile's label for a camera, else its friendly name in Home Assistant, else ''."""
+        for cfg in self.config.get('buttons', []):
+            label = cfg.get('label')
+            if pip_camera_entity(cfg) == entity_id and isinstance(label, str) and label.strip():
+                return label.strip()
+        for entry in getattr(self, '_available_entities', ()):
+            if entry.get('entity_id') == entity_id:
+                name = _friendly_name(entry)
+                if name:
+                    return name
+        states = getattr(self.dashboard, '_entity_states', None) or getattr(self.dashboard, 'entity_states', None)
+        return _friendly_name((states or {}).get(entity_id))
 
     async def _run_power_command(self, action: str):
         if action in OFFLINE_ACTIONS:

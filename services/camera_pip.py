@@ -10,12 +10,17 @@ any frame) show a status line over the last frame and back off.
 
 JPEG decoding runs on a worker thread and only the newest frame is decoded,
 so a fast native-MJPEG camera can't flood the GUI thread.
+
+Home Assistant can also open and close these windows with `command_camera_pip`
+push commands, optionally closing them again after a number of seconds.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import math
+from dataclasses import dataclass
 from typing import Callable, Optional
 
 import aiohttp
@@ -35,6 +40,90 @@ logger = logging.getLogger(__name__)
 CONFIG_KEY = "camera_pip"
 READ_TIMEOUT = 45  # seconds of silence before a quiet reconnect
 BACKOFF = (2, 5, 10, 30, 60)
+
+COMMAND_CAMERA_PIP = "command_camera_pip"
+COMMAND_CAMERA_PIP_CLOSE = "command_camera_pip_close"
+CAMERA_PIP_COMMANDS = frozenset({COMMAND_CAMERA_PIP, COMMAND_CAMERA_PIP_CLOSE})
+# 24 hours; keeps the delay well inside QTimer's 32-bit millisecond range.
+MAX_AUTO_CLOSE_SECONDS = 86400.0
+
+
+@dataclass(frozen=True)
+class CameraPipCommand:
+    """A validated camera PiP push command."""
+
+    action: str  # "open" or "close"
+    entity_id: Optional[str] = None  # None on a close: every window
+    duration: Optional[float] = None  # seconds until auto-close; None: stay open
+    title: str = ""
+
+
+def _clamp_duration(value: float) -> Optional[float]:
+    """An auto-close delay in seconds, or None for anything that isn't a positive finite number."""
+    if not 0 < value < math.inf:  # comparisons also reject NaN
+        return None
+    return min(value, MAX_AUTO_CLOSE_SECONDS)
+
+
+def _parse_duration(raw: object) -> Optional[float]:
+    """The optional `duration` of a push command; invalid values mean no auto-close."""
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    value = None
+    if isinstance(raw, (int, float, str)) and not isinstance(raw, bool):
+        try:
+            value = float(raw)
+        except (ValueError, OverflowError):
+            pass
+    if value is None or not math.isfinite(value) or value < 0:
+        logger.warning("Camera PiP: ignoring invalid duration")
+        return None
+    return _clamp_duration(value)
+
+
+def _parse_entity_id(raw: object) -> Optional[str]:
+    if not isinstance(raw, str):
+        return None
+    entity_id = raw.strip()
+    return entity_id if CAMERA_ENTITY_RE.fullmatch(entity_id) else None
+
+
+def _parse_open(data: dict) -> Optional[CameraPipCommand]:
+    entity_id = _parse_entity_id(data.get("entity_id"))
+    if entity_id is None:
+        logger.warning("Camera PiP: command needs a camera entity_id")
+        return None
+    title = data.get("title")
+    return CameraPipCommand(
+        action="open",
+        entity_id=entity_id,
+        duration=_parse_duration(data.get("duration")),
+        title=title.strip() if isinstance(title, str) else "",
+    )
+
+
+def _parse_close(data: dict) -> Optional[CameraPipCommand]:
+    raw = data.get("entity_id")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return CameraPipCommand(action="close")  # close all
+    entity_id = _parse_entity_id(raw)
+    if entity_id is None:
+        logger.warning("Camera PiP: close command has an invalid entity_id")
+        return None
+    return CameraPipCommand(action="close", entity_id=entity_id)
+
+
+def parse_camera_pip_command(command: object, data: object = None) -> Optional[CameraPipCommand]:
+    """Validate a mobile_app push command; None if it isn't a usable camera PiP command."""
+    if not isinstance(command, str):
+        return None
+    cmd = command.strip().lower()
+    if cmd not in CAMERA_PIP_COMMANDS:
+        return None
+    payload = data if isinstance(data, dict) else {}
+    if cmd == COMMAND_CAMERA_PIP:
+        return _parse_open(payload)
+    return _parse_close(payload)
 
 
 class _HttpStatus(Exception):
@@ -105,6 +194,8 @@ class CameraPipManager:
         self._cached_pixmap = cached_pixmap
         self._windows: dict[str, CameraPipWindow] = {}
         self._tasks: dict[str, asyncio.Task] = {}
+        self._auto_close_timers: dict[str, QTimer] = {}
+        self._remote_entities: set[str] = set()  # windows Home Assistant opened
 
     # -- public ------------------------------------------------------------------
 
@@ -115,15 +206,33 @@ class CameraPipManager:
         """The cameras that have a window open (a copy, safe to close() while looping)."""
         return list(self._windows)
 
-    def open(self, entity_id: str, title: str = "") -> Optional[CameraPipWindow]:
-        """Open a PiP window for a camera, or bring back the one already open."""
+    def is_remote(self, entity_id: str) -> bool:
+        """Whether the open window was opened remotely and not since opened by hand."""
+        return entity_id in self._remote_entities
+
+    def has_auto_close(self, entity_id: str) -> bool:
+        return entity_id in self._auto_close_timers
+
+    def open(
+        self, entity_id: str, title: str = "", *, duration: Optional[float] = None, remote: bool = False
+    ) -> Optional[CameraPipWindow]:
+        """Open a PiP window for a camera, or bring back the one already open.
+
+        `duration` closes the window after that many seconds. On a window that
+        is already open it only restarts a running countdown: a window without
+        one stays open, and opening without a duration cancels it. `remote`
+        marks a new window as not belonging to a tile.
+        """
         if not isinstance(entity_id, str) or not CAMERA_ENTITY_RE.fullmatch(entity_id):
             logger.warning("Camera PiP: not a camera entity")
             return None
+        if isinstance(duration, (int, float)) and not isinstance(duration, bool):
+            duration = _clamp_duration(duration)
+        else:
+            duration = None
         win = self._windows.get(entity_id)
         if win is not None:
-            win.show()
-            win.raise_()
+            self._reopen(entity_id, win, title, duration, remote)
             return win
 
         seed = self._cached_pixmap(entity_id)
@@ -145,6 +254,10 @@ class CameraPipManager:
         self._windows[entity_id] = win
         win.show()
         self._start(entity_id, win)
+        if remote:
+            self._remote_entities.add(entity_id)
+        if duration is not None:
+            self._arm_auto_close(entity_id, duration)
         return win
 
     def reconnect_all(self):
@@ -158,6 +271,8 @@ class CameraPipManager:
             self._start(entity_id, win)
 
     def close(self, entity_id: str):
+        self._cancel_auto_close(entity_id)
+        self._remote_entities.discard(entity_id)
         task = self._tasks.pop(entity_id, None)
         if task is not None:
             task.cancel()
@@ -169,6 +284,35 @@ class CameraPipManager:
     def close_all(self):
         while self._windows:  # close() removes each window
             self.close(next(iter(self._windows)))
+
+    # -- lifetime ----------------------------------------------------------------
+
+    def _reopen(self, entity_id: str, win: CameraPipWindow, title: str, duration: Optional[float], remote: bool):
+        if title:
+            win.set_title(title)
+        if not remote:
+            self._remote_entities.discard(entity_id)  # opened by hand: the tile owns it now
+        if duration is None:
+            self._cancel_auto_close(entity_id)
+        elif entity_id in self._auto_close_timers:
+            self._arm_auto_close(entity_id, duration)
+        # else: never put a countdown on a window that was meant to stay.
+        win.show()
+        win.raise_()
+
+    def _arm_auto_close(self, entity_id: str, duration: float):
+        self._cancel_auto_close(entity_id)
+        timer = QTimer()
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda e=entity_id: self.close(e))
+        self._auto_close_timers[entity_id] = timer
+        timer.start(max(1, round(duration * 1000)))
+
+    def _cancel_auto_close(self, entity_id: str):
+        timer = self._auto_close_timers.pop(entity_id, None)
+        if timer is not None:
+            timer.stop()
+            timer.deleteLater()
 
     # -- geometry ----------------------------------------------------------------
 

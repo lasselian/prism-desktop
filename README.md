@@ -93,6 +93,34 @@ Clicking or dragging the window never takes focus away from the app you're typin
  
 **KDE Plasma:** KWin puts a focused fullscreen window above every "keep above" window, so the camera window hides behind fullscreen video. To keep it on top, add a window rule: *System Settings → Window Management → Window Rules → Add New*. Use *Add Property* to add *Window role*, set to *Exact Match* and `prism-camera-pip`, then *Add Property* again to add *Layer*, set to *Force* and *Popup*. Click *Apply*.
  
+### Open it from a Home Assistant automation
+ 
+An automation can pop up a camera on your desktop, for example when the doorbell rings or motion is detected. Send a command through the Prism device's notify service (`notify.mobile_app_<device>`):
+ 
+```yaml
+action: notify.mobile_app_<device>
+data:
+  message: command_camera_pip
+  title: Front door        # optional window name
+  data:
+    entity_id: camera.front_door
+    duration: 30           # optional: close after this many seconds
+```
+ 
+Without `duration` (or with `0`) the window stays open until you close it; the longest duration is 24 hours. Triggering again restarts a running countdown (or cancels it, if the new command has no `duration`), but never adds one to a window that is already staying open. The camera doesn't need a tile on the dashboard. Without a `title`, the window is named after the camera's tile or its Home Assistant name.
+ 
+To close it early:
+ 
+```yaml
+action: notify.mobile_app_<device>
+data:
+  message: command_camera_pip_close
+  data:
+    entity_id: camera.front_door   # optional: leave out to close all camera windows
+```
+ 
+Prism must be running and connected to Home Assistant to receive the command.
+ 
 ---
  
 ## Keyboard Shortcuts
