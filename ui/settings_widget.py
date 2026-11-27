@@ -265,6 +265,7 @@ class SettingsWidget(QWidget):
         self.setup_ui()
         self.load_config()
         self.url_input.textChanged.connect(self._on_credential_changed)
+        self.fallback_url_input.textChanged.connect(self._on_credential_changed)
         self.token_input.textChanged.connect(self._on_credential_changed)
         if self.url_input.text().strip() and self.token_input.text().strip():
             QTimer.singleShot(600, self._trigger_auto_test)
@@ -685,6 +686,11 @@ class SettingsWidget(QWidget):
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText(t("settings.ha.url_placeholder"))
         cred_form.addRow(t("settings.ha.url_label"), self.url_input)
+
+        self.fallback_url_input = QLineEdit()
+        self.fallback_url_input.setPlaceholderText(t("settings.ha.fallback_url_placeholder"))
+        self.fallback_url_input.setToolTip(t("settings.ha.fallback_url_tooltip"))
+        cred_form.addRow(t("settings.ha.fallback_url_label"), self.fallback_url_input)
 
         self.token_input = QLineEdit()
         self.token_input.setEchoMode(QLineEdit.EchoMode.Password)
@@ -1475,6 +1481,7 @@ class SettingsWidget(QWidget):
         """Load current config values."""
         ha = self.config.get('home_assistant', {})
         self.url_input.setText(ha.get('url', ''))
+        self.fallback_url_input.setText(ha.get('fallback_url', ''))
         self.token_input.setText(ha.get('token', ''))
 
         app = self.config.get('appearance', {})
@@ -1569,6 +1576,11 @@ class SettingsWidget(QWidget):
             self.config['home_assistant'] = {}
         self.config['home_assistant']['url'] = self.url_input.text().strip()
         self.config['home_assistant']['token'] = self.token_input.text().strip()
+        fallback_url = self.fallback_url_input.text().strip()
+        if fallback_url:
+            self.config['home_assistant']['fallback_url'] = fallback_url
+        else:
+            self.config['home_assistant'].pop('fallback_url', None)
 
         theme_map = {0: 'system', 1: 'light', 2: 'dark'}
         if self.theme_manager:
@@ -1892,7 +1904,7 @@ class SettingsWidget(QWidget):
         if self._test_thread and self._test_thread.isRunning():
             return
         self._set_conn_status("checking")
-        self._test_thread = ConnectionTestThread(url, token)
+        self._test_thread = ConnectionTestThread(url, token, self.fallback_url_input.text().strip())
         self._test_thread.finished.connect(self.on_test_complete)
         self._test_thread.start()
 
@@ -1902,7 +1914,7 @@ class SettingsWidget(QWidget):
             return
         color = {"checking": "#8e8e93", "ok": "#34A853", "error": "#e53935"}.get(state, "#8e8e93")
         if state == "ok":
-            text = "●  Connected"
+            text = f"●  {detail or 'Connected'}"
         elif state == "error":
             text = f"●  {detail}" if detail else "●  Connection failed"
         else:

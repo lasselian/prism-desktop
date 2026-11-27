@@ -15,10 +15,11 @@ class ConnectionTestThread(QThread):
 
     finished = pyqtSignal(bool, str)
 
-    def __init__(self, url: str, token: str):
+    def __init__(self, url: str, token: str, fallback_url: str = ""):
         super().__init__()
         self.url = url
         self.token = token
+        self.fallback_url = fallback_url
 
     def run(self):
         """Test connection in background."""
@@ -29,9 +30,16 @@ class ConnectionTestThread(QThread):
             self.finished.emit(False, str(e))
 
     async def _async_run(self):
-        client = HAClient(self.url, self.token)
+        success, message = await self._test(self.url)
+        if not success and self.fallback_url:
+            fallback_ok, _ = await self._test(self.fallback_url)
+            if fallback_ok:
+                success, message = True, "Connected via fallback URL"
+        self.finished.emit(success, message)
+
+    async def _test(self, url: str) -> tuple[bool, str]:
+        client = HAClient(url, self.token)
         try:
-            success, message = await client.test_connection()
-            self.finished.emit(success, message)
+            return await client.test_connection()
         finally:
             await client.close()

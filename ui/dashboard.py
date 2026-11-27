@@ -181,6 +181,7 @@ class Dashboard(QWidget):
         self._refresh_indicators_enabled = app_config.get('refresh_indicators', False)
         self._glass_ui = bool(app_config.get('glass_ui', False)) and self._glass_ui_usable()
         self._wayland_blur = None  # compositor blur handle (Wayland or KWin), attached in setup_ui()
+        self.ha_url_provider = None  # set by the app: returns the HA URL in use (primary or fallback)
         self._button_style = app_config.get('button_style', 'Gradient').capitalize()
         self._temperature_unit = app_config.get('temperature_unit', 'celsius')
 
@@ -1102,8 +1103,10 @@ class Dashboard(QWidget):
 
     def open_ha(self):
         """Open Home Assistant in default browser."""
-        ha_cfg = self.config.get('home_assistant', {})
-        url = ha_cfg.get('url', '').strip()
+        if self.ha_url_provider:
+            url = self.ha_url_provider().strip()
+        else:
+            url = self.config.get('home_assistant', {}).get('url', '').strip()
         if not url:
             return
         try:

@@ -395,7 +395,8 @@ class NotificationManager(QObject):
 
     async def _fire_action_event(self, action_id: str, action_data: Optional[dict]):
         """Report the clicked action back to HA (one retry on failure)."""
-        ha_url = self.config.get('home_assistant', {}).get('url', '')
+        # The client knows which URL is reachable now (primary or fallback).
+        ha_url = getattr(self.ha_client, 'url', '') or self.config.get('home_assistant', {}).get('url', '')
         mobile_cfg = self.config.get('mobile_app', {})
         webhook_id = mobile_cfg.get('webhook_id', '')
         if not ha_url or not webhook_id:
