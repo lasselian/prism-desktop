@@ -80,7 +80,8 @@ from ui.visuals.dashboard_effects import (
     capture_glass_background,
 )
 from ui.utils.key_events import event_matches_shortcut
-from ui.utils.wayland_blur import attach_wayland_blur, is_native_wayland_blur_active
+from ui.utils.kwin_blur import attach_kwin_blur
+from ui.utils.wayland_blur import attach_wayland_blur, is_compositor_blur_active, is_native_wayland_blur_active
 from ui.utils.wayland_stage import WaylandStageWindow
 
 FOOTER_BUTTON_STYLE = 'background: rgba(255,255,255,0.1); border: none; border-radius: 4px; color: #888;'
@@ -179,7 +180,7 @@ class Dashboard(QWidget):
         self._show_dimming = app_config.get('show_dimming', False)
         self._refresh_indicators_enabled = app_config.get('refresh_indicators', False)
         self._glass_ui = bool(app_config.get('glass_ui', False)) and self._glass_ui_usable()
-        self._wayland_blur = None  # compositor blur handle, attached in setup_ui()
+        self._wayland_blur = None  # compositor blur handle (Wayland or KWin), attached in setup_ui()
         self._button_style = app_config.get('button_style', 'Gradient').capitalize()
         self._temperature_unit = app_config.get('temperature_unit', 'celsius')
 
@@ -954,7 +955,9 @@ class Dashboard(QWidget):
         root_layout.addWidget(self.container)
 
         blur_window = self if self._wayland_stage is None else self._wayland_stage
-        self._wayland_blur = attach_wayland_blur(blur_window, self._wayland_blur_region, enabled=self._glass_ui)
+        self._wayland_blur = attach_wayland_blur(
+            blur_window, self._wayland_blur_region, enabled=self._glass_ui
+        ) or attach_kwin_blur(self, self._wayland_blur_region, enabled=self._glass_ui)
 
         # Container Layout (Stack + Footer)
         self.content_layout = QVBoxLayout(self.container)
@@ -1819,14 +1822,14 @@ class Dashboard(QWidget):
     # ── Glass UI ────────────────────────────────────────────────────────────
 
     def _glass_ui_usable(self) -> bool:
-        """On Linux Glass UI needs the compositor's blur, so also a native Wayland window."""
+        """On Linux Glass UI needs the compositor's blur (GNOME on native Wayland, or KWin)."""
         if not sys.platform.startswith('linux'):
             return True
-        return is_native_wayland_blur_active()
+        return is_compositor_blur_active()
 
     def _uses_glass_capture(self) -> bool:
         """True if Glass UI is on and Prism has to blur a screen capture itself."""
-        return self._glass_ui and not is_native_wayland_blur_active()
+        return self._glass_ui and not is_compositor_blur_active()
 
     def set_glass_ui(self, requested: bool):
         """Apply the Glass UI setting, as far as this session can show it."""

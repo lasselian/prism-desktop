@@ -10,6 +10,9 @@ Mutter offers no blur to XWayland clients, so main.py has to know whether to run
 on native Wayland before QApplication exists. PyQt6 is therefore only imported
 inside the functions that need a running application.
 
+KDE Plasma is handled in kwin_blur.py instead: KWin blurs XWayland and X11
+windows through a window property, so Prism stays on xcb there.
+
 Like floating_window.py, nothing here may take the app down: a missing library
 or an API that moved only loses the blur. The one thing that can't be caught is
 a protocol error, which ends the Wayland connection, so the surface lifecycle in
@@ -109,10 +112,27 @@ def is_gnome_glass_supported() -> bool:
 
 
 def is_glass_ui_supported() -> bool:
-    """True if Glass UI can be offered: Windows, macOS, or a blur-capable GNOME."""
+    """True if Glass UI can be offered: Windows, macOS, a blur-capable GNOME, or KWin with blur."""
     if sys.platform.startswith("linux"):
-        return is_gnome_glass_supported()
+        return is_gnome_glass_supported() or _is_kwin_blur_available()
     return True
+
+
+def _is_kwin_blur_available() -> bool:
+    from ui.utils.kwin_blur import is_kwin_blur_available
+
+    return is_kwin_blur_available()
+
+
+def is_compositor_blur_active() -> bool:
+    """True if the compositor blurs behind our windows: GNOME on native Wayland, or KWin.
+
+    Unlike is_native_wayland_blur_active(), this says nothing about whether the
+    window is placed on a Wayland stage; KWin blurs Prism's xcb window directly.
+    """
+    if not sys.platform.startswith("linux"):
+        return False
+    return is_native_wayland_blur_active() or _is_kwin_blur_available()
 
 
 def is_native_wayland_blur_active() -> bool:
