@@ -8,6 +8,10 @@
 - Switching Glass UI on or off on GNOME switches between native Wayland and XWayland on restart, with a one-click Restart button in the notification drawer.
 - The dashboard anchors to the tray corner with smooth fade-in and fade-out transitions, works cleanly alongside GNOME Shell extensions such as Blur my Shell, and camera picture-in-picture windows can be dragged and resized natively on Wayland.
 
+### Glass UI on KDE Plasma
+
+- Glass UI now works on KDE Plasma, on both X11 and Wayland, using KWin's own blur effect behind the dashboard. The toggle appears when KWin's Blur desktop effect is enabled when Prism starts, and turning Glass UI on or off applies immediately, without a restart.
+
 ### PC power control
 
 - Home Assistant can now shut down, restart, sleep, hibernate or lock this PC (hibernate is not available on macOS). Every command is off until you turn it on under Settings > Power Control.
