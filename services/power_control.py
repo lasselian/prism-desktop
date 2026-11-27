@@ -526,7 +526,9 @@ async def create_ha_power_switch(
     if not ha_url or not ha_token:
         return PowerSwitchResult(ok=False, error="Configure and save Home Assistant URL and token first")
 
-    mac, mac_error = _resolve_target_mac(mac_address, config, ha_url)
+    # MAC detection follows the route to the primary (usually LAN) URL, not a fallback over VPN or internet.
+    lan_url = config.get("home_assistant", {}).get("url", "") or ha_url
+    mac, mac_error = _resolve_target_mac(mac_address, config, lan_url)
     if not mac:
         return PowerSwitchResult(ok=False, error=mac_error)
 

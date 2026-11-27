@@ -12,6 +12,11 @@
 
 - Glass UI now works on KDE Plasma, on both X11 and Wayland, using KWin's own blur effect behind the dashboard. The toggle appears when KWin's Blur desktop effect is enabled when Prism starts, and turning Glass UI on or off applies immediately, without a restart.
 
+### Fallback URL
+
+- Settings > Home Assistant has a new optional **Fallback URL**. When the main URL can't be reached, for example when your laptop leaves home, Prism connects through the fallback instead, and tries the main URL first again on every reconnect. Both must point to the same Home Assistant and use the same token.
+- A connection that went dead after a network change is now noticed within about 45 seconds, so Prism reconnects on its own.
+
 ### PC power control
 
 - Home Assistant can now shut down, restart, sleep, hibernate or lock this PC (hibernate is not available on macOS). Every command is off until you turn it on under Settings > Power Control.

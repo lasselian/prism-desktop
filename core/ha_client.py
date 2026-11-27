@@ -21,16 +21,20 @@ FLOW_ID_RE = re.compile(r"[A-Za-z0-9_-]+")
 class HAClient:
     """Asynchronous client for Home Assistant REST API."""
 
-    def __init__(self, url: str = "", token: str = ""):
-        self.url = url.rstrip('/')
+    def __init__(self, url: str = "", token: str = "", fallback_url: str = ""):
+        self.url = url.rstrip('/')  # the URL requests go to; see use_url()
+        self.primary_url = self.url
+        self.fallback_url = fallback_url.rstrip('/')
         self.token = token
         self._session: Optional[aiohttp.ClientSession] = None
         self._anon_session: Optional[aiohttp.ClientSession] = None
         self.logger = logging.getLogger(__name__)
 
-    def configure(self, url: str, token: str):
-        """Update connection settings."""
+    def configure(self, url: str, token: str, fallback_url: str = ""):
+        """Update connection settings. Requests go to `url` until use_url() says otherwise."""
         self.url = url.rstrip('/')
+        self.primary_url = self.url
+        self.fallback_url = fallback_url.rstrip('/')
         self.token = token
 
         # If there's an active session, close it so a new one is spawned with new token headers
@@ -41,6 +45,10 @@ class HAClient:
             except RuntimeError:
                 pass  # No running event loop
         self._session = None
+
+    def use_url(self, url: str):
+        """Send further requests to this configured URL, the one the WebSocket reached."""
+        self.url = url.rstrip('/')
 
     @property
     def headers(self) -> dict:

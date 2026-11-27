@@ -459,7 +459,15 @@ class PrismDesktopApp(QObject):
     def init_ha_client(self):
         """Initialize Home Assistant client."""
         ha_config = self.config.get('home_assistant', {})
-        self.ha_client.configure(url=ha_config.get('url', ''), token=ha_config.get('token', ''))
+        self.ha_client.configure(
+            url=ha_config.get('url', ''),
+            token=ha_config.get('token', ''),
+            fallback_url=ha_config.get('fallback_url', ''),
+        )
+
+    def _ha_url(self) -> str:
+        """The Home Assistant URL in use right now: the primary one or the fallback."""
+        return self.ha_client.url or self.config.get('home_assistant', {}).get('url', '')
 
     def init_ui(self):
         """Initialize UI components."""
@@ -474,6 +482,7 @@ class PrismDesktopApp(QObject):
             cols=cols,
         )
         self.dashboard.set_buttons(self.config.get('buttons', []), self.config.get('appearance', {}))
+        self.dashboard.ha_url_provider = self._ha_url
         # Messages that can't wait for the dashboard to open go out as OS notifications.
         self.dashboard.notice_center.system_notify = self.notification_manager.show_app_notification
 
@@ -652,7 +661,11 @@ class PrismDesktopApp(QObject):
             return
 
         # Create fresh WebSocket client
-        self._ha_websocket = HAWebSocket(url=ha_config.get('url', ''), token=ha_config.get('token', ''))
+        self._ha_websocket = HAWebSocket(
+            url=ha_config.get('url', ''),
+            token=ha_config.get('token', ''),
+            fallback_url=ha_config.get('fallback_url', ''),
+        )
 
         # Subscribe to configured entities
         for btn in self.config.get('buttons', []):
@@ -842,7 +855,7 @@ class PrismDesktopApp(QObject):
         if not mobile_cfg.get('send_logged_in', True):
             return
         webhook_id = mobile_cfg.get('webhook_id', '')
-        ha_url = self.config.get('home_assistant', {}).get('url', '')
+        ha_url = self._ha_url()
         if not (webhook_id and ha_url):
             return
         states = {"logged_in": "logged-in" if value else "logged-out"}
@@ -865,8 +878,15 @@ class PrismDesktopApp(QObject):
 
         new_ha_config = new_config.get('home_assistant', {})
         new_url = new_ha_config.get('url', '').rstrip('/')
+        new_fallback_url = new_ha_config.get('fallback_url', '').rstrip('/')
         new_token = new_ha_config.get('token', '')
-        ha_changed = self.ha_client.url != new_url or self.ha_client.token != new_token
+        # Compare what was configured: ha_client.url may currently be the fallback.
+        old_urls = (self.ha_client.primary_url, self.ha_client.fallback_url)
+        token_changed = self.ha_client.token != new_token
+        ha_changed = token_changed or old_urls != (new_url, new_fallback_url)
+        # A URL in common (say a fallback was added, or the two were swapped) means
+        # the same Home Assistant, so its registration stays valid.
+        same_instance = not token_changed and bool({*old_urls} & {new_url, new_fallback_url} - {""})
         if self.ha_client.token and not new_token:
             # The user emptied the token field. save_config() never writes an empty
             # token, so without this the old one would come back on the next start.
@@ -881,7 +901,7 @@ class PrismDesktopApp(QObject):
         self._notify_glass_ui_change(glass_was_active, glass_ui_enabled)
 
         if ha_changed:
-            await self._restart_ha_connections()
+            await self._restart_ha_connections(keep_registration=same_instance)
             return
         # HA config unchanged, but if the WebSocket isn't live, treat Save as
         # "reconnect" — a stuck or dead connection otherwise has no user-facing
@@ -943,11 +963,12 @@ class PrismDesktopApp(QObject):
         self._apply_assist_visibility()
         self._update_button_shortcuts()
 
-    async def _restart_ha_connections(self):
+    async def _restart_ha_connections(self, keep_registration: bool = False):
         logger.info("HA config changed, restarting connections...")
-        # Clear mobile_app registration and HA-specific switch entry so we re-register with the new HA instance
-        self.config.setdefault("mobile_app", {}).pop("webhook_id", None)
-        self.config.setdefault("power_control", {}).pop("switch_entry_id", None)
+        if not keep_registration:
+            # Clear mobile_app registration and HA-specific switch entry so we re-register with the new HA instance
+            self.config.setdefault("mobile_app", {}).pop("webhook_id", None)
+            self.config.setdefault("power_control", {}).pop("switch_entry_id", None)
         self._stop_location_loop()
         self._stop_metrics_loop()
         self.stop_websocket()
@@ -1431,12 +1452,24 @@ class PrismDesktopApp(QObject):
     def on_ws_connected(self):
         logger.info("WS Connected")
         self._ws_connected = True
+        # First, so every request below goes to the URL that is reachable now.
+        self._follow_websocket_url()
         _create_task_safe(self._ensure_temperature_unit_default())
         self.fetch_initial_states()
         # Prefetch entities in background so tile editor opens instantly
         _create_task_safe(self._prefetch_entities())
         # Register as a Mobile App so HA exposes notify.mobile_app_prism_desktop
         _create_task_safe(self._register_mobile_app())
+
+    def _follow_websocket_url(self):
+        """Point REST requests and camera streams at the URL the WebSocket reached."""
+        url = self._ha_websocket.active_url if self._ha_websocket else ""
+        if not url or url == self.ha_client.url:
+            return
+        which = "fallback" if url == self.ha_client.fallback_url else "primary"
+        logger.info(f"Using the {which} Home Assistant URL")
+        self.ha_client.use_url(url)
+        self.camera_pip.reconnect_all()
 
     async def _ensure_temperature_unit_default(self):
         """Initialize the temperature unit from HA once, unless the user already saved a preference."""
@@ -1464,8 +1497,9 @@ class PrismDesktopApp(QObject):
 
     async def _register_mobile_app(self):
         ha_config = self.config.get('home_assistant', {})
+        ha_url = self._ha_url()
         webhook_id = await register_mobile_app(
-            ha_url=ha_config.get('url', ''),
+            ha_url=ha_url,
             ha_token=ha_config.get('token', ''),
             config=self.config,
             save_config_fn=self.save_config,
@@ -1483,7 +1517,6 @@ class PrismDesktopApp(QObject):
 
         # Register sensors and push initial state
         if webhook_id:
-            ha_url = ha_config.get('url', '')
             await register_sensors(ha_url, webhook_id)
             if self.config.get('mobile_app', {}).get('send_logged_in', True):
                 await update_sensor_states(ha_url, webhook_id, {"logged_in": "logged-in"})
@@ -1501,7 +1534,7 @@ class PrismDesktopApp(QObject):
         if not mobile_cfg.get('send_logged_in', True):
             return
         webhook_id = mobile_cfg.get('webhook_id', '')
-        ha_url = self.config.get('home_assistant', {}).get('url', '')
+        ha_url = self._ha_url()
         if webhook_id and ha_url:
             await update_sensor_states(ha_url, webhook_id, {"logged_in": "logged-in" if value else "logged-out"})
 
@@ -1519,15 +1552,13 @@ class PrismDesktopApp(QObject):
 
     async def _location_update_loop(self):
         """Periodically fetch device location and send it to Home Assistant."""
-        ha_config = self.config.get('home_assistant', {})
-        ha_url = ha_config.get('url', '')
         webhook_id = self.config.get('mobile_app', {}).get('webhook_id', '')
-        if not ha_url or not webhook_id:
+        if not self._ha_url() or not webhook_id:
             return
         while True:
             location = await get_location()
             if location:
-                await send_location_update(ha_url, webhook_id, location)
+                await send_location_update(self._ha_url(), webhook_id, location)
             await asyncio.sleep(900)  # 15 minutes
 
     def _start_metrics_loop(self):
@@ -1556,10 +1587,8 @@ class PrismDesktopApp(QObject):
         lock/mic/camera sensors are polled every 10s but only pushed on change,
         so automations react quickly without constant traffic.
         """
-        ha_config = self.config.get('home_assistant', {})
-        ha_url = ha_config.get('url', '')
         webhook_id = self.config.get('mobile_app', {}).get('webhook_id', '')
-        if not ha_url or not webhook_id:
+        if not self._ha_url() or not webhook_id:
             return
         fast_sensors = set(FAST_SENSORS)
         last_fast = {}
@@ -1578,7 +1607,7 @@ class PrismDesktopApp(QObject):
             fast_changed = await self._changed_sensor_states(fast_ids, last_fast)
             states.update(fast_changed)
 
-            if states and await update_sensor_states(ha_url, webhook_id, states):
+            if states and await update_sensor_states(self._ha_url(), webhook_id, states):
                 last_fast.update(fast_changed)
             await asyncio.sleep(10 if fast_ids else 30)
 

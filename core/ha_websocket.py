@@ -21,6 +21,13 @@ class AuthenticationError(Exception):
 
 _WS_SCHEMES = {"http": "ws", "https": "wss"}
 
+# An address that is unreachable from the current network (a LAN IP away from
+# home) can hang for minutes, so each one gets this long before the next is tried.
+CONNECT_TIMEOUT = 7  # seconds
+# WebSocket-level ping. Without it a connection left half-open by a network
+# change is not noticed for many minutes, and no reconnect (or fallback) happens.
+HEARTBEAT = 30  # seconds
+
 
 def websocket_url(base_url: str) -> str:
     """Return Home Assistant's WebSocket endpoint for a base URL such as http://ha.local:8123.
@@ -44,9 +51,11 @@ class HAWebSocket(QObject):
     command_received = pyqtSignal(str, dict)  # mobile_app command_* message, extra data dict (plus any push title)
     error = pyqtSignal(str)
 
-    def __init__(self, url: str = "", token: str = ""):
+    def __init__(self, url: str = "", token: str = "", fallback_url: str = ""):
         super().__init__()
         self.url = url.rstrip('/')
+        self.fallback_url = fallback_url.rstrip('/')
+        self.active_url = ""  # the URL of the current session, set before `connected`
         self.token = token
         self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
         self._session: Optional[aiohttp.ClientSession] = None
@@ -59,6 +68,8 @@ class HAWebSocket(QObject):
         self._pending_results: dict[int, asyncio.Future] = {}
         self._pending_pipeline_runs: dict[int, asyncio.Queue] = {}
         self._auth_failed = False  # token rejected: retrying can't help (and risks an IP ban)
+        self._rejected_urls: set[str] = set()  # URLs that refused the token; never sent it again
+        self._unreachable = False  # the last connect() never got an authenticated session
         self.logger = logging.getLogger(__name__)
 
     def set_webhook_id(self, webhook_id: str):
@@ -88,31 +99,18 @@ class HAWebSocket(QObject):
         """Connect to Home Assistant WebSocket."""
         # Capture config under lock
         with self._config_lock:
-            current_url = self.url
+            urls = list(dict.fromkeys(u for u in (self.url, self.fallback_url) if u))
             current_token = self.token
 
-        if not current_url or not current_token:
+        if not self.url or not current_token:
             self.error.emit("URL and token are required")
             return
 
-        ws_url = websocket_url(current_url)
-
         try:
+            self._unreachable = True
             self._session = aiohttp.ClientSession()
-            self._ws = await self._session.ws_connect(ws_url)
-            self._running = True
-
-            # Wait for auth_required (bounded — a proxy can accept the socket
-            # while HA itself never answers, which would hang the reconnect loop)
-            msg = await asyncio.wait_for(self._ws.receive_json(), timeout=10)
-            if msg.get('type') != 'auth_required':
-                raise ConnectionError("Unexpected message type")
-
-            await self._send({"type": "auth", "access_token": current_token})
-
-            msg = await asyncio.wait_for(self._ws.receive_json(), timeout=10)
-            if msg.get('type') != 'auth_ok':
-                raise AuthenticationError(f"Authentication failed: {msg.get('message', 'Unknown error')}")
+            self.active_url = await self._open_first_available(urls, current_token)
+            self._unreachable = False
 
             self.connected.emit()
 
@@ -142,13 +140,57 @@ class HAWebSocket(QObject):
             self._running = False
             raise
         except Exception as e:
-            if isinstance(e, AuthenticationError):
-                self._auth_failed = True
             detail = str(e) or type(e).__name__  # TimeoutError stringifies to ""
             self.logger.error(f"WebSocket connection error: {detail}")
             self.error.emit(detail)
         finally:
             await self._cleanup()
+
+    async def _open_first_available(self, urls: list[str], token: str) -> str:
+        """Connect and authenticate against the first URL that works, in order.
+
+        Every attempt starts with the first URL again, which is what moves the
+        client back to it once it is reachable. Raises the last failure.
+        """
+        failure: Exception = AuthenticationError("Authentication failed")
+        for url in urls:
+            if url in self._rejected_urls:
+                continue
+            try:
+                await self._open(url, token)
+                return url
+            except AuthenticationError as e:
+                # Possibly another server answering at this address on a foreign
+                # network, so the other URL still gets its turn.
+                failure = e
+                self._rejected_urls.add(url)
+                self._auth_failed = self._rejected_urls.issuperset(urls)
+            except Exception as e:
+                failure = e
+            if url != urls[-1]:
+                self.logger.warning(f"Could not connect to {url}: {str(failure) or type(failure).__name__}")
+            if self._ws and not self._ws.closed:
+                await self._ws.close()
+        raise failure
+
+    async def _open(self, url: str, token: str):
+        """Open one WebSocket and authenticate on it."""
+        self._ws = await asyncio.wait_for(
+            self._session.ws_connect(websocket_url(url), heartbeat=HEARTBEAT), timeout=CONNECT_TIMEOUT
+        )
+        self._running = True
+
+        # Wait for auth_required (bounded — a proxy can accept the socket
+        # while HA itself never answers, which would hang the reconnect loop)
+        msg = await asyncio.wait_for(self._ws.receive_json(), timeout=10)
+        if msg.get('type') != 'auth_required':
+            raise ConnectionError("Unexpected message type")
+
+        await self._send({"type": "auth", "access_token": token})
+
+        msg = await asyncio.wait_for(self._ws.receive_json(), timeout=10)
+        if msg.get('type') != 'auth_ok':
+            raise AuthenticationError(f"Authentication failed: {msg.get('message', 'Unknown error')}")
 
     async def _message_loop(self):
         """Process incoming WebSocket messages until the socket closes or a stop is requested."""
@@ -420,7 +462,8 @@ class HAWebSocket(QObject):
                 await self.connect()
                 if not self._may_reconnect():
                     break
-                if time.time() - started > 10:
+                # Slow failures (two URLs timing out) must still back off.
+                if not self._unreachable and time.time() - started > 10:
                     backoff = 1  # it was a real session, not a failed attempt
 
                 self.logger.warning(f"WebSocket disconnected. Reconnecting in {backoff}s...")
